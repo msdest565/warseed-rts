@@ -36,12 +36,13 @@
 - [MVP 范围](docs/MVP_SCOPE.md)
 - [系统设计](docs/SYSTEM_DESIGN.md)
 - [Godot 技术方案](docs/TECHNICAL_PLAN.md)
+- [当前进展与下一步](docs/STATUS_AND_NEXT_STEPS.md)
 - [开发路线图](docs/ROADMAP.md)
 - [决策记录](docs/DECISIONS.md)
 
 ## 当前状态
 
-项目处于**Godot 技术基线与垂直切片准备阶段**。已选择 Godot 4.6 stable 系列、typed GDScript、Windows first 和 2D top-down 技术路线；MVP 离线运行且不依赖语言模型。仓库目前仍不包含 Godot 工程或实现代码，下一步是锁定精确 `4.6.x-stable` 版本、建立最小工程，并验证固定模拟 tick、统一命令边界、A* 导航、formation slots 和 headless 测试。
+项目处于**Godot 技术基线与垂直切片准备阶段**。已选择 Godot 4.6 stable 系列、typed GDScript、Windows first 和 2D top-down 技术路线；MVP 离线运行且不依赖语言模型。仓库目前仍不包含 Godot 工程或实现代码，下一步是锁定精确 `4.6.x-stable` 版本并建立最小工程。详细暂停点和执行顺序见[当前进展与下一步](docs/STATUS_AND_NEXT_STEPS.md)。
 
 ## 权利说明
 
