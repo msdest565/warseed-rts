@@ -84,7 +84,7 @@
 - **状态**：Accepted
 - **日期**：2026-07-30
 - **背景**：WARSEED 当前是小规模 2D RTS，首要风险是控制权、任务透明度和快速玩法验证，而非大规模渲染或单位性能。
-- **决策**：采用 Godot 4.6 stable 系列、typed GDScript、2D top-down 和 Windows 10/11 x86-64 first。工程创建时锁定最新 `4.6.x-stable` 精确补丁，编辑器、测试与导出模板保持一致。
+- **决策**：采用 Godot `4.6.3.stable.mono.official.7d41c59c4`、typed GDScript、2D top-down 和 Windows 10/11 x86-64 first。仓库通过 `.godot-version` 锁定 `4.6.3-stable`；编辑器、测试与导出模板保持同一精确版本。当前使用 Mono 编辑器不改变项目仅采用 typed GDScript 的语言基线。
 - **理由**：Godot 的原生 2D、UI、自定义绘制、文本资源和轻量迭代最符合首个垂直切片；Unity 与 Unreal 在当前阶段的额外工程负担没有带来决定性收益。
 - **后果**：patch 升级需独立提交并完成回归；跨 minor 升级需新决策。下一阶段建立最小 Godot 工程，不再进行引擎选型。
 

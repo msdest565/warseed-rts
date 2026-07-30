@@ -1,0 +1,56 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://src/app/game_root.gd" id="1_game_root"]
+[ext_resource type="Script" path="res://src/app/simulation_host.gd" id="2_simulation_host"]
+[ext_resource type="Script" path="res://src/presentation/battlefield.gd" id="3_battlefield"]
+[ext_resource type="Script" path="res://src/presentation/world_presentation.gd" id="4_presentation"]
+[ext_resource type="Script" path="res://src/input/input_controller.gd" id="5_input"]
+[ext_resource type="Script" path="res://src/debug/debug_layer.gd" id="6_debug"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_panel"]
+bg_color = Color(0.035, 0.055, 0.063, 0.92)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.28, 0.44, 0.45, 0.9)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[node name="GameRoot" type="Node"]
+script = ExtResource("1_game_root")
+
+[node name="Battlefield" type="Node2D" parent="."]
+script = ExtResource("3_battlefield")
+
+[node name="SimulationHost" type="Node" parent="."]
+script = ExtResource("2_simulation_host")
+
+[node name="WorldPresentation" type="Node2D" parent="."]
+script = ExtResource("4_presentation")
+
+[node name="Units" type="Node2D" parent="WorldPresentation"]
+
+[node name="InputController" type="Node" parent="."]
+script = ExtResource("5_input")
+
+[node name="DebugLayer" type="CanvasLayer" parent="."]
+script = ExtResource("6_debug")
+
+[node name="Panel" type="PanelContainer" parent="DebugLayer"]
+offset_left = 64.0
+offset_top = 88.0
+offset_right = 395.0
+offset_bottom = 260.0
+theme_override_styles/panel = SubResource("StyleBox_panel")
+
+[node name="Status" type="Label" parent="DebugLayer/Panel"]
+custom_minimum_size = Vector2(310, 150)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.84, 0.91, 0.91, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.8)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 15
+text = "Initializing simulation..."

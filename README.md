@@ -36,13 +36,14 @@
 - [MVP 范围](docs/MVP_SCOPE.md)
 - [系统设计](docs/SYSTEM_DESIGN.md)
 - [Godot 技术方案](docs/TECHNICAL_PLAN.md)
-- [当前进展与下一步](docs/STATUS_AND_NEXT_STEPS.md)
+- [当前进展、AI 交接与下一步](docs/STATUS_AND_NEXT_STEPS.md)
+- [AI handoff（英文简版）](docs/AI_HANDOFF.md)
 - [开发路线图](docs/ROADMAP.md)
 - [决策记录](docs/DECISIONS.md)
 
 ## 当前状态
 
-项目处于**Godot 技术基线与垂直切片准备阶段**。已选择 Godot 4.6 stable 系列、typed GDScript、Windows first 和 2D top-down 技术路线；MVP 离线运行且不依赖语言模型。仓库目前仍不包含 Godot 工程或实现代码，下一步是锁定精确 `4.6.x-stable` 版本并建立最小工程。详细暂停点和执行顺序见[当前进展与下一步](docs/STATUS_AND_NEXT_STEPS.md)。
+项目处于**首个可运行权威移动切片阶段**。工程已锁定 Godot `4.6.3-stable` Mono 编辑器构建，采用 typed GDScript、Windows first 和 2D top-down 技术路线；MVP 离线运行且不依赖语言模型。当前已有一个可见俯视载具：左键选择、右键移动，命令经过验证器和队列后由 10 Hz 权威模拟推进，表现层消费快照。Windows debug 导出基线已验证，完整 RTS、导航、战斗和 Agent 仍按路线图逐步实现。详细状态和执行顺序见[当前进展与下一步](docs/STATUS_AND_NEXT_STEPS.md)。
 
 ## 权利说明
 

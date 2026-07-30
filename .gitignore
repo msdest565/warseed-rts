@@ -27,3 +27,14 @@ tmp/
 # Local Claude Code state
 .claude/settings.local.json
 .claude/worktrees/
+
+# Godot generated state
+.godot/
+.import/
+
+# Local export credentials
+export_credentials.cfg
+
+# Generated builds and exports
+/build/
+/exports/
