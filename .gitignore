@@ -38,3 +38,7 @@ export_credentials.cfg
 # Generated builds and exports
 /build/
 /exports/
+
+# Local UI verification captures
+/ui-verification*.png
+/ui-verification*.png.import

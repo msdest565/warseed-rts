@@ -43,7 +43,27 @@
 
 ## 当前状态
 
-项目处于**首个可运行权威移动切片阶段**。工程已锁定 Godot `4.6.3-stable` Mono 编辑器构建，采用 typed GDScript、Windows first 和 2D top-down 技术路线；MVP 离线运行且不依赖语言模型。当前已有一个可见俯视载具：左键选择、右键移动，命令经过验证器和队列后由 10 Hz 权威模拟推进，表现层消费快照。Windows debug 导出基线已验证，完整 RTS、导航、战斗和 Agent 仍按路线图逐步实现。详细状态和执行顺序见[当前进展与下一步](docs/STATUS_AND_NEXT_STEPS.md)。
+项目已完成首个离线指挥链技术切片：五类单位、三类建筑、采矿与生产、编队导航、弹丸战斗、阵营知识、玩家接管与归队、三项高层委托、规则敌方袭击队、任务面板、任务路线可视化和 ESC 菜单均已接入 10 Hz 权威模拟。项目自有 runner 当前通过 12 个测试套件，Windows debug export 已验证。
+
+这仍不是完整 15—20 分钟 MVP。建筑施工/维修、建筑可攻击链、完整手动胜利路径、敌方经济阶段机、美术和数值调优仍需继续。详细状态见[当前进展与下一步](docs/STATUS_AND_NEXT_STEPS.md)。
+
+## 本地复现
+
+1. 安装 Godot `4.6.3-stable`（Windows 推荐 Mono 构建，并安装同版本 export templates）。
+2. 克隆仓库并从 Godot Project Manager 导入仓库根目录的 `project.godot`。
+3. 按 `F6/F5` 或直接运行项目；主场景为 `scenes/game/game_root.tscn`。
+
+命令行验证（将 `<godot-console>` 替换为本机 Godot console 路径）：
+
+```powershell
+& <godot-console> --headless --editor --path . --quit
+& <godot-console> --headless --path . --script res://tests/test_runner.gd
+& <godot-console> --headless --path . --quit-after 3
+& <godot-console> --headless --path . --export-debug "Windows Desktop" "build/windows/warseed-debug.exe"
+& .\build\windows\warseed-debug.exe --headless --quit-after 3
+```
+
+`.godot/` 与 `build/` 是本机生成目录，不随 Git 上传。项目运行时不依赖开发机绝对路径、联网服务或 LLM。
 
 ## 权利说明
 
