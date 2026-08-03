@@ -8,6 +8,8 @@ func run() -> Array[String]:
 	_test_arrival_without_overshoot(failures)
 	_test_snapshot_is_value_copy(failures)
 	_test_deterministic_replay(failures)
+	_test_default_formation_and_snapshot_copy(failures)
+	_test_stuck_detection_and_recovery(failures)
 	return failures
 
 
@@ -43,8 +45,45 @@ func _test_deterministic_replay(failures: Array[String]) -> void:
 		_expect(first_unit.position == second_unit.position, "replay diverged at tick %d" % index, failures)
 
 
-func _moving_world(target: Vector2) -> SimulationWorld:
+func _test_default_formation_and_snapshot_copy(failures: Array[String]) -> void:
 	var world := SimulationWorld.new()
+	var snapshot := world.create_snapshot()
+	_expect(snapshot.units.size() == 6, "default world should create five formation members and one enemy", failures)
+	var old_mode := snapshot.get_formation(1).mode
+	var old_slot := snapshot.get_unit(5).formation_slot_id
+	var command := FormationMoveCommand.new(1, 1, GameCommand.IssuerKind.PLAYER, 0, 1, 1, Vector2(800.0, 336.0))
+	world.submit_command(command)
+	for tick in range(20):
+		world.advance_tick()
+	_expect(snapshot.get_formation(1).mode == old_mode, "old formation snapshot must not mutate", failures)
+	_expect(snapshot.get_unit(5).formation_slot_id == old_slot, "old unit slot snapshot must not mutate", failures)
+
+
+func _test_stuck_detection_and_recovery(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	var formation := world.formations[1] as FormationState
+	formation.target_position = Vector2(800.0, 336.0)
+	formation.path = world.pathfinder.find_path(formation.anchor_position, formation.target_position)
+	formation.path_index = 1
+	formation.is_moving = true
+	var unit := world.units[5] as UnitState
+	unit.position = Vector2(600.0, 90.0)
+	unit.following_formation = true
+	unit.has_move_target = true
+	var system := world.formation_movement
+	for tick in range(FormationMovementSystem.STUCK_TICK_LIMIT):
+		system._update_stuck_state(unit, formation, unit.position, world.events, tick)
+	var saw_stuck := false
+	for event in world.events:
+		if event.kind == SimulationEvent.Kind.UNIT_STUCK and event.entity_id == 5:
+			saw_stuck = true
+	_expect(saw_stuck, "no-progress unit should emit UNIT_STUCK at threshold", failures)
+	_expect(unit.recovery_attempts == 1, "stuck unit should perform one bounded recovery attempt", failures)
+
+
+func _moving_world(target: Vector2) -> SimulationWorld:
+	var world := SimulationWorld.new(false)
+	world.units[1] = UnitState.new(1, Vector2(320.0, 360.0), 180.0, 1)
 	var command := MoveCommand.new(1, 1, GameCommand.IssuerKind.PLAYER, 0, 1, target)
 	world.submit_command(command)
 	return world

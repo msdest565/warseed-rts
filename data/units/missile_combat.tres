@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="CombatDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/data/combat_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+max_health = 130.0
+armor = 3.0
+attack_power = 70.0
+attack_range = 420.0
+attacks_per_second = 0.5
+projectile_speed = 420.0

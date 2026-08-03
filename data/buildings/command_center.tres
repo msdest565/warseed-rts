@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/data/building_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+definition_id = &"command_center"
+display_name = "Command Center"
+max_health = 1500.0
+provides_command_center = true

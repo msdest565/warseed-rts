@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/data/unit_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/units/scout_combat.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+definition_id = &"scout_vehicle"
+display_name = "Scout Vehicle"
+move_speed = 180.0
+production_cost = 100
+production_ticks = 20
+combat = ExtResource("2")

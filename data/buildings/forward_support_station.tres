@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/data/building_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+definition_id = &"forward_support_station"
+display_name = "Forward Support Station"
+max_health = 800.0
+provides_support = true

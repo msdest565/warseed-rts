@@ -9,6 +9,10 @@ var world := SimulationWorld.new()
 var previous_snapshot: WorldSnapshot
 var current_snapshot: WorldSnapshot
 var _accumulator: float = 0.0
+var _timed_tick_count: int = 0
+var _last_tick_usec: int = 0
+var _total_tick_usec: int = 0
+var _max_tick_usec: int = 0
 
 
 func _ready() -> void:
@@ -29,6 +33,22 @@ func submit_command(command: GameCommand) -> CommandValidationResult:
 	return result
 
 
+func create_unit_disposition_command(
+	entity_id: int,
+	disposition: UnitDispositionCommand.Disposition,
+	destination_formation_id: int = 0
+) -> UnitDispositionCommand:
+	return UnitDispositionCommand.new(
+		world.allocate_command_id(),
+		SimulationWorld.LOCAL_PLAYER_ID,
+		GameCommand.IssuerKind.PLAYER,
+		world.current_tick,
+		entity_id,
+		disposition,
+		destination_formation_id
+	)
+
+
 func create_move_command(
 	entity_id: int,
 	target_position: Vector2,
@@ -44,10 +64,151 @@ func create_move_command(
 	)
 
 
+func create_formation_move_command(
+	formation_id: int,
+	target_position: Vector2,
+	issuer_kind: GameCommand.IssuerKind = GameCommand.IssuerKind.PLAYER
+) -> FormationMoveCommand:
+	var formation := world.formations.get(formation_id) as FormationState
+	var leader_entity_id := formation.leader_entity_id if formation != null else 0
+	return FormationMoveCommand.new(
+		world.allocate_command_id(),
+		SimulationWorld.LOCAL_PLAYER_ID,
+		issuer_kind,
+		world.current_tick,
+		leader_entity_id,
+		formation_id,
+		target_position
+	)
+
+
+func create_stop_command(entity_id: int, formation_id: int = 0) -> StopCommand:
+	var leader_id := entity_id
+	if formation_id != 0:
+		var formation := world.formations.get(formation_id) as FormationState
+		leader_id = formation.leader_entity_id if formation != null else entity_id
+	return StopCommand.new(
+		world.allocate_command_id(),
+		SimulationWorld.LOCAL_PLAYER_ID,
+		GameCommand.IssuerKind.PLAYER,
+		world.current_tick,
+		leader_id,
+		formation_id
+	)
+
+
+func create_attack_move_command(formation_id: int, target_position: Vector2) -> AttackMoveCommand:
+	var formation := world.formations.get(formation_id) as FormationState
+	var leader_entity_id := formation.leader_entity_id if formation != null else 0
+	return AttackMoveCommand.new(
+		world.allocate_command_id(),
+		SimulationWorld.LOCAL_PLAYER_ID,
+		GameCommand.IssuerKind.PLAYER,
+		world.current_tick,
+		leader_entity_id,
+		formation_id,
+		target_position
+	)
+
+
+func create_attack_command(
+	entity_id: int,
+	attack_target_entity_id: int,
+	formation_id: int = 0
+) -> AttackCommand:
+	var attacker_id := entity_id
+	if formation_id != 0:
+		var formation := world.formations.get(formation_id) as FormationState
+		attacker_id = formation.leader_entity_id if formation != null else entity_id
+	return AttackCommand.new(
+		world.allocate_command_id(),
+		SimulationWorld.LOCAL_PLAYER_ID,
+		GameCommand.IssuerKind.PLAYER,
+		world.current_tick,
+		attacker_id,
+		attack_target_entity_id,
+		formation_id
+	)
+
+
+func create_harvest_command(harvester_entity_id: int, ore_field_entity_id: int, refinery_entity_id: int) -> HarvestCommand:
+	return HarvestCommand.new(
+		world.allocate_command_id(),
+		SimulationWorld.LOCAL_PLAYER_ID,
+		GameCommand.IssuerKind.PLAYER,
+		world.current_tick,
+		harvester_entity_id,
+		ore_field_entity_id,
+		refinery_entity_id
+	)
+
+
+func create_produce_unit_command(factory_entity_id: int, unit_definition_id: StringName) -> ProduceUnitCommand:
+	return ProduceUnitCommand.new(
+		world.allocate_command_id(),
+		SimulationWorld.LOCAL_PLAYER_ID,
+		GameCommand.IssuerKind.PLAYER,
+		world.current_tick,
+		factory_entity_id,
+		unit_definition_id
+	)
+
+
+func create_strategic_order_command(
+	order_kind: StrategicOrderCommand.OrderKind,
+	formation_id: int,
+	objective_entity_id: int,
+	target_position: Vector2,
+	target_radius: float = 0.0
+) -> StrategicOrderCommand:
+	return StrategicOrderCommand.new(
+		world.allocate_command_id(),
+		SimulationWorld.LOCAL_PLAYER_ID,
+		world.current_tick,
+		order_kind,
+		formation_id,
+		objective_entity_id,
+		target_position,
+		target_radius
+	)
+
+
+func create_task_control_command(task_id: int, action: TaskControlCommand.Action) -> TaskControlCommand:
+	return TaskControlCommand.new(
+		world.allocate_command_id(),
+		SimulationWorld.LOCAL_PLAYER_ID,
+		world.current_tick,
+		task_id,
+		action
+	)
+
+
 func advance_tick() -> WorldSnapshot:
 	previous_snapshot = current_snapshot
+	var started_usec := Time.get_ticks_usec()
 	current_snapshot = world.advance_tick()
+	_last_tick_usec = Time.get_ticks_usec() - started_usec
+	_timed_tick_count += 1
+	_total_tick_usec += _last_tick_usec
+	_max_tick_usec = maxi(_max_tick_usec, _last_tick_usec)
 	return current_snapshot
+
+
+func get_true_state_snapshot_for_debug() -> WorldSnapshot:
+	return world.create_true_state_snapshot()
+
+
+func get_faction_snapshot(faction_id: int) -> WorldSnapshot:
+	return world.create_faction_snapshot(faction_id)
+
+
+func get_tick_timing_snapshot() -> HostTickTimingSnapshot:
+	return HostTickTimingSnapshot.new(
+		_timed_tick_count,
+		_last_tick_usec,
+		_total_tick_usec,
+		_max_tick_usec
+	)
 
 
 func get_interpolation_alpha() -> float:

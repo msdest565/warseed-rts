@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="MapDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/data/map_definition.gd" id="1_map"]
+
+[resource]
+script = ExtResource("1_map")
+definition_id = &"test_arena"
+cell_size = 32.0
+grid_size = Vector2i(96, 64)
+world_origin = Vector2(0, 0)
+player_spawn_cell = Vector2i(10, 10)
+enemy_spawn_cell = Vector2i(86, 32)
+camera_start_cell = Vector2i(12, 10)

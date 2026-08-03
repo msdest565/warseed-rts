@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://src/app/game_root.gd" id="1_game_root"]
 [ext_resource type="Script" path="res://src/app/simulation_host.gd" id="2_simulation_host"]
@@ -6,6 +6,11 @@
 [ext_resource type="Script" path="res://src/presentation/world_presentation.gd" id="4_presentation"]
 [ext_resource type="Script" path="res://src/input/input_controller.gd" id="5_input"]
 [ext_resource type="Script" path="res://src/debug/debug_layer.gd" id="6_debug"]
+[ext_resource type="Script" path="res://src/input/camera_controller.gd" id="7_camera"]
+[ext_resource type="Script" path="res://src/presentation/selection_overlay.gd" id="8_selection"]
+[ext_resource type="Script" path="res://src/ui/minimap_control.gd" id="9_minimap"]
+[ext_resource type="Script" path="res://src/ui/task_panel.gd" id="10_task_panel"]
+[ext_resource type="Script" path="res://src/ui/pause_menu.gd" id="11_pause_menu"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_panel"]
 bg_color = Color(0.035, 0.055, 0.063, 0.92)
@@ -25,32 +30,199 @@ script = ExtResource("1_game_root")
 [node name="Battlefield" type="Node2D" parent="."]
 script = ExtResource("3_battlefield")
 
+[node name="Terrain" type="TileMapLayer" parent="Battlefield"]
+
 [node name="SimulationHost" type="Node" parent="."]
 script = ExtResource("2_simulation_host")
 
 [node name="WorldPresentation" type="Node2D" parent="."]
 script = ExtResource("4_presentation")
 
+[node name="OreFields" type="Node2D" parent="WorldPresentation"]
+
+[node name="Buildings" type="Node2D" parent="WorldPresentation"]
+
 [node name="Units" type="Node2D" parent="WorldPresentation"]
+
+[node name="CameraController" type="Camera2D" parent="."]
+position = Vector2(400, 336)
+script = ExtResource("7_camera")
 
 [node name="InputController" type="Node" parent="."]
 script = ExtResource("5_input")
+
+[node name="SelectionLayer" type="CanvasLayer" parent="."]
+
+[node name="SelectionOverlay" type="Control" parent="SelectionLayer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("8_selection")
+
+[node name="HUDLayer" type="CanvasLayer" parent="."]
+
+[node name="TaskPanel" type="PanelContainer" parent="HUDLayer"]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 396.0
+offset_bottom = 300.0
+theme_override_styles/panel = SubResource("StyleBox_panel")
+script = ExtResource("10_task_panel")
+
+[node name="Layout" type="VBoxContainer" parent="HUDLayer/TaskPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="HUDLayer/TaskPanel/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.78, 0.28, 1)
+theme_override_font_sizes/font_size = 16
+text = "COMMAND NETWORK"
+
+[node name="Mission" type="Label" parent="HUDLayer/TaskPanel/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.84, 0.91, 0.91, 1)
+theme_override_font_sizes/font_size = 12
+text = "MISSION / awaiting state"
+
+[node name="Orders" type="HBoxContainer" parent="HUDLayer/TaskPanel/Layout"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Develop" type="Button" parent="HUDLayer/TaskPanel/Layout/Orders"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Develop"
+
+[node name="Defend" type="Button" parent="HUDLayer/TaskPanel/Layout/Orders"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Defend"
+
+[node name="Attack" type="Button" parent="HUDLayer/TaskPanel/Layout/Orders"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Attack"
+
+[node name="TaskStatus" type="Label" parent="HUDLayer/TaskPanel/Layout"]
+custom_minimum_size = Vector2(360, 96)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.76, 0.84, 0.85, 1)
+theme_override_font_sizes/font_size = 11
+text = "No active assignment"
+autowrap_mode = 2
+
+[node name="TaskControls" type="HBoxContainer" parent="HUDLayer/TaskPanel/Layout"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Pause" type="Button" parent="HUDLayer/TaskPanel/Layout/TaskControls"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Pause"
+
+[node name="Resume" type="Button" parent="HUDLayer/TaskPanel/Layout/TaskControls"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Resume"
+
+[node name="Cancel" type="Button" parent="HUDLayer/TaskPanel/Layout/TaskControls"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Cancel"
+
+[node name="Minimap" type="Control" parent="HUDLayer"]
+custom_minimum_size = Vector2(300, 200)
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -316.0
+offset_top = -216.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 0
+script = ExtResource("9_minimap")
 
 [node name="DebugLayer" type="CanvasLayer" parent="."]
 script = ExtResource("6_debug")
 
 [node name="Panel" type="PanelContainer" parent="DebugLayer"]
-offset_left = 64.0
-offset_top = 88.0
-offset_right = 395.0
-offset_bottom = 260.0
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -372.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = 300.0
+grow_horizontal = 0
+mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBox_panel")
 
 [node name="Status" type="Label" parent="DebugLayer/Panel"]
-custom_minimum_size = Vector2(310, 150)
+custom_minimum_size = Vector2(340, 150)
 layout_mode = 2
+mouse_filter = 2
 theme_override_colors/font_color = Color(0.84, 0.91, 0.91, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.8)
 theme_override_constants/outline_size = 2
-theme_override_font_sizes/font_size = 15
+theme_override_font_sizes/font_size = 12
 text = "Initializing simulation..."
+
+[node name="PauseMenu" type="CanvasLayer" parent="."]
+layer = 100
+script = ExtResource("11_pause_menu")
+
+[node name="Backdrop" type="ColorRect" parent="PauseMenu"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+color = Color(0.01, 0.015, 0.018, 0.78)
+
+[node name="Menu" type="PanelContainer" parent="PauseMenu/Backdrop"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -170.0
+offset_top = -104.0
+offset_right = 170.0
+offset_bottom = 104.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBox_panel")
+
+[node name="Content" type="VBoxContainer" parent="PauseMenu/Backdrop/Menu"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="Title" type="Label" parent="PauseMenu/Backdrop/Menu/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.78, 0.28, 1)
+theme_override_font_sizes/font_size = 24
+text = "PAUSED"
+horizontal_alignment = 1
+
+[node name="Continue" type="Button" parent="PauseMenu/Backdrop/Menu/Content"]
+custom_minimum_size = Vector2(280, 44)
+layout_mode = 2
+text = "Continue"
+
+[node name="Exit" type="Button" parent="PauseMenu/Backdrop/Menu/Content"]
+custom_minimum_size = Vector2(280, 44)
+layout_mode = 2
+text = "Exit Game"

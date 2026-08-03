@@ -1,0 +1,25 @@
+class_name AttackCommand
+extends GameCommand
+
+var attack_target_entity_id: int
+var formation_id: int
+
+
+func _init(
+	new_command_id: int,
+	new_issuer_id: int,
+	new_issuer_kind: IssuerKind,
+	new_issued_tick: int,
+	new_entity_id: int,
+	new_attack_target_entity_id: int,
+	new_formation_id: int = 0
+) -> void:
+	super(new_command_id, new_issuer_id, new_issuer_kind, new_issued_tick, new_entity_id)
+	attack_target_entity_id = new_attack_target_entity_id
+	formation_id = new_formation_id
+
+
+func get_supersession_key() -> String:
+	if formation_id != 0:
+		return "F%d" % formation_id
+	return super()

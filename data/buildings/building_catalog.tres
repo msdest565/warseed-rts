@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="BuildingDefinitionCatalog" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/data/building_definition_catalog.gd" id="1"]
+[ext_resource type="Resource" path="res://data/buildings/command_center.tres" id="2"]
+[ext_resource type="Resource" path="res://data/buildings/automated_factory.tres" id="3"]
+[ext_resource type="Resource" path="res://data/buildings/forward_support_station.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+buildings = Array[ExtResource("2")]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
