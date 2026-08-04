@@ -98,17 +98,20 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	Engine.get_main_loop().root.add_child(game)
 	var host := game.get_node("SimulationHost") as SimulationHost
 	var panel := game.get_node("HUDLayer/TaskPanel") as TaskPanel
+	var minimap := game.get_node("HUDLayer/Minimap") as MinimapControl
+	var debug_layer := game.get_node("DebugLayer") as DebugLayer
+	var input_controller := game.get_node("InputController") as InputController
 	var pause_menu := game.get_node("PauseMenu") as PauseMenu
 	var camera := game.get_node("CameraController") as CameraController
 	host._ready()
-	panel.mission_label = panel.get_node("Layout/Mission")
-	panel.task_label = panel.get_node("Layout/TaskStatus")
-	panel.develop_button = panel.get_node("Layout/Orders/Develop")
-	panel.defend_button = panel.get_node("Layout/Orders/Defend")
-	panel.attack_button = panel.get_node("Layout/Orders/Attack")
-	panel.pause_button = panel.get_node("Layout/Orders/Pause")
-	panel.resume_button = panel.get_node("Layout/Orders/Resume")
-	panel.cancel_button = panel.get_node("Layout/Orders/Cancel")
+	panel.mission_label = panel.get_node("Margin/Layout/Intel/Mission")
+	panel.task_label = panel.get_node("Margin/Layout/Intel/TaskStatus")
+	panel.develop_button = panel.get_node("Margin/Layout/Strategic/Develop")
+	panel.defend_button = panel.get_node("Margin/Layout/Strategic/Defend")
+	panel.attack_button = panel.get_node("Margin/Layout/Strategic/Attack")
+	panel.pause_button = panel.get_node("Margin/Layout/Operations/Grid/Pause")
+	panel.resume_button = panel.get_node("Margin/Layout/Operations/Grid/Resume")
+	panel.cancel_button = panel.get_node("Margin/Layout/Operations/Grid/Cancel")
 	panel.simulation_host = host
 	panel._ready()
 	pause_menu.backdrop = pause_menu.get_node("Backdrop")
@@ -120,6 +123,19 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	var camera_limits := camera.get_center_limits(Vector2(1280.0, 720.0))
 	_expect(camera_limits.end.y + 360.0 >= CameraController.WORLD_RECT.end.y + 250.0, "camera should overscroll below the map enough to reveal terrain behind the bottom command bar", failures)
 	_expect(panel.simulation_host == host, "task panel should accept the authoritative simulation host", failures)
+	_expect(panel.has_node("Margin/Layout/Intel") and panel.has_node("Margin/Layout/Strategic") and panel.has_node("Margin/Layout/Operations") and panel.has_node("Margin/Layout/ProductionSection"), "task panel should separate intelligence, strategy, operations, and production", failures)
+	_expect(panel.production_buttons.size() == 5, "production section should retain all five unit controls", failures)
+	var panel_rect_720p := Rect2(Vector2(panel.offset_left, 720.0 + panel.offset_top), Vector2(1280.0 + panel.offset_right - panel.offset_left, panel.offset_bottom - panel.offset_top))
+	var minimap_rect_720p := Rect2(Vector2(minimap.offset_left, 720.0 + minimap.offset_top), Vector2(minimap.offset_right - minimap.offset_left, minimap.offset_bottom - minimap.offset_top))
+	_expect(not panel_rect_720p.intersects(minimap_rect_720p), "bottom command panel and minimap should not overlap at 1280x720", failures)
+	_expect(not debug_layer.visible, "developer diagnostics should be hidden by default", failures)
+	var debug_toggle := InputEventKey.new()
+	debug_toggle.keycode = KEY_F3
+	debug_toggle.pressed = true
+	debug_layer._unhandled_input(debug_toggle)
+	_expect(debug_layer.visible, "F3 should reveal developer diagnostics", failures)
+	debug_layer._unhandled_input(debug_toggle)
+	_expect(not debug_layer.visible, "F3 should hide developer diagnostics again", failures)
 	panel.develop_button.pressed.emit()
 	_expect(host.get_queue_size() == 1, "Develop button should submit a strategic command through the host", failures)
 	pause_menu.open()
@@ -130,9 +146,23 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	_expect(pause_menu.language_changed.is_connected(Callable(game, "_on_language_changed")), "pause menu language signal should be connected to the game root", failures)
 	_expect(TranslationServer.get_locale() == "zh_CN", "language menu should switch the runtime locale to Chinese", failures)
 	_expect(pause_menu.title_label.text == "游戏暂停" and panel.title_label.text == "指挥网络", "Chinese selection should immediately refresh pause menu and HUD", failures)
+	_expect(panel.selection_title_label.text == "当前选择" and panel.strategic_title_label.text == "战略指令" and panel.operations_title_label.text == "工程与控制" and panel.production_title_label.text == "单位生产", "Chinese HUD should localize every command section", failures)
 	pause_menu._select_language(1)
 	_expect(TranslationServer.get_locale() == "en", "language menu should switch the runtime locale to English", failures)
 	_expect(pause_menu.title_label.text == "PAUSED" and panel.title_label.text == "COMMAND NETWORK", "English selection should immediately refresh pause menu and HUD", failures)
+	_expect(panel.selection_title_label.text == "SELECTION" and panel.strategic_title_label.text == "STRATEGY" and panel.operations_title_label.text == "OPERATIONS" and panel.production_title_label.text == "PRODUCTION", "English HUD should localize every command section", failures)
+	input_controller.selected_building_id = 0
+	input_controller.selected_entity_ids.assign([1])
+	panel.update_snapshot(host.current_snapshot)
+	_expect(panel.selection_label.text.contains("Harvester") and panel.selection_label.text.contains("HP"), "single-unit selection should show identity and health", failures)
+	input_controller.selected_entity_ids.clear()
+	input_controller.selected_building_id = SimulationWorld.PLAYER_FACTORY_ID
+	panel.update_snapshot(host.current_snapshot)
+	_expect(panel.selection_label.text.contains("Automated Factory"), "building selection should show the selected structure", failures)
+	input_controller.selected_building_id = 0
+	input_controller.selected_entity_ids.assign([1, 2, 3])
+	panel.update_snapshot(host.current_snapshot)
+	_expect(panel.selection_label.text.contains("3 units") and panel.selection_label.text.contains("Workers 2"), "group selection should summarize combat and worker roles", failures)
 	game.free()
 
 

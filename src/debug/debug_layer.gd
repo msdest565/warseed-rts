@@ -4,6 +4,14 @@ extends CanvasLayer
 @onready var status_label: Label = $Panel/Status
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
+		visible = not visible
+		var viewport := get_viewport()
+		if viewport != null:
+			viewport.set_input_as_handled()
+
+
 func update_status(
 	snapshot: WorldSnapshot,
 	selected_entity_id: int,

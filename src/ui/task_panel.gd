@@ -1,25 +1,30 @@
 class_name TaskPanel
 extends PanelContainer
 
-@onready var title_label: Label = $Layout/Title
-@onready var mission_label: Label = $Layout/Mission
-@onready var task_label: Label = $Layout/TaskStatus
-@onready var develop_button: Button = $Layout/Orders/Develop
-@onready var defend_button: Button = $Layout/Orders/Defend
-@onready var attack_button: Button = $Layout/Orders/Attack
-@onready var build_factory_button: Button = $Layout/Orders/BuildFactory
-@onready var build_support_button: Button = $Layout/Orders/BuildSupport
-@onready var repair_button: Button = $Layout/Orders/Repair
-@onready var pause_button: Button = $Layout/Orders/Pause
-@onready var resume_button: Button = $Layout/Orders/Resume
-@onready var cancel_button: Button = $Layout/Orders/Cancel
-@onready var harvest_button: Button = $Layout/Production/Harvest
+@onready var title_label: Label = $Margin/Layout/Intel/Title
+@onready var mission_label: Label = $Margin/Layout/Intel/Mission
+@onready var selection_title_label: Label = $Margin/Layout/Intel/SelectionTitle
+@onready var selection_label: Label = $Margin/Layout/Intel/Selection
+@onready var task_label: Label = $Margin/Layout/Intel/TaskStatus
+@onready var strategic_title_label: Label = $Margin/Layout/Strategic/Title
+@onready var operations_title_label: Label = $Margin/Layout/Operations/Title
+@onready var production_title_label: Label = $Margin/Layout/ProductionSection/Title
+@onready var develop_button: Button = $Margin/Layout/Strategic/Develop
+@onready var defend_button: Button = $Margin/Layout/Strategic/Defend
+@onready var attack_button: Button = $Margin/Layout/Strategic/Attack
+@onready var build_factory_button: Button = $Margin/Layout/Operations/Grid/BuildFactory
+@onready var build_support_button: Button = $Margin/Layout/Operations/Grid/BuildSupport
+@onready var repair_button: Button = $Margin/Layout/Operations/Grid/Repair
+@onready var pause_button: Button = $Margin/Layout/Operations/Grid/Pause
+@onready var resume_button: Button = $Margin/Layout/Operations/Grid/Resume
+@onready var cancel_button: Button = $Margin/Layout/Operations/Grid/Cancel
+@onready var harvest_button: Button = $Margin/Layout/Operations/Grid/Harvest
 @onready var production_buttons: Array[Button] = [
-	$Layout/Production/Harvester,
-	$Layout/Production/Engineer,
-	$Layout/Production/Scout,
-	$Layout/Production/Assault,
-	$Layout/Production/Missile,
+	$Margin/Layout/ProductionSection/Grid/Harvester,
+	$Margin/Layout/ProductionSection/Grid/Engineer,
+	$Margin/Layout/ProductionSection/Grid/Scout,
+	$Margin/Layout/ProductionSection/Grid/Assault,
+	$Margin/Layout/ProductionSection/Grid/Missile,
 ]
 
 const PRODUCTION_DEFINITIONS: Array[StringName] = [
@@ -54,11 +59,15 @@ func _ready() -> void:
 
 
 func refresh_locale() -> void:
-	for control in [title_label, mission_label, task_label, develop_button, defend_button, attack_button, build_factory_button, build_support_button, repair_button, pause_button, resume_button, cancel_button, harvest_button]:
+	for control in [title_label, mission_label, selection_title_label, selection_label, task_label, strategic_title_label, operations_title_label, production_title_label, develop_button, defend_button, attack_button, build_factory_button, build_support_button, repair_button, pause_button, resume_button, cancel_button, harvest_button]:
 		(control as Control).auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	for button in production_buttons:
 		button.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	title_label.text = GameText.t(&"HUD_TITLE")
+	selection_title_label.text = GameText.t(&"HUD_SELECTION")
+	strategic_title_label.text = GameText.t(&"HUD_STRATEGIC")
+	operations_title_label.text = GameText.t(&"HUD_OPERATIONS")
+	production_title_label.text = GameText.t(&"HUD_PRODUCTION")
 	develop_button.text = GameText.t(&"ORDER_DEVELOP")
 	defend_button.text = GameText.t(&"ORDER_DEFEND")
 	attack_button.text = GameText.t(&"ORDER_ATTACK")
@@ -102,6 +111,7 @@ func update_snapshot(snapshot: WorldSnapshot) -> void:
 		button.disabled = not factory_available
 	harvest_button.disabled = input_controller == null or input_controller._selected_harvester_id() == 0
 	_update_mission(snapshot.mission)
+	_update_selection(snapshot)
 	_update_task(active_task)
 
 
@@ -121,30 +131,54 @@ func _update_mission(mission: MissionSnapshot) -> void:
 
 func _update_task(task: TaskSnapshot) -> void:
 	if task == null:
-		task_label.text = last_status
+		task_label.text = input_controller.last_command_status if input_controller != null and not input_controller.last_command_status.is_empty() else last_status
 		return
-	var route_text := GameText.t(&"TASK_ROUTE") % task.route.size()
-	var blocked_text := ""
-	if task.lifecycle == TaskState.Lifecycle.BLOCKED:
-		blocked_text = "\n" + GameText.t(&"TASK_BLOCKED") % [
-			GameText.enum_name("TASK_BLOCKED", TaskState.BlockedReason.keys()[task.blocked_reason]),
-			TranslationServer.translate(task.blocked_detail),
-		]
-	task_label.text = GameText.t(&"TASK_TEMPLATE") % [
+	task_label.text = GameText.t(&"TASK_COMPACT") % [
 		task.task_id,
 		GameText.enum_name("TASK_KIND", TaskState.Kind.keys()[task.kind]),
 		GameText.enum_name("TASK_LIFECYCLE", TaskState.Lifecycle.keys()[task.lifecycle]),
 		GameText.enum_name("TASK_PHASE", TaskState.Phase.keys()[task.phase]),
-		task.target_position.x,
-		task.target_position.y,
-		task.target_radius,
-		route_text,
-		str(task.participant_entity_ids),
 		task.progress_current,
 		task.progress_target,
-		TranslationServer.translate(task.last_detail),
-		blocked_text,
 	]
+
+
+func _update_selection(snapshot: WorldSnapshot) -> void:
+	if input_controller == null:
+		selection_label.text = GameText.t(&"SELECTION_NONE")
+		return
+	if input_controller.selected_building_id != 0:
+		var building := snapshot.get_building(input_controller.selected_building_id)
+		if building != null:
+			selection_label.text = GameText.t(&"SELECTION_BUILDING") % [
+				GameText.building_name(building.definition_id), building.health, building.max_health,
+			]
+			if not building.production_definition_id.is_empty():
+				selection_label.text += "\n" + GameText.t(&"SELECTION_PRODUCING") % [
+					GameText.unit_name(building.production_definition_id), building.production_ticks_remaining,
+				]
+			return
+	if input_controller.selected_entity_ids.is_empty():
+		selection_label.text = GameText.t(&"SELECTION_NONE")
+		return
+	if input_controller.selected_entity_ids.size() == 1:
+		var unit := snapshot.get_unit(input_controller.selected_entity_ids[0])
+		if unit != null:
+			selection_label.text = GameText.t(&"SELECTION_UNIT") % [
+				GameText.unit_name(unit.definition_id), unit.entity_id, unit.health, unit.max_health,
+			]
+			return
+	var combat_count := 0
+	var worker_count := 0
+	for entity_id in input_controller.selected_entity_ids:
+		var unit := snapshot.get_unit(entity_id)
+		if unit == null:
+			continue
+		if unit.can_harvest or unit.can_construct or unit.can_repair:
+			worker_count += 1
+		elif unit.can_attack:
+			combat_count += 1
+	selection_label.text = GameText.t(&"SELECTION_GROUP") % [input_controller.selected_entity_ids.size(), combat_count, worker_count]
 
 
 func _submit_develop() -> void:

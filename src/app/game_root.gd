@@ -53,12 +53,13 @@ func _process(_delta: float) -> void:
 	)
 	task_panel.update_snapshot(simulation_host.current_snapshot)
 	resource_bar.update_snapshot(simulation_host.current_snapshot)
-	debug_layer.update_status(
-		simulation_host.current_snapshot,
-		input_controller.selected_entity_id,
-		simulation_host.get_queue_size(),
-		input_controller.last_command_status,
-		simulation_host.get_tick_timing_snapshot(),
-		simulation_host.get_true_state_snapshot_for_debug(),
-		simulation_host.get_enemy_phase_name()
-	)
+	if debug_layer.visible:
+		debug_layer.update_status(
+			simulation_host.current_snapshot,
+			input_controller.selected_entity_id,
+			simulation_host.get_queue_size(),
+			input_controller.last_command_status,
+			simulation_host.get_tick_timing_snapshot(),
+			simulation_host.get_true_state_snapshot_for_debug(),
+			simulation_host.get_enemy_phase_name()
+		)
