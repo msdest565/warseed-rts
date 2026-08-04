@@ -9,6 +9,15 @@ var current_snapshot: WorldSnapshot
 var interpolation_alpha: float = 0.0
 var pending_move_target: Vector2
 var pending_move_active: bool = false
+var build_preview_position: Vector2
+var build_preview_footprint_size: Vector2i = Vector2i.ONE
+var build_preview_engineer_position: Vector2
+var build_preview_valid: bool = false
+var build_preview_active: bool = false
+var attack_targeting_active: bool = false
+var attack_preview_active: bool = false
+var attack_preview_position: Vector2
+var attack_preview_target_entity_id: int = 0
 var _proxies: Dictionary = {}
 var _building_proxies: Dictionary = {}
 var _ore_field_proxies: Dictionary = {}
@@ -73,6 +82,42 @@ func set_pending_move_target(target_position: Vector2) -> void:
 
 func clear_pending_move_target() -> void:
 	pending_move_active = false
+	queue_redraw()
+
+
+func set_build_preview(build_position: Vector2, footprint_size: Vector2i, valid: bool, engineer_position: Vector2) -> void:
+	build_preview_position = build_position
+	build_preview_footprint_size = footprint_size
+	build_preview_valid = valid
+	build_preview_engineer_position = engineer_position
+	build_preview_active = true
+	queue_redraw()
+
+
+func clear_build_preview() -> void:
+	build_preview_active = false
+	queue_redraw()
+
+
+func begin_attack_targeting() -> void:
+	attack_targeting_active = true
+	attack_preview_active = false
+	attack_preview_target_entity_id = 0
+	queue_redraw()
+
+
+func set_attack_preview(target_position: Vector2, target_entity_id: int) -> void:
+	attack_targeting_active = true
+	attack_preview_active = true
+	attack_preview_position = target_position
+	attack_preview_target_entity_id = target_entity_id
+	queue_redraw()
+
+
+func clear_attack_preview() -> void:
+	attack_targeting_active = false
+	attack_preview_active = false
+	attack_preview_target_entity_id = 0
 	queue_redraw()
 
 
@@ -151,6 +196,10 @@ func _update_proxy_positions() -> void:
 
 
 func _draw() -> void:
+	if build_preview_active:
+		_draw_build_preview()
+	if attack_targeting_active:
+		_draw_attack_targeting()
 	if current_snapshot != null:
 		for task in current_snapshot.tasks:
 			if task.kind == TaskState.Kind.FORMATION_MOVE_TEST or task.lifecycle in [TaskState.Lifecycle.COMPLETED, TaskState.Lifecycle.FAILED, TaskState.Lifecycle.CANCELLED]:
@@ -210,3 +259,50 @@ func _draw() -> void:
 		draw_polyline(unit.path, Color(0.95, 0.78, 0.28, 0.8), 2.0)
 	draw_circle(unit.move_target, 9.0, Color(0.95, 0.78, 0.28, 0.18))
 	draw_arc(unit.move_target, 9.0, 0.0, TAU, 24, Color("f2c94c"), 2.0)
+
+
+func _draw_build_preview() -> void:
+	var grid := LogicGrid.new()
+	var footprint := grid.get_footprint_cells(build_preview_position, build_preview_footprint_size)
+	var color := Color("55d6a9") if build_preview_valid else Color("ef6258")
+	for cell in footprint:
+		var cell_rect := Rect2(Vector2(cell) * LogicGrid.CELL_SIZE, Vector2.ONE * LogicGrid.CELL_SIZE)
+		draw_rect(cell_rect, Color(color, 0.22), true)
+		draw_rect(cell_rect.grow(-1.0), Color(color, 0.95), false, 2.0)
+	var footprint_lookup: Dictionary = {}
+	for cell in footprint:
+		footprint_lookup[cell] = true
+	var work_cells: Array[Vector2i] = []
+	for cell in footprint:
+		for offset in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+			var work_cell: Vector2i = cell + offset
+			if not footprint_lookup.has(work_cell) and not work_cells.has(work_cell):
+				work_cells.append(work_cell)
+	for cell in work_cells:
+		draw_circle(grid.cell_to_world(cell), 4.0, Color(color, 0.75))
+	var range_radius := maxf(build_preview_footprint_size.x, build_preview_footprint_size.y) * LogicGrid.CELL_SIZE * 0.5 + LogicGrid.CELL_SIZE
+	draw_arc(build_preview_position, range_radius, 0.0, TAU, 48, Color(color, 0.8), 2.0)
+	draw_dashed_line(build_preview_engineer_position, build_preview_position, Color(color, 0.7), 2.0, 8.0)
+
+
+func _draw_attack_targeting() -> void:
+	if current_snapshot == null:
+		return
+	var combat_units: Array[UnitSnapshot] = []
+	for entity_id in selected_entity_ids:
+		var unit := current_snapshot.get_unit(entity_id)
+		if unit == null or not unit.enabled or not unit.can_attack or not unit.can_accept_attack_orders:
+			continue
+		combat_units.append(unit)
+		draw_circle(unit.position, unit.attack_range, Color(0.22, 0.78, 0.72, 0.055))
+		draw_arc(unit.position, unit.attack_range, 0.0, TAU, 72, Color(0.32, 0.86, 0.78, 0.78), 2.0)
+	if not attack_preview_active or combat_units.is_empty():
+		return
+	var marker_color := Color("ed5b4f") if attack_preview_target_entity_id != 0 else Color("f2c94c")
+	var marker_radius := 30.0 if attack_preview_target_entity_id != 0 else 12.0
+	for unit in combat_units:
+		draw_dashed_line(unit.position, attack_preview_position, Color(marker_color, 0.58), 1.5, 9.0)
+	draw_circle(attack_preview_position, marker_radius, Color(marker_color, 0.14))
+	draw_arc(attack_preview_position, marker_radius, 0.0, TAU, 40, marker_color, 2.5)
+	draw_line(attack_preview_position + Vector2(-8.0, 0.0), attack_preview_position + Vector2(8.0, 0.0), marker_color, 2.0)
+	draw_line(attack_preview_position + Vector2(0.0, -8.0), attack_preview_position + Vector2(0.0, 8.0), marker_color, 2.0)

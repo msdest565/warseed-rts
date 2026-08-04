@@ -71,15 +71,15 @@ func refresh_locale() -> void:
 	develop_button.text = GameText.t(&"ORDER_DEVELOP")
 	defend_button.text = GameText.t(&"ORDER_DEFEND")
 	attack_button.text = GameText.t(&"ORDER_ATTACK")
-	build_factory_button.text = GameText.t(&"BUILD_FACTORY")
-	build_support_button.text = GameText.t(&"BUILD_SUPPORT")
+	build_factory_button.text = _building_button_text(&"automated_factory", &"BUILD_FACTORY")
+	build_support_button.text = _building_button_text(&"forward_support_station", &"BUILD_SUPPORT")
 	repair_button.text = GameText.t(&"REPAIR_BUILDING")
 	pause_button.text = GameText.t(&"TASK_PAUSE")
 	resume_button.text = GameText.t(&"TASK_RESUME")
 	cancel_button.text = GameText.t(&"TASK_CANCEL")
 	harvest_button.text = GameText.t(&"ORDER_HARVEST")
 	for index in range(production_buttons.size()):
-		production_buttons[index].text = GameText.unit_name(PRODUCTION_DEFINITIONS[index])
+		production_buttons[index].text = _production_button_text(PRODUCTION_DEFINITIONS[index])
 	if current_task_id == 0:
 		last_status = GameText.t(&"TASK_NONE")
 
@@ -88,27 +88,42 @@ func update_snapshot(snapshot: WorldSnapshot) -> void:
 	if snapshot == null:
 		return
 	var active_task: TaskSnapshot
+	var latest_task: TaskSnapshot
+	var industrial_open := false
+	var battlefield_open := false
 	for task in snapshot.tasks:
 		if task.kind == TaskState.Kind.FORMATION_MOVE_TEST:
 			continue
+		if latest_task == null or task.task_id > latest_task.task_id:
+			latest_task = task
+		if task.lifecycle in [TaskState.Lifecycle.COMPLETED, TaskState.Lifecycle.FAILED, TaskState.Lifecycle.CANCELLED]:
+			continue
 		if active_task == null or task.task_id > active_task.task_id:
 			active_task = task
+		if task.kind == TaskState.Kind.DEVELOP_RESOURCE:
+			industrial_open = true
+		else:
+			battlefield_open = true
+	if active_task == null:
+		active_task = latest_task
 	current_task_id = active_task.task_id if active_task != null else 0
 	var has_open_task := active_task != null and active_task.lifecycle not in [TaskState.Lifecycle.COMPLETED, TaskState.Lifecycle.FAILED, TaskState.Lifecycle.CANCELLED]
-	develop_button.disabled = has_open_task
-	defend_button.disabled = has_open_task
-	attack_button.disabled = has_open_task or snapshot.get_unit(SimulationWorld.DEFAULT_ENEMY_UNIT_ID) == null or not snapshot.get_unit(SimulationWorld.DEFAULT_ENEMY_UNIT_ID).enabled
+	develop_button.disabled = industrial_open
+	defend_button.disabled = battlefield_open
+	attack_button.disabled = battlefield_open or snapshot.get_unit(SimulationWorld.DEFAULT_ENEMY_UNIT_ID) == null or not snapshot.get_unit(SimulationWorld.DEFAULT_ENEMY_UNIT_ID).enabled
 	pause_button.disabled = active_task == null or active_task.lifecycle != TaskState.Lifecycle.EXECUTING
 	resume_button.disabled = active_task == null or active_task.lifecycle not in [TaskState.Lifecycle.PAUSED, TaskState.Lifecycle.BLOCKED]
 	cancel_button.disabled = not has_open_task
 	var engineer_available := _has_available_engineer(snapshot)
-	build_factory_button.disabled = not engineer_available
-	build_support_button.disabled = not engineer_available
+	var faction := snapshot.get_faction(SimulationWorld.LOCAL_PLAYER_ID)
+	var available_ore := faction.ore if faction != null else 0
+	build_factory_button.disabled = not engineer_available or available_ore < _building_cost(&"automated_factory")
+	build_support_button.disabled = not engineer_available or available_ore < _building_cost(&"forward_support_station")
 	repair_button.disabled = not engineer_available
 	var selected_factory := snapshot.get_building(input_controller.selected_building_id) if input_controller != null else null
 	var factory_available := selected_factory != null and selected_factory.enabled and selected_factory.operational and selected_factory.definition_id == &"automated_factory" and selected_factory.production_definition_id.is_empty()
-	for button in production_buttons:
-		button.disabled = not factory_available
+	for index in range(production_buttons.size()):
+		production_buttons[index].disabled = not factory_available or available_ore < _unit_cost(PRODUCTION_DEFINITIONS[index])
 	harvest_button.disabled = input_controller == null or input_controller._selected_harvester_id() == 0
 	_update_mission(snapshot.mission)
 	_update_selection(snapshot)
@@ -153,6 +168,7 @@ func _update_selection(snapshot: WorldSnapshot) -> void:
 			selection_label.text = GameText.t(&"SELECTION_BUILDING") % [
 				GameText.building_name(building.definition_id), building.health, building.max_health,
 			]
+			selection_label.text += "\n" + GameText.t(&"SELECTION_VALUE") % _building_cost(building.definition_id)
 			if not building.production_definition_id.is_empty():
 				selection_label.text += "\n" + GameText.t(&"SELECTION_PRODUCING") % [
 					GameText.unit_name(building.production_definition_id), building.production_ticks_remaining,
@@ -167,6 +183,9 @@ func _update_selection(snapshot: WorldSnapshot) -> void:
 			selection_label.text = GameText.t(&"SELECTION_UNIT") % [
 				GameText.unit_name(unit.definition_id), unit.entity_id, unit.health, unit.max_health,
 			]
+			selection_label.text += "\n" + GameText.t(&"SELECTION_VALUE") % _unit_cost(unit.definition_id)
+			if unit.can_attack:
+				selection_label.text += "  " + GameText.t(&"SELECTION_COMBAT") % [unit.attack_damage, unit.attack_range]
 			return
 	var combat_count := 0
 	var worker_count := 0
@@ -176,7 +195,7 @@ func _update_selection(snapshot: WorldSnapshot) -> void:
 			continue
 		if unit.can_harvest or unit.can_construct or unit.can_repair:
 			worker_count += 1
-		elif unit.can_attack:
+		elif unit.can_attack and unit.can_accept_attack_orders:
 			combat_count += 1
 	selection_label.text = GameText.t(&"SELECTION_GROUP") % [input_controller.selected_entity_ids.size(), combat_count, worker_count]
 
@@ -240,6 +259,27 @@ func _has_available_engineer(snapshot: WorldSnapshot) -> bool:
 		if unit.enabled and unit.faction_id == SimulationWorld.LOCAL_PLAYER_ID and unit.definition_id == &"engineer_vehicle" and unit.work_kind == UnitState.WorkKind.NONE:
 			return true
 	return false
+
+
+func _building_button_text(definition_id: StringName, label_key: StringName) -> String:
+	return GameText.t(&"COST_BUTTON") % [GameText.t(label_key), _building_cost(definition_id)]
+
+
+func _production_button_text(definition_id: StringName) -> String:
+	var definition := SimulationWorld.UNIT_CATALOG.get_unit(definition_id)
+	if definition == null:
+		return GameText.unit_name(definition_id)
+	return GameText.t(&"PRODUCTION_COST_BUTTON") % [GameText.unit_name(definition_id), definition.production_cost, definition.production_ticks * SimulationWorld.TICK_SECONDS]
+
+
+func _building_cost(definition_id: StringName) -> int:
+	var definition := SimulationWorld.BUILDING_CATALOG.get_building(definition_id)
+	return definition.build_cost if definition != null else 0
+
+
+func _unit_cost(definition_id: StringName) -> int:
+	var definition := SimulationWorld.UNIT_CATALOG.get_unit(definition_id)
+	return definition.production_cost if definition != null else 0
 
 
 func _control_task(action: TaskControlCommand.Action) -> void:

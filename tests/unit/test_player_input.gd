@@ -9,6 +9,7 @@ func run() -> Array[String]:
 	_test_drag_input_event_sequence(failures)
 	_test_produced_unit_can_be_selected(failures)
 	_test_stop_and_attack_move_input(failures)
+	_test_q_context_attack_and_range_preview(failures)
 	_test_role_filtered_attack_and_targeted_orders(failures)
 	_test_context_attack_input(failures)
 	_test_engineering_and_building_attack_input(failures)
@@ -112,6 +113,31 @@ func _test_stop_and_attack_move_input(failures: Array[String]) -> void:
 	_free_fixture(fixture)
 
 
+func _test_q_context_attack_and_range_preview(failures: Array[String]) -> void:
+	var fixture := _create_fixture()
+	var input := fixture["input"] as InputController
+	var host := fixture["host"] as SimulationHost
+	var presentation := fixture["presentation"] as WorldPresentation
+	input.attack_targeting_started.connect(presentation.begin_attack_targeting)
+	input.attack_preview_changed.connect(presentation.set_attack_preview)
+	input.attack_preview_cleared.connect(presentation.clear_attack_preview)
+	input.select_at(host.current_snapshot.get_unit(3).position)
+	var key := InputEventKey.new()
+	key.keycode = KEY_Q
+	key.pressed = true
+	input._handle_key(key)
+	_expect(input.command_mode == InputController.CommandMode.ATTACK_MOVE_TARGETING and presentation.attack_targeting_active, "Q should enter unified attack targeting and reveal selected weapon ranges", failures)
+	var ground_target := host.current_snapshot.get_unit(3).position + Vector2(320.0, 0.0)
+	input._update_attack_preview(ground_target)
+	_expect(presentation.attack_preview_active and presentation.attack_preview_target_entity_id == 0, "ground hover should publish an attack-move marker", failures)
+	var ground_result := input.attack_or_move_selected_at(ground_target)
+	_expect(ground_result != null and ground_result.is_accepted(), "Q ground click should issue standalone attack-move", failures)
+	host.advance_tick()
+	_expect((host.world.units[3] as UnitState).is_attack_moving and (host.world.units[3] as UnitState).formation_id == 0, "standalone Q attack-move should enter authoritative state", failures)
+	_expect(not presentation.attack_targeting_active, "accepted Q command should clear attack targeting visuals", failures)
+	_free_fixture(fixture)
+
+
 func _test_role_filtered_attack_and_targeted_orders(failures: Array[String]) -> void:
 	var fixture := _create_fixture()
 	var input := fixture["input"] as InputController
@@ -211,11 +237,25 @@ func _test_engineering_and_building_attack_input(failures: Array[String]) -> voi
 	var build_fixture := _create_fixture()
 	var build_input := build_fixture["input"] as InputController
 	var build_host := build_fixture["host"] as SimulationHost
-	build_input.select_at(build_host.current_snapshot.get_unit(2).position)
+	var build_presentation := build_fixture["presentation"] as WorldPresentation
+	build_input.build_preview_changed.connect(build_presentation.set_build_preview)
+	build_input.build_preview_cleared.connect(build_presentation.clear_build_preview)
 	build_input.begin_build_targeting(&"automated_factory")
 	_expect(build_input.command_mode == InputController.CommandMode.BUILD_FACTORY_TARGETING, "build button should enter factory placement mode with an engineer selected", failures)
-	var build_result := build_input.build_selected_at(&"automated_factory", build_host.world.logic_grid.cell_to_world(Vector2i(24, 14)))
+	_expect(build_input.selected_entity_ids == [2], "build command should select an available engineer when none is selected", failures)
+	var valid_position := build_host.world.logic_grid.cell_to_world(Vector2i(24, 14))
+	var valid_preview := build_host.get_build_placement_preview(2, &"automated_factory", valid_position)
+	_expect(valid_preview["valid"] and valid_preview["footprint_size"] == Vector2i(3, 3), "construction preview should expose a legal factory footprint", failures)
+	build_input._update_build_preview(valid_position)
+	_expect(build_presentation.build_preview_active and build_presentation.build_preview_valid, "construction targeting should publish a visible legal placement preview", failures)
+	var occupied_position := (build_host.world.buildings[SimulationWorld.PLAYER_COMMAND_CENTER_ID] as BuildingState).position
+	var occupied_preview := build_host.get_build_placement_preview(2, &"automated_factory", occupied_position)
+	_expect(not occupied_preview["valid"] and occupied_preview["reason"] == CommandValidationResult.Reason.BUILDING_OCCUPIED, "construction preview should mark occupied footprints invalid", failures)
+	var unsnapped_position := valid_position + Vector2(11.0, 9.0)
+	_expect(build_host.get_build_placement_preview(2, &"automated_factory", unsnapped_position)["position"] == valid_position, "construction placement should snap to the authoritative logic grid", failures)
+	var build_result := build_input.build_selected_at(&"automated_factory", valid_position)
 	_expect(build_result != null and build_result.is_accepted(), "map placement should submit an authoritative construction command", failures)
+	_expect(not build_presentation.build_preview_active, "accepted construction should clear the placement preview", failures)
 	_expect(build_host.get_queue_size() == 1, "accepted construction input should wait in the shared command queue", failures)
 	_free_fixture(build_fixture)
 

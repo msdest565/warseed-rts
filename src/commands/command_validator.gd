@@ -33,6 +33,8 @@ func validate(
 		return _validate_stop(command as StopCommand, units, formations)
 	if command is AttackCommand:
 		return _validate_attack(command as AttackCommand, units, formations, buildings, faction_knowledge, logic_grid)
+	if command is AttackMoveCommand:
+		return _validate_attack_move(command as AttackMoveCommand, units, formations, battlefield_bounds, pathfinder)
 	if command is FormationMoveCommand:
 		return _validate_formation_move(command as FormationMoveCommand, units, formations, battlefield_bounds, pathfinder)
 	if command is UnitDispositionCommand:
@@ -74,7 +76,7 @@ func _validate_attack(command: AttackCommand, units: Dictionary, formations: Dic
 		if not units.has(entity_id):
 			return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 		var attacker := units[entity_id] as UnitState
-		if not attacker.can_attack:
+		if not attacker.can_attack or not attacker.can_accept_attack_orders:
 			continue
 		combat_attacker_ids.append(entity_id)
 		var attacker_result := _validate_unit(attacker, command.issuer_id)
@@ -111,6 +113,39 @@ func _validate_attack(command: AttackCommand, units: Dictionary, formations: Dic
 			return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 		if attacker.faction_id == target_faction_id:
 			return _rejected(CommandValidationResult.Reason.FRIENDLY_TARGET)
+	return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
+
+
+func _validate_attack_move(
+	command: AttackMoveCommand,
+	units: Dictionary,
+	formations: Dictionary,
+	battlefield_bounds: Rect2,
+	pathfinder: GridPathfinder
+) -> CommandValidationResult:
+	if command.formation_id != 0:
+		var result := _validate_formation_move(command, units, formations, battlefield_bounds, pathfinder)
+		if not result.is_accepted():
+			return result
+		for entity_id in (formations[command.formation_id] as FormationState).member_entity_ids:
+			var member := units[entity_id] as UnitState
+			if member.enabled and member.can_attack and member.can_accept_attack_orders:
+				return result
+		return _rejected(CommandValidationResult.Reason.INVALID_DEFINITION)
+	if not units.has(command.target_entity_id):
+		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+	var unit := units[command.target_entity_id] as UnitState
+	var unit_result := _validate_unit(unit, command.issuer_id)
+	if not unit_result.is_accepted():
+		return unit_result
+	if not unit.can_attack or not unit.can_accept_attack_orders:
+		return _rejected(CommandValidationResult.Reason.INVALID_DEFINITION)
+	if command.issuer_kind == GameCommand.IssuerKind.AGENT and not _agent_can_control(unit, command):
+		return _rejected(CommandValidationResult.Reason.AGENT_OVERRIDE_BLOCKED)
+	if not _is_valid_position(command.target_position, battlefield_bounds):
+		return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
+	if pathfinder != null and pathfinder.find_path(unit.position, command.target_position).is_empty():
+		return _rejected(CommandValidationResult.Reason.PATH_UNAVAILABLE)
 	return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
 
 
@@ -324,9 +359,11 @@ func _validate_strategic_order(
 	pathfinder: GridPathfinder,
 	tasks: Dictionary
 ) -> CommandValidationResult:
+	var requested_industrial := command.order_kind == StrategicOrderCommand.OrderKind.DEVELOP_RESOURCE
 	for task_variant in tasks.values():
 		var task := task_variant as TaskState
-		if task.kind != TaskState.Kind.FORMATION_MOVE_TEST and task.lifecycle in [TaskState.Lifecycle.WAITING, TaskState.Lifecycle.PREPARING, TaskState.Lifecycle.EXECUTING, TaskState.Lifecycle.PAUSED, TaskState.Lifecycle.BLOCKED]:
+		var task_industrial := task.kind == TaskState.Kind.DEVELOP_RESOURCE
+		if task.kind != TaskState.Kind.FORMATION_MOVE_TEST and task.faction_id in [0, command.issuer_id] and task_industrial == requested_industrial and task.lifecycle in [TaskState.Lifecycle.WAITING, TaskState.Lifecycle.PREPARING, TaskState.Lifecycle.EXECUTING, TaskState.Lifecycle.PAUSED, TaskState.Lifecycle.BLOCKED]:
 			return _rejected(CommandValidationResult.Reason.TASK_CONFLICT)
 	match command.order_kind:
 		StrategicOrderCommand.OrderKind.DEVELOP_RESOURCE:

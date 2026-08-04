@@ -101,6 +101,7 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	var minimap := game.get_node("HUDLayer/Minimap") as MinimapControl
 	var debug_layer := game.get_node("DebugLayer") as DebugLayer
 	var input_controller := game.get_node("InputController") as InputController
+	var workflow_panel := game.get_node("HUDLayer/WorkflowPanel") as WorkflowPanel
 	var pause_menu := game.get_node("PauseMenu") as PauseMenu
 	var camera := game.get_node("CameraController") as CameraController
 	host._ready()
@@ -114,6 +115,10 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	panel.cancel_button = panel.get_node("Margin/Layout/Operations/Grid/Cancel")
 	panel.simulation_host = host
 	panel._ready()
+	workflow_panel.title_label = workflow_panel.get_node("Margin/Layout/Title")
+	workflow_panel.unit_flows_label = workflow_panel.get_node("Margin/Layout/UnitFlows")
+	workflow_panel.tasks_title_label = workflow_panel.get_node("Margin/Layout/TasksTitle")
+	workflow_panel.tasks_label = workflow_panel.get_node("Margin/Layout/Tasks")
 	pause_menu.backdrop = pause_menu.get_node("Backdrop")
 	pause_menu.continue_button = pause_menu.get_node("Backdrop/Menu/Content/Continue")
 	pause_menu.exit_button = pause_menu.get_node("Backdrop/Menu/Content/Exit")
@@ -125,6 +130,8 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	_expect(panel.simulation_host == host, "task panel should accept the authoritative simulation host", failures)
 	_expect(panel.has_node("Margin/Layout/Intel") and panel.has_node("Margin/Layout/Strategic") and panel.has_node("Margin/Layout/Operations") and panel.has_node("Margin/Layout/ProductionSection"), "task panel should separate intelligence, strategy, operations, and production", failures)
 	_expect(panel.production_buttons.size() == 5, "production section should retain all five unit controls", failures)
+	_expect(panel.build_factory_button.text.contains("300") and panel.production_buttons[4].text.contains("350"), "construction and production controls should expose authoritative ore costs", failures)
+	_expect(workflow_panel != null and workflow_panel.has_node("Margin/Layout/UnitFlows") and workflow_panel.has_node("Margin/Layout/Tasks"), "left workflow panel should expose unit work and delegated tasks", failures)
 	var panel_rect_720p := Rect2(Vector2(panel.offset_left, 720.0 + panel.offset_top), Vector2(1280.0 + panel.offset_right - panel.offset_left, panel.offset_bottom - panel.offset_top))
 	var minimap_rect_720p := Rect2(Vector2(minimap.offset_left, 720.0 + minimap.offset_top), Vector2(minimap.offset_right - minimap.offset_left, minimap.offset_bottom - minimap.offset_top))
 	_expect(not panel_rect_720p.intersects(minimap_rect_720p), "bottom command panel and minimap should not overlap at 1280x720", failures)
@@ -147,10 +154,23 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	_expect(TranslationServer.get_locale() == "zh_CN", "language menu should switch the runtime locale to Chinese", failures)
 	_expect(pause_menu.title_label.text == "游戏暂停" and panel.title_label.text == "指挥网络", "Chinese selection should immediately refresh pause menu and HUD", failures)
 	_expect(panel.selection_title_label.text == "当前选择" and panel.strategic_title_label.text == "战略指令" and panel.operations_title_label.text == "工程与控制" and panel.production_title_label.text == "单位生产", "Chinese HUD should localize every command section", failures)
+	_expect(workflow_panel.title_label.text == "当前工作流程", "Chinese HUD should localize the workflow monitor", failures)
 	pause_menu._select_language(1)
 	_expect(TranslationServer.get_locale() == "en", "language menu should switch the runtime locale to English", failures)
 	_expect(pause_menu.title_label.text == "PAUSED" and panel.title_label.text == "COMMAND NETWORK", "English selection should immediately refresh pause menu and HUD", failures)
 	_expect(panel.selection_title_label.text == "SELECTION" and panel.strategic_title_label.text == "STRATEGY" and panel.operations_title_label.text == "OPERATIONS" and panel.production_title_label.text == "PRODUCTION", "English HUD should localize every command section", failures)
+	_expect(workflow_panel.title_label.text == "ACTIVE WORKFLOWS", "English HUD should localize the workflow monitor", failures)
+	(world_faction(host) as FactionState).ore = 120
+	host.current_snapshot = host.world.create_snapshot()
+	input_controller.selected_building_id = SimulationWorld.PLAYER_FACTORY_ID
+	panel.update_snapshot(host.current_snapshot)
+	_expect(not panel.production_buttons[2].disabled and panel.production_buttons[4].disabled, "production controls should distinguish affordable and unaffordable unit costs", failures)
+	host.advance_tick()
+	host.advance_tick()
+	panel.update_snapshot(host.current_snapshot)
+	workflow_panel.update_snapshot(host.current_snapshot)
+	_expect(workflow_panel.unit_flows_label.text.contains("Mining  1") and workflow_panel.tasks_label.text.contains("T1"), "workflow monitor should show authoritative mining and task activity", failures)
+	_expect(panel.develop_button.disabled and not panel.defend_button.disabled, "industrial work should not disable the parallel battlefield command domain", failures)
 	input_controller.selected_building_id = 0
 	input_controller.selected_entity_ids.assign([1])
 	panel.update_snapshot(host.current_snapshot)
@@ -169,3 +189,7 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 func _expect(condition: bool, message: String, failures: Array[String]) -> void:
 	if not condition:
 		failures.append(message)
+
+
+func world_faction(host: SimulationHost) -> FactionState:
+	return host.world.factions[SimulationWorld.LOCAL_PLAYER_ID] as FactionState

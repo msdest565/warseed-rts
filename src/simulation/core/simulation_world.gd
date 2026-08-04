@@ -65,6 +65,7 @@ func _init(create_default_units: bool = true, create_test_agent: bool = false) -
 func _create_default_agent_task() -> void:
 	var task := TaskState.new(_next_task_id, TEST_AGENT_ID, [1, 2, 3, 4, 5])
 	_next_task_id += 1
+	task.faction_id = LOCAL_PLAYER_ID
 	task.target_position = logic_grid.cell_to_world(Vector2i(20, 8))
 	task.priority = 10
 	task.set_lifecycle(TaskState.Lifecycle.EXECUTING, current_tick)
@@ -128,9 +129,9 @@ func _create_default_enemy() -> void:
 	var enemy_position := logic_grid.cell_to_world(LogicGrid.MAP_DEFINITION.enemy_spawn_cell + Vector2i(-4, 0))
 	var enemy := UnitState.new(DEFAULT_ENEMY_UNIT_ID, enemy_position, 0.0, ENEMY_PLAYER_ID)
 	_apply_unit_definition(enemy, DEFAULT_UNIT_DEFINITION)
-	enemy.max_health = 240.0
-	enemy.health = enemy.max_health
-	enemy.attack_damage = 0.0
+	enemy.control_state = UnitState.ControlState.AGENT_ASSIGNED
+	enemy.assigned_agent_id = EnemyRaidAgent.AGENT_ID
+	enemy.assigned_task_id = EnemyRaidAgent.TASK_ID
 	units[enemy.entity_id] = enemy
 	_add_enemy_agent_unit(ENEMY_HARVESTER_ID, &"harvester", LogicGrid.MAP_DEFINITION.enemy_spawn_cell + Vector2i(-5, 2))
 	_add_enemy_agent_unit(ENEMY_ENGINEER_ID, &"engineer_vehicle", LogicGrid.MAP_DEFINITION.enemy_spawn_cell + Vector2i(-5, -2))
@@ -143,11 +144,6 @@ func _add_enemy_agent_unit(entity_id: int, definition_id: StringName, cell: Vect
 	unit.control_state = UnitState.ControlState.AGENT_ASSIGNED
 	unit.assigned_agent_id = EnemyRaidAgent.AGENT_ID
 	unit.assigned_task_id = EnemyRaidAgent.TASK_ID
-	if definition_id == &"harvester":
-		unit.can_attack = true
-		unit.attack_damage = 12.0
-		unit.attack_range = 144.0
-		unit.attack_cooldown_ticks = 14
 	units[entity_id] = unit
 
 
@@ -164,6 +160,8 @@ func _apply_unit_definition(unit: UnitState, definition: UnitDefinition) -> void
 	unit.projectile_speed = definition.combat.projectile_speed
 	unit.sight_range = definition.sight_range
 	unit.can_attack = definition.can_attack
+	unit.can_accept_attack_orders = definition.can_accept_attack_orders
+	unit.auto_retaliate = definition.auto_retaliate
 	unit.can_harvest = definition.can_harvest
 	unit.can_construct = definition.can_construct
 	unit.can_repair = definition.can_repair
@@ -176,8 +174,7 @@ func allocate_command_id() -> int:
 
 
 func submit_command(command: GameCommand) -> CommandValidationResult:
-	_update_faction_knowledge()
-	var result := command_validator.validate(command, units, BATTLEFIELD_BOUNDS, pathfinder, formations, buildings, ore_fields, factions, UNIT_CATALOG, BUILDING_CATALOG, faction_knowledge, logic_grid, tasks)
+	var result := validate_command(command)
 	if result.is_accepted() and _is_direct_player_order(command):
 		var takeover_formation_id := 0
 		if command is FormationMoveCommand:
@@ -202,6 +199,11 @@ func submit_command(command: GameCommand) -> CommandValidationResult:
 	return result
 
 
+func validate_command(command: GameCommand) -> CommandValidationResult:
+	_update_faction_knowledge()
+	return command_validator.validate(command, units, BATTLEFIELD_BOUNDS, pathfinder, formations, buildings, ore_fields, factions, UNIT_CATALOG, BUILDING_CATALOG, faction_knowledge, logic_grid, tasks)
+
+
 func _is_direct_player_order(command: GameCommand) -> bool:
 	if command.issuer_kind != GameCommand.IssuerKind.PLAYER:
 		return false
@@ -220,6 +222,7 @@ func advance_tick() -> WorldSnapshot:
 	enemy_raid_agent.advance(self)
 	_update_faction_knowledge()
 	_drop_hidden_attack_targets()
+	_update_worker_self_defense()
 	_update_combat_orders()
 	formation_movement.advance(formations, units, events, current_tick)
 	var entity_ids := units.keys()
@@ -475,6 +478,28 @@ func _drop_hidden_attack_targets() -> void:
 			_clear_attack_target(unit, "hidden")
 
 
+func _update_worker_self_defense() -> void:
+	var entity_ids := units.keys()
+	entity_ids.sort()
+	for entity_id in entity_ids:
+		var worker := units[entity_id] as UnitState
+		if not worker.enabled or not worker.auto_retaliate or not worker.can_attack or worker.can_accept_attack_orders:
+			continue
+		if worker.harvest_ore_field_entity_id == 0 and worker.work_kind == UnitState.WorkKind.NONE:
+			_clear_attack_target(worker, "worker_idle")
+			continue
+		if worker.attack_target_entity_id != 0:
+			var target_id := worker.attack_target_entity_id
+			if is_entity_enabled(target_id) and get_entity_faction_id(target_id) != worker.faction_id and is_entity_visible_to_faction(target_id, worker.faction_id):
+				if worker.position.distance_to(get_entity_position(target_id)) <= worker.attack_range * 1.15:
+					continue
+			_clear_attack_target(worker, "retaliation_range")
+		var nearby_target := _find_nearest_enemy_for_faction(worker.position, worker.faction_id, worker.attack_range)
+		if nearby_target != 0:
+			worker.attack_target_entity_id = nearby_target
+			events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.ATTACK_STARTED, worker.entity_id, "target=%d;retaliate=1" % nearby_target))
+
+
 func _update_combat_orders() -> void:
 	for formation_id in formations.keys():
 		var formation := formations[formation_id] as FormationState
@@ -482,7 +507,9 @@ func _update_combat_orders() -> void:
 			continue
 		var target_id := formation.order_target_entity_id
 		if formation.order_kind == FormationState.OrderKind.ATTACK_MOVE and target_id == 0:
-			target_id = _find_nearest_enemy(formation.anchor_position, 320.0)
+			var leader := units.get(formation.leader_entity_id) as UnitState
+			if leader != null:
+				target_id = _find_nearest_enemy_for_faction(formation.anchor_position, leader.faction_id, minf(leader.sight_range, 320.0))
 			if target_id != 0:
 				formation.order_target_entity_id = target_id
 		if target_id == 0 or not is_entity_enabled(target_id):
@@ -520,6 +547,50 @@ func _update_combat_orders() -> void:
 					formation.path_index = 1
 					formation.is_moving = formation.path.size() > 1
 					formation.pursuit_target_cell = logic_grid.world_to_cell(destination)
+	_update_individual_combat_orders()
+
+
+func _update_individual_combat_orders() -> void:
+	var entity_ids := units.keys()
+	entity_ids.sort()
+	for entity_id in entity_ids:
+		var unit := units[entity_id] as UnitState
+		if not unit.enabled or unit.following_formation or not unit.can_attack:
+			continue
+		if unit.attack_target_entity_id == 0 and unit.is_attack_moving:
+			var acquired_target := _find_nearest_enemy_for_faction(unit.position, unit.faction_id, minf(unit.sight_range, 320.0))
+			if acquired_target != 0:
+				unit.attack_target_entity_id = acquired_target
+				unit.pursuit_target_cell = Vector2i(-1, -1)
+				events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.ATTACK_STARTED, unit.entity_id, "target=%d;attack_move=1" % acquired_target))
+		if unit.attack_target_entity_id == 0:
+			if unit.is_attack_moving and not unit.has_move_target and unit.position.distance_to(unit.attack_move_destination) > FormationMovementSystem.ARRIVAL_TOLERANCE:
+				_start_individual_attack_path(unit, unit.attack_move_destination)
+			continue
+		var target_id := unit.attack_target_entity_id
+		if not is_entity_enabled(target_id) or get_entity_faction_id(target_id) == unit.faction_id:
+			_clear_attack_target(unit, "invalid")
+			continue
+		var target_position := get_entity_position(target_id)
+		if unit.position.distance_to(target_position) <= unit.attack_range:
+			unit.has_move_target = false
+			unit.path = PackedVector2Array()
+			unit.path_index = 0
+			unit.pursuit_target_cell = logic_grid.world_to_cell(target_position)
+			continue
+		if not unit.can_accept_attack_orders:
+			continue
+		var destination := get_attack_destination(target_id, unit.position)
+		var destination_cell := logic_grid.world_to_cell(destination)
+		if unit.pursuit_target_cell != destination_cell or not unit.has_move_target:
+			_start_individual_attack_path(unit, destination)
+			unit.pursuit_target_cell = destination_cell
+
+
+func _start_individual_attack_path(unit: UnitState, destination: Vector2) -> void:
+	unit.path = pathfinder.find_path(unit.position, destination)
+	unit.path_index = 1
+	unit.has_move_target = unit.path.size() > 1
 
 
 func _resume_formation_route(formation: FormationState) -> void:
@@ -536,12 +607,12 @@ func _resume_formation_route(formation: FormationState) -> void:
 			member.has_move_target = formation.is_moving
 
 
-func _find_nearest_enemy(origin: Vector2, radius: float) -> int:
+func _find_nearest_enemy_for_faction(origin: Vector2, faction_id: int, radius: float) -> int:
 	var best_id := 0
 	var best_distance := INF
 	for unit_variant in units.values():
 		var unit := unit_variant as UnitState
-		if not unit.enabled or unit.faction_id == LOCAL_PLAYER_ID or not is_entity_visible_to_faction(unit.entity_id, LOCAL_PLAYER_ID):
+		if not unit.enabled or unit.faction_id == faction_id or not is_entity_visible_to_faction(unit.entity_id, faction_id):
 			continue
 		var distance := origin.distance_squared_to(unit.position)
 		if distance <= radius * radius and (distance < best_distance or (is_equal_approx(distance, best_distance) and unit.entity_id < best_id)):
@@ -549,7 +620,7 @@ func _find_nearest_enemy(origin: Vector2, radius: float) -> int:
 			best_distance = distance
 	for building_variant in buildings.values():
 		var building := building_variant as BuildingState
-		if not building.enabled or building.faction_id == LOCAL_PLAYER_ID or not is_entity_visible_to_faction(building.entity_id, LOCAL_PLAYER_ID):
+		if not building.enabled or building.faction_id == faction_id or not is_entity_visible_to_faction(building.entity_id, faction_id):
 			continue
 		var distance := origin.distance_squared_to(building.position)
 		if distance <= radius * radius and (distance < best_distance or (is_equal_approx(distance, best_distance) and building.entity_id < best_id)):
@@ -703,11 +774,27 @@ func _apply_command(command: GameCommand) -> void:
 		_apply_attack(command as AttackCommand)
 	elif command is FormationMoveCommand:
 		var formation_command := command as FormationMoveCommand
+		if formation_command.formation_id == 0:
+			var unit := units[formation_command.target_entity_id] as UnitState
+			_cancel_unit_job(unit)
+			_clear_attack_target(unit, "command_move")
+			_remove_unit_from_formation(unit)
+			unit.move_target = formation_command.target_position
+			unit.attack_move_destination = formation_command.target_position
+			unit.path = pathfinder.find_path(unit.position, unit.move_target)
+			unit.path_index = 1
+			unit.has_move_target = unit.path.size() > 1
+			unit.is_attack_moving = command is AttackMoveCommand
+			unit.pursuit_target_cell = Vector2i(-1, -1)
+			return
+		if command is AttackMoveCommand:
+			_detach_noncombat_members(formation_command.formation_id)
 		var formation := formations[formation_command.formation_id] as FormationState
 		formation.order_kind = FormationState.OrderKind.ATTACK_MOVE if command is AttackMoveCommand else FormationState.OrderKind.MOVE
 		formation.engagement_state = FormationState.EngagementState.NONE
 		formation.order_destination = formation_command.target_position
 		formation.order_target_entity_id = 0
+		formation.pursuit_target_cell = Vector2i(-1, -1)
 		formation.target_position = formation_command.target_position
 		formation.path = pathfinder.find_path(formation.anchor_position, formation.target_position)
 		formation.path_index = 1
@@ -742,6 +829,8 @@ func _apply_command(command: GameCommand) -> void:
 		unit.path_index = 1
 		unit.has_move_target = unit.path.size() > 1
 		unit.is_attack_moving = false
+		unit.attack_move_destination = unit.position
+		unit.pursuit_target_cell = Vector2i(-1, -1)
 
 
 func _apply_build(command: BuildBuildingCommand) -> void:
@@ -859,6 +948,7 @@ func _apply_strategic_order(command: StrategicOrderCommand) -> void:
 			participants = _combat_participants(command.formation_id)
 	var task := TaskState.new(_next_task_id, agent_id, participants)
 	_next_task_id += 1
+	task.faction_id = command.issuer_id
 	task.kind = kind
 	task.formation_id = command.formation_id
 	task.target_entity_id = command.objective_entity_id
@@ -945,7 +1035,7 @@ func _apply_attack(command: AttackCommand) -> void:
 		entity_ids.append(command.target_entity_id)
 	for entity_id in entity_ids:
 		var unit := units[entity_id] as UnitState
-		if not unit.can_attack:
+		if not unit.can_attack or not unit.can_accept_attack_orders:
 			continue
 		var preserve_harvest := unit.can_harvest and unit.harvest_ore_field_entity_id != 0
 		if not preserve_harvest:
@@ -967,6 +1057,8 @@ func _apply_attack(command: AttackCommand) -> void:
 			unit.recovery_path = PackedVector2Array()
 			unit.recovery_path_index = 0
 			unit.is_attack_moving = false
+			unit.attack_move_destination = unit.position
+		unit.pursuit_target_cell = Vector2i(-1, -1)
 		unit.attack_target_entity_id = command.attack_target_entity_id
 		events.append(SimulationEvent.new(
 			current_tick,
@@ -982,7 +1074,7 @@ func _combat_participants(formation_id: int) -> Array[int]:
 		return result
 	for entity_id in (formations[formation_id] as FormationState).member_entity_ids:
 		var unit := units.get(entity_id) as UnitState
-		if unit != null and unit.enabled and unit.can_attack:
+		if unit != null and unit.enabled and unit.can_attack and unit.can_accept_attack_orders:
 			result.append(entity_id)
 	return result
 
@@ -994,7 +1086,7 @@ func _detach_noncombat_members(formation_id: int) -> void:
 	var member_ids := formation.member_entity_ids.duplicate()
 	for entity_id in member_ids:
 		var unit := units.get(entity_id) as UnitState
-		if unit != null and not unit.can_attack:
+		if unit != null and (not unit.can_attack or not unit.can_accept_attack_orders):
 			_remove_unit_from_formation(unit)
 
 
@@ -1003,6 +1095,7 @@ func _clear_attack_target(unit: UnitState, reason: String) -> void:
 		return
 	var target_id := unit.attack_target_entity_id
 	unit.attack_target_entity_id = 0
+	unit.pursuit_target_cell = Vector2i(-1, -1)
 	events.append(SimulationEvent.new(
 		current_tick,
 		SimulationEvent.Kind.TARGET_LOST,
@@ -1039,6 +1132,8 @@ func _apply_stop(command: StopCommand) -> void:
 		unit.recovery_path = PackedVector2Array()
 		unit.recovery_path_index = 0
 		unit.is_attack_moving = false
+		unit.attack_move_destination = unit.position
+		unit.pursuit_target_cell = Vector2i(-1, -1)
 
 
 func _remove_unit_from_formation(unit: UnitState) -> void:

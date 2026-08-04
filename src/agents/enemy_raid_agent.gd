@@ -23,7 +23,10 @@ const RAID_DURATION_TICKS := 400
 const RETREAT_TIMEOUT_TICKS := 240
 const DEFEND_DURATION_TICKS := 220
 const RAID_FORCE_SIZE := 3
+const BASE_DEFENSE_RADIUS := 640.0
+const RAID_RETREAT_HEALTH_RATIO := 0.42
 const ENEMY_FACTORY_POSITION := Vector2i(79, 51)
+const ENEMY_SUPPORT_POSITION := Vector2i(84, 48)
 const SCOUT_POSITION := Vector2i(53, 32)
 
 var phase: Phase = Phase.ECONOMY
@@ -31,6 +34,8 @@ var phase_started_tick: int = 0
 var phase_history: Array[Phase] = [Phase.ECONOMY]
 var last_order_tick: int = -ORDER_INTERVAL_TICKS
 var last_unit_order_tick: Dictionary = {}
+var production_reserved_tick: int = -1
+var engineering_reserved_tick: int = -1
 var completed_cycles: int = 0
 var spawned: bool = false
 
@@ -40,7 +45,10 @@ func advance(world: SimulationWorld) -> void:
 		return
 	_claim_enemy_units(world)
 	_ensure_harvest(world)
-	_defend_harvester(world)
+	_maintain_economy_units(world)
+	_maintain_engineering(world)
+	if _base_under_threat(world) and phase not in [Phase.DEFENDING, Phase.RETREATING]:
+		_change_phase(Phase.DEFENDING, world)
 	match phase:
 		Phase.ECONOMY:
 			if world.current_tick >= STRATEGY_START_TICK:
@@ -66,6 +74,8 @@ func phase_name() -> String:
 
 
 func _advance_expansion(world: SimulationWorld) -> void:
+	if engineering_reserved_tick == world.current_tick:
+		return
 	var factory := _enemy_factory(world)
 	if factory != null:
 		if factory.operational:
@@ -74,6 +84,9 @@ func _advance_expansion(world: SimulationWorld) -> void:
 	var engineer := world.units.get(SimulationWorld.ENEMY_ENGINEER_ID) as UnitState
 	if engineer == null or not engineer.enabled or engineer.work_kind != UnitState.WorkKind.NONE:
 		return
+	var build_position := _find_factory_position(engineer, world)
+	if build_position == Vector2.ZERO:
+		return
 	var command := BuildBuildingCommand.new(
 		world.allocate_command_id(),
 		SimulationWorld.ENEMY_PLAYER_ID,
@@ -81,9 +94,10 @@ func _advance_expansion(world: SimulationWorld) -> void:
 		world.current_tick,
 		engineer.entity_id,
 		&"automated_factory",
-		world.logic_grid.cell_to_world(ENEMY_FACTORY_POSITION)
+		build_position
 	)
-	_submit(command, world)
+	if _submit(command, world):
+		engineering_reserved_tick = world.current_tick
 
 
 func _advance_scouting(world: SimulationWorld) -> void:
@@ -112,12 +126,12 @@ func _advance_mustering(world: SimulationWorld) -> void:
 		_change_phase(Phase.RAIDING, world)
 		spawned = true
 		return
-	_submit_production(&"assault_vehicle", world)
+	_submit_production(_next_combat_definition(world), world)
 
 
 func _advance_raiding(world: SimulationWorld) -> void:
 	var combat_units := _combat_units(world)
-	if combat_units.size() <= 1 or _phase_elapsed(world) >= RAID_DURATION_TICKS:
+	if combat_units.size() <= 1 or _average_health_ratio(combat_units) <= RAID_RETREAT_HEALTH_RATIO or _phase_elapsed(world) >= RAID_DURATION_TICKS:
 		_change_phase(Phase.RETREATING, world)
 		return
 	var knowledge := world.create_faction_snapshot(SimulationWorld.ENEMY_PLAYER_ID)
@@ -149,51 +163,98 @@ func _advance_retreating(world: SimulationWorld) -> void:
 func _advance_defending(world: SimulationWorld) -> void:
 	var base_position := _base_rally_position(world)
 	var knowledge := world.create_faction_snapshot(SimulationWorld.ENEMY_PLAYER_ID)
+	var threat_present := false
 	for unit in _combat_units(world):
-		var target_id := _best_visible_target(knowledge, base_position, 520.0)
+		var target_id := _best_visible_target(knowledge, base_position, BASE_DEFENSE_RADIUS)
 		if target_id != 0:
+			threat_present = true
 			_submit_attack(unit, target_id, world)
 		elif unit.position.distance_to(base_position) > 180.0:
 			_submit_move(unit, base_position, world)
-	if _phase_elapsed(world) >= DEFEND_DURATION_TICKS:
+	if not threat_present and _phase_elapsed(world) >= DEFEND_DURATION_TICKS:
 		completed_cycles += 1
 		_change_phase(Phase.MUSTERING, world)
 
 
 func _ensure_harvest(world: SimulationWorld) -> void:
-	var harvester := world.units.get(SimulationWorld.ENEMY_HARVESTER_ID) as UnitState
-	if harvester == null or not harvester.enabled or harvester.harvest_ore_field_entity_id != 0:
-		return
 	var ore_field := world.ore_fields.get(SimulationWorld.ENEMY_ORE_FIELD_ID) as OreFieldState
 	var refinery := world.buildings.get(SimulationWorld.ENEMY_COMMAND_CENTER_ID) as BuildingState
 	if ore_field == null or ore_field.ore_remaining <= 0 or refinery == null or not refinery.enabled:
 		return
-	var command := HarvestCommand.new(
-		world.allocate_command_id(), SimulationWorld.ENEMY_PLAYER_ID, GameCommand.IssuerKind.AGENT,
-		world.current_tick, harvester.entity_id, ore_field.entity_id, refinery.entity_id
-	)
-	_submit(command, world)
+	for unit_variant in world.units.values():
+		var harvester := unit_variant as UnitState
+		if not harvester.enabled or harvester.faction_id != SimulationWorld.ENEMY_PLAYER_ID or not harvester.can_harvest or harvester.harvest_ore_field_entity_id != 0:
+			continue
+		var command := HarvestCommand.new(
+			world.allocate_command_id(), SimulationWorld.ENEMY_PLAYER_ID, GameCommand.IssuerKind.AGENT,
+			world.current_tick, harvester.entity_id, ore_field.entity_id, refinery.entity_id
+		)
+		_submit(command, world)
 
 
-func _defend_harvester(world: SimulationWorld) -> void:
-	var harvester := world.units.get(SimulationWorld.ENEMY_HARVESTER_ID) as UnitState
-	if harvester == null or not harvester.enabled or not harvester.can_attack or harvester.harvest_ore_field_entity_id == 0:
+func _maintain_economy_units(world: SimulationWorld) -> void:
+	var harvester_count := 0
+	var engineer_count := 0
+	for unit_variant in world.units.values():
+		var unit := unit_variant as UnitState
+		if not unit.enabled or unit.faction_id != SimulationWorld.ENEMY_PLAYER_ID:
+			continue
+		if unit.can_harvest:
+			harvester_count += 1
+		if unit.can_construct:
+			engineer_count += 1
+	if harvester_count == 0:
+		_submit_production(&"harvester", world)
+	elif engineer_count == 0:
+		_submit_production(&"engineer_vehicle", world)
+
+
+func _maintain_engineering(world: SimulationWorld) -> void:
+	var engineer := _idle_engineer(world)
+	if engineer == null:
 		return
-	var snapshot := world.create_faction_snapshot(SimulationWorld.ENEMY_PLAYER_ID)
-	var target_id := _best_visible_target(snapshot, harvester.position, harvester.attack_range)
-	if target_id != 0:
-		_submit_attack(harvester, target_id, world)
+	var repair_target := _most_damaged_building(world)
+	if repair_target != null:
+		var repair := RepairBuildingCommand.new(
+			world.allocate_command_id(), SimulationWorld.ENEMY_PLAYER_ID, GameCommand.IssuerKind.AGENT,
+			world.current_tick, engineer.entity_id, repair_target.entity_id
+		)
+		if _submit(repair, world):
+			engineering_reserved_tick = world.current_tick
+		return
+	if _enemy_factory(world) == null or _enemy_support(world) != null:
+		return
+	var support_definition := SimulationWorld.BUILDING_CATALOG.get_building(&"forward_support_station")
+	var faction := world.factions.get(SimulationWorld.ENEMY_PLAYER_ID) as FactionState
+	if support_definition == null or faction == null or faction.ore < support_definition.build_cost:
+		return
+	var build_position := _find_building_position(engineer, &"forward_support_station", ENEMY_SUPPORT_POSITION, world)
+	if build_position == Vector2.ZERO:
+		return
+	var build := BuildBuildingCommand.new(
+		world.allocate_command_id(), SimulationWorld.ENEMY_PLAYER_ID, GameCommand.IssuerKind.AGENT,
+		world.current_tick, engineer.entity_id, &"forward_support_station", build_position
+	)
+	if _submit(build, world):
+		engineering_reserved_tick = world.current_tick
 
 
 func _submit_production(definition_id: StringName, world: SimulationWorld) -> void:
+	if production_reserved_tick == world.current_tick:
+		return
 	var factory := _enemy_factory(world)
 	if factory == null or not factory.operational or not factory.production_definition_id.is_empty():
+		return
+	var definition := SimulationWorld.UNIT_CATALOG.get_unit(definition_id)
+	var faction := world.factions.get(SimulationWorld.ENEMY_PLAYER_ID) as FactionState
+	if definition == null or faction == null or faction.ore < definition.production_cost:
 		return
 	var command := ProduceUnitCommand.new(
 		world.allocate_command_id(), SimulationWorld.ENEMY_PLAYER_ID, GameCommand.IssuerKind.AGENT,
 		world.current_tick, factory.entity_id, definition_id
 	)
-	_submit(command, world)
+	if _submit(command, world):
+		production_reserved_tick = world.current_tick
 
 
 func _submit_attack(unit: UnitState, target_entity_id: int, world: SimulationWorld) -> void:
@@ -241,6 +302,36 @@ func _enemy_factory(world: SimulationWorld) -> BuildingState:
 	return null
 
 
+func _enemy_support(world: SimulationWorld) -> BuildingState:
+	for building_variant in world.buildings.values():
+		var building := building_variant as BuildingState
+		if building.faction_id == SimulationWorld.ENEMY_PLAYER_ID and building.definition_id == &"forward_support_station" and building.enabled:
+			return building
+	return null
+
+
+func _idle_engineer(world: SimulationWorld) -> UnitState:
+	for unit_variant in world.units.values():
+		var unit := unit_variant as UnitState
+		if unit.enabled and unit.faction_id == SimulationWorld.ENEMY_PLAYER_ID and unit.can_construct and unit.work_kind == UnitState.WorkKind.NONE:
+			return unit
+	return null
+
+
+func _most_damaged_building(world: SimulationWorld) -> BuildingState:
+	var result: BuildingState
+	var lowest_ratio := 1.0
+	for building_variant in world.buildings.values():
+		var building := building_variant as BuildingState
+		if not building.enabled or not building.operational or building.under_construction or building.faction_id != SimulationWorld.ENEMY_PLAYER_ID or building.health >= building.max_health:
+			continue
+		var ratio := building.health / building.max_health
+		if ratio < lowest_ratio:
+			lowest_ratio = ratio
+			result = building
+	return result
+
+
 func _base_rally_position(world: SimulationWorld) -> Vector2:
 	var command_center := world.buildings.get(SimulationWorld.ENEMY_COMMAND_CENTER_ID) as BuildingState
 	return command_center.rally_position if command_center != null and command_center.enabled else world.logic_grid.cell_to_world(LogicGrid.MAP_DEFINITION.enemy_spawn_cell + Vector2i(-4, 0))
@@ -259,7 +350,7 @@ func _combat_units(world: SimulationWorld) -> Array[UnitState]:
 	entity_ids.sort()
 	for entity_id in entity_ids:
 		var unit := world.units[entity_id] as UnitState
-		if unit.enabled and unit.faction_id == SimulationWorld.ENEMY_PLAYER_ID and unit.entity_id != SimulationWorld.DEFAULT_ENEMY_UNIT_ID and unit.can_attack and not unit.can_harvest and not unit.can_construct:
+		if unit.enabled and unit.faction_id == SimulationWorld.ENEMY_PLAYER_ID and unit.can_attack and not unit.can_harvest and not unit.can_construct:
 			result.append(unit)
 	return result
 
@@ -274,7 +365,7 @@ func _best_visible_target(snapshot: WorldSnapshot, origin: Vector2, max_distance
 		var distance := origin.distance_squared_to(contact.position)
 		if distance > max_distance * max_distance:
 			continue
-		var priority := 0 if contact.definition_id == &"harvester" else 1
+		var priority := _target_priority(contact)
 		if priority < best_priority or (priority == best_priority and (distance < best_distance or (is_equal_approx(distance, best_distance) and contact.entity_id < best_id))):
 			best_id = contact.entity_id
 			best_priority = priority
@@ -308,11 +399,79 @@ func _newest_stale_position(snapshot: WorldSnapshot) -> Vector2:
 func _claim_enemy_units(world: SimulationWorld) -> void:
 	for unit_variant in world.units.values():
 		var unit := unit_variant as UnitState
-		if unit.faction_id != SimulationWorld.ENEMY_PLAYER_ID or unit.entity_id == SimulationWorld.DEFAULT_ENEMY_UNIT_ID:
+		if unit.faction_id != SimulationWorld.ENEMY_PLAYER_ID:
 			continue
 		unit.control_state = UnitState.ControlState.AGENT_ASSIGNED
 		unit.assigned_agent_id = AGENT_ID
 		unit.assigned_task_id = TASK_ID
+
+
+func _base_under_threat(world: SimulationWorld) -> bool:
+	var snapshot := world.create_faction_snapshot(SimulationWorld.ENEMY_PLAYER_ID)
+	return _best_visible_target(snapshot, _base_rally_position(world), BASE_DEFENSE_RADIUS) != 0
+
+
+func _average_health_ratio(units: Array[UnitState]) -> float:
+	if units.is_empty():
+		return 0.0
+	var total := 0.0
+	for unit in units:
+		total += unit.health / unit.max_health if unit.max_health > 0.0 else 0.0
+	return total / units.size()
+
+
+func _target_priority(contact: UnitSnapshot) -> int:
+	if contact.attack_target_entity_id != 0:
+		return 0
+	match contact.definition_id:
+		&"missile_vehicle":
+			return 1
+		&"assault_vehicle":
+			return 2
+		&"harvester":
+			return 3
+		&"engineer_vehicle":
+			return 4
+	return 5
+
+
+func _next_combat_definition(world: SimulationWorld) -> StringName:
+	var scouts := 0
+	var assaults := 0
+	var missiles := 0
+	for unit in _combat_units(world):
+		match unit.definition_id:
+			&"scout_vehicle": scouts += 1
+			&"assault_vehicle": assaults += 1
+			&"missile_vehicle": missiles += 1
+	if scouts == 0:
+		return &"scout_vehicle"
+	if assaults == 0:
+		return &"assault_vehicle"
+	if missiles == 0:
+		return &"missile_vehicle"
+	return &"assault_vehicle" if assaults <= missiles else &"missile_vehicle"
+
+
+func _find_factory_position(engineer: UnitState, world: SimulationWorld) -> Vector2:
+	return _find_building_position(engineer, &"automated_factory", ENEMY_FACTORY_POSITION, world)
+
+
+func _find_building_position(engineer: UnitState, definition_id: StringName, preferred_cell: Vector2i, world: SimulationWorld) -> Vector2:
+	var offsets: Array[Vector2i] = [
+		Vector2i.ZERO, Vector2i(-4, 0), Vector2i(0, -4), Vector2i(-4, -4),
+		Vector2i(4, 0), Vector2i(0, 4), Vector2i(-8, 0), Vector2i(0, -8),
+	]
+	for offset in offsets:
+		var position := world.logic_grid.cell_to_world(preferred_cell + offset)
+		var probe := BuildBuildingCommand.new(
+			0, SimulationWorld.ENEMY_PLAYER_ID, GameCommand.IssuerKind.AGENT,
+			world.current_tick, engineer.entity_id, definition_id, position
+		)
+		_set_context(probe)
+		if world.validate_command(probe).is_accepted():
+			return position
+	return Vector2.ZERO
 
 
 func _change_phase(next_phase: Phase, world: SimulationWorld) -> void:

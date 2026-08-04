@@ -42,6 +42,8 @@ var is_recovering: bool = false
 var recovery_path: PackedVector2Array = PackedVector2Array()
 var recovery_path_index: int = 0
 var is_attack_moving: bool = false
+var attack_move_destination: Vector2
+var pursuit_target_cell: Vector2i = Vector2i(-1, -1)
 var faction_id: int
 var max_health: float = 100.0
 var health: float = 100.0
@@ -59,6 +61,8 @@ var last_seen_tick: int = 0
 var last_seen_position: Vector2
 var definition_id: StringName = &"scout_vehicle"
 var can_attack: bool = true
+var can_accept_attack_orders: bool = true
+var auto_retaliate: bool = true
 var can_harvest: bool = false
 var can_construct: bool = false
 var can_repair: bool = false
@@ -93,6 +97,7 @@ func _init(
 	position = new_position
 	move_target = new_position
 	desired_position = new_position
+	attack_move_destination = new_position
 	move_speed = new_move_speed
 	controller_id = new_controller_id
 	faction_id = new_controller_id

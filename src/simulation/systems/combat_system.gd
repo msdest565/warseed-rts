@@ -152,6 +152,7 @@ func _clear_invalid_target(unit: UnitState, events: Array[SimulationEvent], curr
 	if target_id == 0:
 		return
 	unit.attack_target_entity_id = 0
+	unit.pursuit_target_cell = Vector2i(-1, -1)
 	events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.TARGET_LOST, unit.entity_id, "target=%d;reason=%s" % [target_id, reason]))
 
 
@@ -179,6 +180,8 @@ func _disable_destroyed_target(entity_id: int, units: Dictionary, buildings: Dic
 	unit.recovery_path = PackedVector2Array()
 	unit.recovery_path_index = 0
 	unit.is_attack_moving = false
+	unit.attack_move_destination = unit.position
+	unit.pursuit_target_cell = Vector2i(-1, -1)
 	unit.attack_target_entity_id = 0
 	unit.work_kind = UnitState.WorkKind.NONE
 	unit.work_target_building_id = 0

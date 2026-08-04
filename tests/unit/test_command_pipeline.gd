@@ -101,7 +101,8 @@ func _test_stop_and_attack_move_commands(failures: Array[String]) -> void:
 	var attack_move := AttackMoveCommand.new(1, 1, GameCommand.IssuerKind.PLAYER, 0, 1, 1, Vector2(800.0, 336.0))
 	_expect(world.submit_command(attack_move).is_accepted(), "attack-move should share formation path validation", failures)
 	world.advance_tick()
-	_expect((world.units[1] as UnitState).is_attack_moving, "attack-move intent should enter authoritative unit state", failures)
+	_expect((world.units[3] as UnitState).is_attack_moving, "attack-move intent should enter authoritative combat unit state", failures)
+	_expect(not (world.units[1] as UnitState).is_attack_moving, "attack-move should not interrupt the harvester role", failures)
 	var stop := StopCommand.new(2, 1, GameCommand.IssuerKind.PLAYER, world.current_tick, 1, 1)
 	_expect(world.submit_command(stop).is_accepted(), "formation stop should be accepted", failures)
 	var before := (world.units[1] as UnitState).position

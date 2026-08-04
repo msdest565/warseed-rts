@@ -46,6 +46,7 @@ enum Phase {
 
 var task_id: int
 var agent_id: int
+var faction_id: int = 0
 var parent_task_id: int = 0
 var kind: Kind = Kind.FORMATION_MOVE_TEST
 var phase: Phase = Phase.PREPARING

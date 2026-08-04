@@ -97,9 +97,9 @@ func create_stop_command(entity_id: int, formation_id: int = 0) -> StopCommand:
 	)
 
 
-func create_attack_move_command(formation_id: int, target_position: Vector2) -> AttackMoveCommand:
+func create_attack_move_command(formation_id: int, target_position: Vector2, entity_id: int = 0) -> AttackMoveCommand:
 	var formation := world.formations.get(formation_id) as FormationState
-	var leader_entity_id := formation.leader_entity_id if formation != null else 0
+	var leader_entity_id := formation.leader_entity_id if formation != null else entity_id
 	return AttackMoveCommand.new(
 		world.allocate_command_id(),
 		SimulationWorld.LOCAL_PLAYER_ID,
@@ -162,8 +162,32 @@ func create_build_building_command(engineer_entity_id: int, building_definition_
 		world.current_tick,
 		engineer_entity_id,
 		building_definition_id,
-		build_position
+		snap_build_position(build_position)
 	)
+
+
+func snap_build_position(world_position: Vector2) -> Vector2:
+	return world.logic_grid.cell_to_world(world.logic_grid.world_to_cell(world_position))
+
+
+func get_build_placement_preview(engineer_entity_id: int, building_definition_id: StringName, world_position: Vector2) -> Dictionary:
+	var snapped_position := snap_build_position(world_position)
+	var definition := SimulationWorld.BUILDING_CATALOG.get_building(building_definition_id)
+	if definition == null:
+		return {"position": snapped_position, "footprint_size": Vector2i.ONE, "valid": false, "reason": CommandValidationResult.Reason.INVALID_DEFINITION, "engineer_position": snapped_position}
+	var command := BuildBuildingCommand.new(
+		0, SimulationWorld.LOCAL_PLAYER_ID, GameCommand.IssuerKind.PLAYER, world.current_tick,
+		engineer_entity_id, building_definition_id, snapped_position
+	)
+	var result := world.validate_command(command)
+	var engineer := world.units.get(engineer_entity_id) as UnitState
+	return {
+		"position": snapped_position,
+		"footprint_size": definition.footprint_size,
+		"valid": result.is_accepted(),
+		"reason": result.reason,
+		"engineer_position": engineer.position if engineer != null else snapped_position,
+	}
 
 
 func create_repair_building_command(engineer_entity_id: int, building_entity_id: int) -> RepairBuildingCommand:

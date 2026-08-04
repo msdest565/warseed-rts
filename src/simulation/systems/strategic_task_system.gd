@@ -13,6 +13,12 @@ func advance(world: SimulationWorld) -> void:
 	task_ids.sort()
 	for task_id in task_ids:
 		var task := world.tasks[task_id] as TaskState
+		if task.kind != TaskState.Kind.FORMATION_MOVE_TEST and task.lifecycle in [TaskState.Lifecycle.WAITING, TaskState.Lifecycle.PREPARING, TaskState.Lifecycle.EXECUTING, TaskState.Lifecycle.PAUSED, TaskState.Lifecycle.BLOCKED]:
+			var enrolled := _enroll_compatible_units(task, world)
+			if enrolled > 0 and task.lifecycle == TaskState.Lifecycle.BLOCKED and task.blocked_reason in [TaskState.BlockedReason.NO_AVAILABLE_UNITS, TaskState.BlockedReason.INSUFFICIENT_PARTICIPANTS, TaskState.BlockedReason.PARTICIPANT_OVERRIDDEN]:
+				task.set_lifecycle(TaskState.Lifecycle.EXECUTING, world.current_tick)
+				task.set_phase(TaskState.Phase.PREPARING, world.current_tick, "Reinforcements assigned; task resumed")
+				_emit_task_event(task, world)
 		if task.lifecycle != TaskState.Lifecycle.EXECUTING:
 			continue
 		match task.kind:
@@ -33,26 +39,20 @@ func _advance_develop_resource(task: TaskState, world: SimulationWorld) -> void:
 	if harvester == null:
 		_block(task, world, TaskState.BlockedReason.NO_AVAILABLE_UNITS, "No assigned harvester is available")
 		return
+	var refinery := _find_faction_building(world, task.faction_id, &"command_center", true)
+	if refinery == null:
+		_block(task, world, TaskState.BlockedReason.PRODUCTION_UNAVAILABLE, "No operational refinery is available")
+		return
+	_ensure_harvest_orders(task, refinery, world)
 	if task.phase == TaskState.Phase.PREPARING:
-		var harvest := HarvestCommand.new(
-			world.allocate_command_id(),
-			SimulationWorld.LOCAL_PLAYER_ID,
-			GameCommand.IssuerKind.AGENT,
-			world.current_tick,
-			harvester.entity_id,
-			task.target_entity_id,
-			SimulationWorld.PLAYER_COMMAND_CENTER_ID
-		)
-		_set_agent_context(harvest, task)
-		var harvest_result := world.submit_command(harvest)
-		if not harvest_result.is_accepted():
-			_block(task, world, TaskState.BlockedReason.INVALID_TARGET, harvest_result.describe())
+		var factory := _find_faction_building(world, task.faction_id, &"automated_factory", true)
+		if factory == null:
+			_block(task, world, TaskState.BlockedReason.PRODUCTION_UNAVAILABLE, "No operational factory is available")
 			return
-		var factory := world.buildings[SimulationWorld.PLAYER_FACTORY_ID] as BuildingState
-		if factory.production_definition_id.is_empty() and _count_definition(world, &"harvester") <= task.expected_unit_count:
+		if factory.production_definition_id.is_empty() and _count_definition(world, task.faction_id, &"harvester") <= task.expected_unit_count:
 			var production := ProduceUnitCommand.new(
 				world.allocate_command_id(),
-				SimulationWorld.LOCAL_PLAYER_ID,
+				task.faction_id,
 				GameCommand.IssuerKind.AGENT,
 				world.current_tick,
 				factory.entity_id,
@@ -69,7 +69,7 @@ func _advance_develop_resource(task: TaskState, world: SimulationWorld) -> void:
 		return
 
 	var delivered := task.baseline_value - ore_field.ore_remaining >= DEVELOP_DELIVERY_TARGET
-	var produced := _count_definition(world, &"harvester") > task.expected_unit_count
+	var produced := _count_definition(world, task.faction_id, &"harvester") > task.expected_unit_count
 	task.progress_current = int(delivered) + int(produced)
 	if delivered and not produced:
 		task.set_phase(TaskState.Phase.PRODUCING, world.current_tick, "Ore delivered; waiting for second harvester")
@@ -94,7 +94,7 @@ func _advance_defend_area(task: TaskState, world: SimulationWorld) -> void:
 		task.route = formation.path.duplicate()
 		return
 
-	var target_id := _nearest_visible_hostile(task.target_position, task.target_radius, world)
+	var target_id := _nearest_visible_hostile(task.target_position, task.target_radius, world, task.faction_id)
 	if formation.order_target_entity_id != 0:
 		var current_target := world.units.get(formation.order_target_entity_id) as UnitState
 		if current_target == null or current_target.position.distance_to(task.target_position) > task.target_radius:
@@ -104,7 +104,7 @@ func _advance_defend_area(task: TaskState, world: SimulationWorld) -> void:
 	if target_id != 0 and formation.order_target_entity_id == 0:
 		var attack := AttackCommand.new(
 			world.allocate_command_id(),
-			SimulationWorld.LOCAL_PLAYER_ID,
+			task.faction_id,
 			GameCommand.IssuerKind.AGENT,
 			world.current_tick,
 			formation.leader_entity_id,
@@ -130,7 +130,13 @@ func _advance_attack_target(task: TaskState, world: SimulationWorld) -> void:
 	var survivors := _enabled_participant_count(task, world)
 	var retreat_threshold := maxi(1, ceili(task.original_participant_entity_ids.size() * RETREAT_SURVIVOR_RATIO))
 	if survivors < retreat_threshold and task.phase != TaskState.Phase.RETREATING:
-		var retreat_position := (world.buildings[SimulationWorld.PLAYER_SUPPORT_ID] as BuildingState).position
+		var retreat_building := _find_faction_building(world, task.faction_id, &"forward_support_station", true)
+		if retreat_building == null:
+			retreat_building = _find_faction_building(world, task.faction_id, &"command_center", true)
+		if retreat_building == null:
+			_fail(task, world, "No surviving retreat destination")
+			return
+		var retreat_position := retreat_building.position
 		if _submit_formation_move(task, formation, retreat_position, world):
 			task.set_phase(TaskState.Phase.RETREATING, world.current_tick, "Loss threshold reached; withdrawing")
 			task.route = world.pathfinder.find_path(formation.anchor_position, retreat_position)
@@ -140,7 +146,7 @@ func _advance_attack_target(task: TaskState, world: SimulationWorld) -> void:
 		if not formation.is_moving:
 			_fail(task, world, "Formation withdrew after reaching the loss threshold")
 		return
-	var known_target := world.create_faction_snapshot(SimulationWorld.LOCAL_PLAYER_ID).get_unit(task.target_entity_id)
+	var known_target := world.create_faction_snapshot(task.faction_id).get_unit(task.target_entity_id)
 	if known_target == null:
 		_block(task, world, TaskState.BlockedReason.INVALID_TARGET, "Target is not present in faction knowledge")
 		return
@@ -150,7 +156,7 @@ func _advance_attack_target(task: TaskState, world: SimulationWorld) -> void:
 	if task.phase == TaskState.Phase.PREPARING:
 		var attack := AttackCommand.new(
 			world.allocate_command_id(),
-			SimulationWorld.LOCAL_PLAYER_ID,
+			task.faction_id,
 			GameCommand.IssuerKind.AGENT,
 			world.current_tick,
 			formation.leader_entity_id,
@@ -176,7 +182,7 @@ func _advance_attack_target(task: TaskState, world: SimulationWorld) -> void:
 func _submit_formation_move(task: TaskState, formation: FormationState, destination: Vector2, world: SimulationWorld) -> bool:
 	var move := FormationMoveCommand.new(
 		world.allocate_command_id(),
-		SimulationWorld.LOCAL_PLAYER_ID,
+		task.faction_id,
 		GameCommand.IssuerKind.AGENT,
 		world.current_tick,
 		formation.leader_entity_id,
@@ -191,12 +197,12 @@ func _submit_formation_move(task: TaskState, formation: FormationState, destinat
 	return true
 
 
-func _nearest_visible_hostile(origin: Vector2, radius: float, world: SimulationWorld) -> int:
-	var snapshot := world.create_faction_snapshot(SimulationWorld.LOCAL_PLAYER_ID)
+func _nearest_visible_hostile(origin: Vector2, radius: float, world: SimulationWorld, faction_id: int = SimulationWorld.LOCAL_PLAYER_ID) -> int:
+	var snapshot := world.create_faction_snapshot(faction_id)
 	var best_id := 0
 	var best_distance := INF
 	for contact in snapshot.units:
-		if contact.faction_id == SimulationWorld.LOCAL_PLAYER_ID or not contact.enabled or not contact.is_visible_to_local_player:
+		if contact.faction_id == faction_id or not contact.enabled or not contact.is_visible_to_local_player:
 			continue
 		var distance := contact.position.distance_squared_to(origin)
 		if distance <= radius * radius and (distance < best_distance or (is_equal_approx(distance, best_distance) and contact.entity_id < best_id)):
@@ -222,13 +228,71 @@ func _enabled_participant_count(task: TaskState, world: SimulationWorld) -> int:
 	return count
 
 
-func _count_definition(world: SimulationWorld, definition_id: StringName) -> int:
+func _count_definition(world: SimulationWorld, faction_id: int, definition_id: StringName) -> int:
 	var count := 0
 	for unit_variant in world.units.values():
 		var unit := unit_variant as UnitState
-		if unit.enabled and unit.faction_id == SimulationWorld.LOCAL_PLAYER_ID and unit.definition_id == definition_id:
+		if unit.enabled and unit.faction_id == faction_id and unit.definition_id == definition_id:
 			count += 1
 	return count
+
+
+func _enroll_compatible_units(task: TaskState, world: SimulationWorld) -> int:
+	var enrolled := 0
+	var unit_ids := world.units.keys()
+	unit_ids.sort()
+	for entity_id in unit_ids:
+		var unit := world.units[entity_id] as UnitState
+		if not unit.enabled or unit.faction_id != task.faction_id or unit.assigned_task_id != 0 or unit.last_command_id != 0:
+			continue
+		var compatible := unit.can_harvest if task.kind == TaskState.Kind.DEVELOP_RESOURCE else unit.can_attack and not unit.can_harvest and not unit.can_construct
+		if not compatible:
+			continue
+		if task.formation_id != 0:
+			if unit.formation_id != 0 and unit.formation_id != task.formation_id:
+				continue
+			var formation := world.formations.get(task.formation_id) as FormationState
+			if formation == null:
+				continue
+			var slot_id := formation.add_member(unit.entity_id)
+			unit.formation_id = formation.formation_id
+			unit.formation_slot_id = slot_id
+			unit.following_formation = true
+			unit.desired_position = formation.anchor_position + formation.get_wide_offset(slot_id)
+		task.add_participant(unit.entity_id)
+		if not task.original_participant_entity_ids.has(unit.entity_id):
+			task.original_participant_entity_ids.append(unit.entity_id)
+			task.original_participant_entity_ids.sort()
+		unit.control_state = UnitState.ControlState.AGENT_ASSIGNED
+		unit.assigned_agent_id = task.agent_id
+		unit.assigned_task_id = task.task_id
+		unit.original_formation_id = unit.formation_id
+		enrolled += 1
+		world.events.append(SimulationEvent.new(world.current_tick, SimulationEvent.Kind.UNIT_CONTROL_CHANGED, unit.entity_id, "AGENT_ASSIGNED;task=%d;reinforcement=true" % task.task_id))
+	return enrolled
+
+
+func _ensure_harvest_orders(task: TaskState, refinery: BuildingState, world: SimulationWorld) -> void:
+	for entity_id in task.participant_entity_ids:
+		var unit := world.units.get(entity_id) as UnitState
+		if unit == null or not unit.enabled or not unit.can_harvest or unit.harvest_ore_field_entity_id != 0:
+			continue
+		var harvest := HarvestCommand.new(
+			world.allocate_command_id(), task.faction_id, GameCommand.IssuerKind.AGENT,
+			world.current_tick, unit.entity_id, task.target_entity_id, refinery.entity_id
+		)
+		_set_agent_context(harvest, task)
+		world.submit_command(harvest)
+
+
+func _find_faction_building(world: SimulationWorld, faction_id: int, definition_id: StringName, require_operational: bool) -> BuildingState:
+	var building_ids := world.buildings.keys()
+	building_ids.sort()
+	for building_id in building_ids:
+		var building := world.buildings[building_id] as BuildingState
+		if building.enabled and building.faction_id == faction_id and building.definition_id == definition_id and (not require_operational or building.operational):
+			return building
+	return null
 
 
 func _set_agent_context(command: GameCommand, task: TaskState) -> void:

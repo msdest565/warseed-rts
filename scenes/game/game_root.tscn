@@ -1,4 +1,4 @@
-[gd_scene load_steps=23 format=3]
+[gd_scene load_steps=24 format=3]
 
 [ext_resource type="Script" path="res://src/app/game_root.gd" id="1_game_root"]
 [ext_resource type="Script" path="res://src/app/simulation_host.gd" id="2_simulation_host"]
@@ -12,6 +12,7 @@
 [ext_resource type="Script" path="res://src/ui/task_panel.gd" id="10_task_panel"]
 [ext_resource type="Script" path="res://src/ui/pause_menu.gd" id="11_pause_menu"]
 [ext_resource type="Script" path="res://src/ui/resource_bar.gd" id="12_resource_bar"]
+[ext_resource type="Script" path="res://src/ui/workflow_panel.gd" id="13_workflow_panel"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_panel"]
 bg_color = Color(0.025, 0.032, 0.033, 0.97)
@@ -415,6 +416,53 @@ theme_override_font_sizes/font_size = 18
 text = "Gold: 0"
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="WorkflowPanel" type="PanelContainer" parent="HUDLayer"]
+offset_left = 16.0
+offset_top = 76.0
+offset_right = 288.0
+offset_bottom = 266.0
+mouse_filter = 2
+theme = SubResource("Theme_command")
+theme_override_styles/panel = SubResource("StyleBox_panel")
+script = ExtResource("13_workflow_panel")
+
+[node name="Margin" type="MarginContainer" parent="HUDLayer/WorkflowPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="Layout" type="VBoxContainer" parent="HUDLayer/WorkflowPanel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="Title" type="Label" parent="HUDLayer/WorkflowPanel/Margin/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.78, 0.28, 1)
+theme_override_font_sizes/font_size = 13
+text = "ACTIVE WORKFLOWS"
+
+[node name="UnitFlows" type="Label" parent="HUDLayer/WorkflowPanel/Margin/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.87, 0.91, 0.88, 1)
+theme_override_font_sizes/font_size = 11
+text = "Mining  0\nConstruction  0\nRepair  0\nScouting  0\nDefense  0\nAttack  0"
+
+[node name="TasksTitle" type="Label" parent="HUDLayer/WorkflowPanel/Margin/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.35, 0.78, 0.72, 1)
+theme_override_font_sizes/font_size = 10
+text = "COMMAND TASKS"
+
+[node name="Tasks" type="Label" parent="HUDLayer/WorkflowPanel/Margin/Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.68, 0.74, 0.72, 1)
+theme_override_font_sizes/font_size = 10
+text = "No delegated task"
+text_overrun_behavior = 3
 
 [node name="Minimap" type="Control" parent="HUDLayer"]
 custom_minimum_size = Vector2(272, 188)

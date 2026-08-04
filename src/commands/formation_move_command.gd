@@ -20,4 +20,6 @@ func _init(
 
 
 func get_supersession_key() -> String:
+	if formation_id == 0:
+		return super()
 	return "F%d" % formation_id

@@ -7,6 +7,7 @@ func run() -> Array[String]:
 	_test_develop_resource_completes_visible_work(failures)
 	_test_defend_area_respects_leash(failures)
 	_test_attack_target_advances_and_completes(failures)
+	_test_parallel_domains_and_dynamic_reinforcements(failures)
 	_test_task_controls_use_command_pipeline(failures)
 	_test_complete_vertical_slice(failures)
 	return failures
@@ -85,6 +86,46 @@ func _test_attack_target_advances_and_completes(failures: Array[String]) -> void
 	_expect(saw_route_or_engagement, "attack task should expose its route or engagement phase", failures)
 	_expect(not enemy.enabled and task.lifecycle == TaskState.Lifecycle.COMPLETED, "attack task should complete after destroying its target", failures)
 	_expect(world.mission_state.attacked_target, "completed attack should update mission progress", failures)
+
+
+func _test_parallel_domains_and_dynamic_reinforcements(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	var ore_field := world.ore_fields[SimulationWorld.DEFAULT_ORE_FIELD_ID] as OreFieldState
+	var formation := world.formations[SimulationWorld.DEFAULT_FORMATION_ID] as FormationState
+	var develop := StrategicOrderCommand.new(
+		world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, world.current_tick,
+		StrategicOrderCommand.OrderKind.DEVELOP_RESOURCE, 0, ore_field.entity_id, ore_field.position
+	)
+	_expect(world.submit_command(develop).is_accepted(), "industrial task should be accepted", failures)
+	world.advance_tick()
+	var defend := StrategicOrderCommand.new(
+		world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, world.current_tick,
+		StrategicOrderCommand.OrderKind.DEFEND_AREA, formation.formation_id, 0, formation.anchor_position, 160.0
+	)
+	_expect(world.submit_command(defend).is_accepted(), "battlefield task should run in parallel with industrial work", failures)
+	world.advance_tick()
+	_expect(world.tasks.size() == 2 and (world.tasks[1] as TaskState).lifecycle == TaskState.Lifecycle.EXECUTING and (world.tasks[2] as TaskState).lifecycle == TaskState.Lifecycle.EXECUTING, "industrial and battlefield tasks should execute concurrently", failures)
+	var duplicate_battlefield := StrategicOrderCommand.new(
+		world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, world.current_tick,
+		StrategicOrderCommand.OrderKind.DEFEND_AREA, formation.formation_id, 0, formation.anchor_position, 160.0
+	)
+	_expect(world.submit_command(duplicate_battlefield).reason == CommandValidationResult.Reason.TASK_CONFLICT, "a second battlefield task should wait for the shared combat formation", failures)
+
+	var scout_definition := SimulationWorld.UNIT_CATALOG.get_unit(&"scout_vehicle")
+	var reinforcement := UnitState.new(1100, formation.anchor_position + Vector2(-160.0, 0.0), scout_definition.move_speed, SimulationWorld.LOCAL_PLAYER_ID)
+	world._apply_unit_definition(reinforcement, scout_definition)
+	world.units[reinforcement.entity_id] = reinforcement
+	var harvester_definition := SimulationWorld.UNIT_CATALOG.get_unit(&"harvester")
+	var new_harvester := UnitState.new(1101, formation.anchor_position + Vector2(-192.0, 0.0), harvester_definition.move_speed, SimulationWorld.LOCAL_PLAYER_ID)
+	world._apply_unit_definition(new_harvester, harvester_definition)
+	world.units[new_harvester.entity_id] = new_harvester
+	world.advance_tick()
+	_expect((world.tasks[2] as TaskState).has_participant(reinforcement.entity_id) and formation.member_entity_ids.has(reinforcement.entity_id), "new combat units should reinforce the open battlefield task", failures)
+	_expect(reinforcement.assigned_task_id == 2 and reinforcement.control_state == UnitState.ControlState.AGENT_ASSIGNED, "reinforcement should receive authoritative task ownership", failures)
+	_expect((world.tasks[1] as TaskState).has_participant(new_harvester.entity_id), "new harvesters should join the open industrial task", failures)
+	world.advance_tick()
+	_expect(new_harvester.harvest_ore_field_entity_id == ore_field.entity_id, "new harvesters should receive the active mining assignment", failures)
+	_expect(world.create_snapshot().get_task(1).faction_id == SimulationWorld.LOCAL_PLAYER_ID, "task snapshots should expose their owning faction", failures)
 
 
 func _test_task_controls_use_command_pipeline(failures: Array[String]) -> void:

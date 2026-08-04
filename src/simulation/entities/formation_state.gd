@@ -85,7 +85,14 @@ func get_slot_id(entity_id: int) -> int:
 
 
 func get_wide_offset(slot_id: int) -> Vector2:
-	return SLOT_OFFSETS[slot_id] if slot_id >= 0 and slot_id < SLOT_OFFSETS.size() else Vector2.ZERO
+	if slot_id < 0:
+		return Vector2.ZERO
+	if slot_id < SLOT_OFFSETS.size():
+		return SLOT_OFFSETS[slot_id]
+	var reinforcement_index := slot_id - SLOT_OFFSETS.size()
+	var rank := reinforcement_index / 2 + 3
+	var side := -1.0 if reinforcement_index % 2 == 0 else 1.0
+	return Vector2(-48.0 * rank, 44.0 * side)
 
 
 func reset_anchor_history(path_direction: Vector2) -> void:

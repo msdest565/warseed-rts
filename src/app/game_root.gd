@@ -9,6 +9,7 @@ extends Node
 @onready var minimap: MinimapControl = $HUDLayer/Minimap
 @onready var task_panel: TaskPanel = $HUDLayer/TaskPanel
 @onready var resource_bar = $HUDLayer/ResourceBar
+@onready var workflow_panel: WorkflowPanel = $HUDLayer/WorkflowPanel
 @onready var debug_layer: DebugLayer = $DebugLayer
 @onready var pause_menu: PauseMenu = $PauseMenu
 
@@ -20,6 +21,11 @@ func _ready() -> void:
 	input_controller.selection_overlay = selection_overlay
 	input_controller.move_intent_changed.connect(_on_move_intent_changed)
 	input_controller.pending_intent_cleared.connect(world_presentation.clear_pending_move_target)
+	input_controller.build_preview_changed.connect(world_presentation.set_build_preview)
+	input_controller.build_preview_cleared.connect(world_presentation.clear_build_preview)
+	input_controller.attack_targeting_started.connect(world_presentation.begin_attack_targeting)
+	input_controller.attack_preview_changed.connect(world_presentation.set_attack_preview)
+	input_controller.attack_preview_cleared.connect(world_presentation.clear_attack_preview)
 	task_panel.simulation_host = simulation_host
 	task_panel.input_controller = input_controller
 	pause_menu.language_changed.connect(_on_language_changed)
@@ -33,6 +39,7 @@ func _on_move_intent_changed(target_position: Vector2, _intent_sequence: int) ->
 func _on_language_changed(_locale: String) -> void:
 	task_panel.refresh_locale()
 	resource_bar.refresh_locale()
+	workflow_panel.refresh_locale()
 	input_controller.refresh_locale_status()
 	world_presentation.refresh_locale()
 
@@ -53,6 +60,7 @@ func _process(_delta: float) -> void:
 	)
 	task_panel.update_snapshot(simulation_host.current_snapshot)
 	resource_bar.update_snapshot(simulation_host.current_snapshot)
+	workflow_panel.update_snapshot(simulation_host.current_snapshot)
 	if debug_layer.visible:
 		debug_layer.update_status(
 			simulation_host.current_snapshot,

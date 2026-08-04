@@ -9,7 +9,9 @@ func run() -> Array[String]:
 	_test_hidden_attack_target_is_rejected(failures)
 	_test_enemy_raid_uses_last_seen_position(failures)
 	_test_enemy_harvester_mines_and_defends_itself(failures)
+	_test_enemy_combat_parity_and_tactical_reactions(failures)
 	_test_enemy_strategy_phase_machine(failures)
+	_test_enemy_replaces_economy_losses(failures)
 	return failures
 
 
@@ -128,12 +130,15 @@ func _test_enemy_strategy_phase_machine(failures: Array[String]) -> void:
 		_expect(history.has(expected_phase), "enemy strategy should reach phase %s through authoritative play" % EnemyRaidAgent.Phase.keys()[expected_phase], failures)
 	_expect(reached_raid, "enemy strategy should build a raid force within deterministic slice timing", failures)
 	var enemy_factory: BuildingState
+	var enemy_support: BuildingState
 	for building_variant in world.buildings.values():
 		var building := building_variant as BuildingState
 		if building.faction_id == SimulationWorld.ENEMY_PLAYER_ID and building.definition_id == &"automated_factory":
 			enemy_factory = building
-			break
+		elif building.faction_id == SimulationWorld.ENEMY_PLAYER_ID and building.definition_id == &"forward_support_station":
+			enemy_support = building
 	_expect(enemy_factory != null and enemy_factory.operational, "enemy expansion should construct an operational factory", failures)
+	_expect(enemy_support != null and enemy_support.operational, "enemy expansion should construct an operational support station through shared building rules", failures)
 	_expect((world.units[SimulationWorld.ENEMY_HARVESTER_ID] as UnitState).harvest_ore_field_entity_id == SimulationWorld.ENEMY_ORE_FIELD_ID, "enemy economy should use its own real harvester round trip", failures)
 	_expect((world.ore_fields[SimulationWorld.ENEMY_ORE_FIELD_ID] as OreFieldState).ore_remaining < 1800, "enemy economy should extract from the enemy-side ore field", failures)
 	_expect((world.ore_fields[SimulationWorld.DEFAULT_ORE_FIELD_ID] as OreFieldState).ore_remaining == 1200, "enemy harvester must not consume the player-side ore field", failures)
@@ -164,6 +169,60 @@ func _test_enemy_harvester_mines_and_defends_itself(failures: Array[String]) -> 
 	_expect(harvester.harvest_ore_field_entity_id == SimulationWorld.ENEMY_ORE_FIELD_ID, "enemy harvester should keep its own ore assignment while defending", failures)
 	_expect(local_scout.health < health_before, "enemy harvester self-defense should apply real projectile damage", failures)
 	_expect(not world.enemy_raid_agent._combat_units(world).has(harvester), "enemy harvester should not abandon mining to join raid forces", failures)
+	_expect(not harvester.can_accept_attack_orders and not (world.units[1] as UnitState).can_accept_attack_orders, "both factions should share defensive-only harvester responsibilities", failures)
+
+
+func _test_enemy_replaces_economy_losses(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	world._add_building(2190, &"automated_factory", SimulationWorld.ENEMY_PLAYER_ID, world.logic_grid.cell_to_world(Vector2i(76, 54)))
+	var lost_harvester := world.units[SimulationWorld.ENEMY_HARVESTER_ID] as UnitState
+	lost_harvester.enabled = false
+	lost_harvester.health = 0.0
+	lost_harvester.death_tick = world.current_tick
+	(world.factions[SimulationWorld.ENEMY_PLAYER_ID] as FactionState).ore = 1000
+	world.current_tick = EnemyRaidAgent.STRATEGY_START_TICK
+	world.enemy_raid_agent.phase = EnemyRaidAgent.Phase.MUSTERING
+	world.enemy_raid_agent.phase_started_tick = world.current_tick
+	for _tick in range(40):
+		world.advance_tick()
+	var replacement: UnitState
+	for unit_variant in world.units.values():
+		var unit := unit_variant as UnitState
+		if unit.enabled and unit.entity_id != SimulationWorld.ENEMY_HARVESTER_ID and unit.faction_id == SimulationWorld.ENEMY_PLAYER_ID and unit.can_harvest:
+			replacement = unit
+			break
+	_expect(replacement != null, "enemy economy should replace a destroyed harvester through normal paid production", failures)
+	if replacement != null:
+		_expect(replacement.harvest_ore_field_entity_id == SimulationWorld.ENEMY_ORE_FIELD_ID, "replacement harvester should automatically claim the enemy ore route", failures)
+
+
+func _test_enemy_combat_parity_and_tactical_reactions(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	var definition := SimulationWorld.UNIT_CATALOG.get_unit(&"scout_vehicle")
+	var enemy_scout := world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	_expect(enemy_scout.can_attack and enemy_scout.move_speed == definition.move_speed and enemy_scout.attack_damage == definition.combat.attack_power and enemy_scout.max_health == definition.combat.max_health, "enemy scout should use the same unit definition and combat rules as the player scout", failures)
+	var enemy_base := (world.buildings[SimulationWorld.ENEMY_COMMAND_CENTER_ID] as BuildingState).rally_position
+	var intruder := world.units[4] as UnitState
+	intruder.position = enemy_base + Vector2(-64.0, 0.0)
+	intruder.following_formation = false
+	world.current_tick = EnemyRaidAgent.STRATEGY_START_TICK
+	world.enemy_raid_agent.phase = EnemyRaidAgent.Phase.RAIDING
+	world.enemy_raid_agent.phase_started_tick = world.current_tick
+	world._update_faction_knowledge()
+	world.enemy_raid_agent.advance(world)
+	_expect(world.enemy_raid_agent.phase == EnemyRaidAgent.Phase.DEFENDING, "visible threats near the enemy base should interrupt a raid and trigger emergency defense", failures)
+	world.advance_tick()
+	_expect(enemy_scout.attack_target_entity_id == intruder.entity_id, "enemy defenders should attack through the same authoritative attack command", failures)
+
+	var retreat_world := SimulationWorld.new()
+	retreat_world.current_tick = EnemyRaidAgent.STRATEGY_START_TICK
+	retreat_world.enemy_raid_agent.phase = EnemyRaidAgent.Phase.RAIDING
+	retreat_world.enemy_raid_agent.phase_started_tick = retreat_world.current_tick
+	for unit in retreat_world.enemy_raid_agent._combat_units(retreat_world):
+		unit.health = unit.max_health * 0.2
+	retreat_world.enemy_raid_agent.advance(retreat_world)
+	_expect(retreat_world.enemy_raid_agent.phase == EnemyRaidAgent.Phase.RETREATING, "badly damaged enemy forces should withdraw before the fixed raid timeout", failures)
+	_expect(retreat_world.enemy_raid_agent._next_combat_definition(retreat_world) == &"assault_vehicle", "enemy production should fill missing combat roles instead of repeating one unit type", failures)
 
 
 func _expect(condition: bool, message: String, failures: Array[String]) -> void:

@@ -3,6 +3,7 @@ extends RefCounted
 
 var task_id: int
 var agent_id: int
+var faction_id: int
 var parent_task_id: int
 var kind: TaskState.Kind
 var phase: TaskState.Phase
@@ -26,6 +27,7 @@ var last_detail: String
 func _init(task: TaskState) -> void:
 	task_id = task.task_id
 	agent_id = task.agent_id
+	faction_id = task.faction_id
 	parent_task_id = task.parent_task_id
 	kind = task.kind
 	phase = task.phase

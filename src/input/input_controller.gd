@@ -13,6 +13,11 @@ enum CommandMode {
 
 signal move_intent_changed(target_position: Vector2, intent_sequence: int)
 signal pending_intent_cleared
+signal build_preview_changed(build_position: Vector2, footprint_size: Vector2i, valid: bool, engineer_position: Vector2)
+signal build_preview_cleared
+signal attack_targeting_started
+signal attack_preview_changed(target_position: Vector2, target_entity_id: int)
+signal attack_preview_cleared
 
 const HIT_RADIUS_SCREEN := 34.0
 const DRAG_THRESHOLD := 6.0
@@ -51,13 +56,19 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		_handle_key(event as InputEventKey)
 		return
+	if _is_build_targeting() and event is InputEventMouseMotion:
+		_update_build_preview(_screen_to_world((event as InputEventMouseMotion).position))
+		return
+	if command_mode == CommandMode.ATTACK_MOVE_TARGETING and event is InputEventMouseMotion:
+		_update_attack_preview(_screen_to_world((event as InputEventMouseMotion).position))
+		return
 	if command_mode == CommandMode.ATTACK_MOVE_TARGETING and event is InputEventMouseButton:
 		var targeting_mouse := event as InputEventMouseButton
 		if targeting_mouse.pressed and targeting_mouse.button_index == MOUSE_BUTTON_RIGHT:
 			cancel_command_mode()
 			return
 		if targeting_mouse.pressed and targeting_mouse.button_index == MOUSE_BUTTON_LEFT:
-			attack_move_selected_to(_screen_to_world(targeting_mouse.position))
+			attack_or_move_selected_at(_screen_to_world(targeting_mouse.position))
 			return
 	if command_mode in [CommandMode.HARVEST_TARGETING, CommandMode.DEFEND_TARGETING] and event is InputEventMouseButton:
 		var target_mouse := event as InputEventMouseButton
@@ -199,7 +210,7 @@ func attack_selected_target(attack_target_entity_id: int) -> CommandValidationRe
 		)
 	for entity_id in standalone_ids:
 		var attacker := snapshot.get_unit(entity_id)
-		if attacker == null or not attacker.can_attack:
+		if attacker == null or not attacker.can_attack or not attacker.can_accept_attack_orders:
 			continue
 		last_result = simulation_host.submit_command(
 			simulation_host.create_attack_command(entity_id, attack_target_entity_id)
@@ -236,9 +247,14 @@ func _find_attack_target_at(world_position: Vector2) -> int:
 
 
 func begin_build_targeting(building_definition_id: StringName) -> void:
-	if _selected_engineer_id() == 0:
+	var engineer_id := _selected_available_engineer_id()
+	if engineer_id == 0:
+		engineer_id = _first_available_engineer_id()
+	if engineer_id == 0:
 		last_command_status = GameText.t(&"STATUS_SELECT_ENGINEER")
 		return
+	if not selected_entity_ids.has(engineer_id) or selected_entity_ids.size() != 1:
+		_set_selection([engineer_id])
 	command_mode = CommandMode.BUILD_FACTORY_TARGETING if building_definition_id == &"automated_factory" else CommandMode.BUILD_SUPPORT_TARGETING
 	last_command_status = GameText.t(&"STATUS_BUILD_TARGET")
 
@@ -248,10 +264,14 @@ func build_selected_at(building_definition_id: StringName, world_position: Vecto
 	if engineer_id == 0:
 		last_command_status = GameText.t(&"STATUS_SELECT_ENGINEER")
 		return null
-	var result := simulation_host.submit_command(simulation_host.create_build_building_command(engineer_id, building_definition_id, world_position))
+	var preview := simulation_host.get_build_placement_preview(engineer_id, building_definition_id, world_position)
+	var result := simulation_host.submit_command(simulation_host.create_build_building_command(engineer_id, building_definition_id, preview["position"]))
 	last_command_status = GameText.t(&"STATUS_BUILD") % [GameText.building_name(building_definition_id), GameText.command_result(result)]
 	if result.is_accepted():
 		command_mode = CommandMode.NORMAL
+		build_preview_cleared.emit()
+	else:
+		_emit_build_preview(preview)
 	return result
 
 
@@ -306,6 +326,24 @@ func _selected_engineer_id() -> int:
 		if unit != null and unit.enabled and unit.definition_id == &"engineer_vehicle":
 			return entity_id
 	return 0
+
+
+func _selected_available_engineer_id() -> int:
+	var snapshot := simulation_host.current_snapshot
+	for entity_id in selected_entity_ids:
+		var unit := snapshot.get_unit(entity_id)
+		if unit != null and unit.enabled and unit.definition_id == &"engineer_vehicle" and unit.work_kind == UnitState.WorkKind.NONE:
+			return entity_id
+	return 0
+
+
+func _first_available_engineer_id() -> int:
+	var candidates: Array[int] = []
+	for unit in simulation_host.current_snapshot.units:
+		if unit.enabled and unit.faction_id == SimulationWorld.LOCAL_PLAYER_ID and unit.definition_id == &"engineer_vehicle" and unit.work_kind == UnitState.WorkKind.NONE:
+			candidates.append(unit.entity_id)
+	candidates.sort()
+	return candidates[0] if not candidates.is_empty() else 0
 
 
 func _selected_harvester_id() -> int:
@@ -378,40 +416,89 @@ func stop_selected() -> CommandValidationResult:
 
 
 func begin_attack_move_targeting() -> void:
-	if selected_entity_ids.is_empty():
+	if not _selection_has_orderable_combat_unit():
 		last_command_status = GameText.t(&"STATUS_SELECT_FORMATION")
 		return
 	command_mode = CommandMode.ATTACK_MOVE_TARGETING
+	attack_targeting_started.emit()
 	last_command_status = GameText.t(&"STATUS_ATTACK_MOVE_TARGET")
 
 
 func cancel_command_mode() -> void:
+	var was_build_targeting := _is_build_targeting()
+	var was_attack_targeting := command_mode == CommandMode.ATTACK_MOVE_TARGETING
 	command_mode = CommandMode.NORMAL
 	last_command_status = GameText.t(&"STATUS_TARGETING_CANCELLED")
+	if was_build_targeting:
+		build_preview_cleared.emit()
+	if was_attack_targeting:
+		attack_preview_cleared.emit()
+
+
+func _is_build_targeting() -> bool:
+	return command_mode in [CommandMode.BUILD_FACTORY_TARGETING, CommandMode.BUILD_SUPPORT_TARGETING]
+
+
+func _update_build_preview(world_position: Vector2) -> void:
+	var engineer_id := _selected_engineer_id()
+	if engineer_id == 0:
+		build_preview_cleared.emit()
+		return
+	var definition_id: StringName = &"automated_factory" if command_mode == CommandMode.BUILD_FACTORY_TARGETING else &"forward_support_station"
+	_emit_build_preview(simulation_host.get_build_placement_preview(engineer_id, definition_id, world_position))
+
+
+func _emit_build_preview(preview: Dictionary) -> void:
+	build_preview_changed.emit(preview["position"], preview["footprint_size"], preview["valid"], preview["engineer_position"])
+
+
+func _update_attack_preview(world_position: Vector2) -> void:
+	attack_preview_changed.emit(world_position, _find_attack_target_at(world_position))
+
+
+func attack_or_move_selected_at(world_position: Vector2) -> CommandValidationResult:
+	var target_id := _find_attack_target_at(world_position)
+	var result := attack_selected_target(target_id) if target_id != 0 else attack_move_selected_to(world_position)
+	if result != null and result.is_accepted():
+		command_mode = CommandMode.NORMAL
+		attack_preview_cleared.emit()
+	return result
 
 
 func attack_move_selected_to(world_position: Vector2) -> CommandValidationResult:
 	var snapshot := simulation_host.current_snapshot
-	var formation_ids: Array[int] = []
-	for entity_id in selected_entity_ids:
-		var unit := snapshot.get_unit(entity_id)
-		if unit != null and unit.formation_id != 0 and not formation_ids.has(unit.formation_id):
-			formation_ids.append(unit.formation_id)
-	if formation_ids.is_empty():
-		last_command_status = GameText.t(&"STATUS_ATTACK_MOVE_FORMATION")
-		return null
-	formation_ids.sort()
+	var command_targets := _partition_selection_for_commands(snapshot)
+	var formation_ids := command_targets["formations"] as Array[int]
+	var standalone_ids := command_targets["units"] as Array[int]
 	var last_result: CommandValidationResult
 	for formation_id in formation_ids:
 		last_result = simulation_host.submit_command(simulation_host.create_attack_move_command(formation_id, world_position))
+	for entity_id in standalone_ids:
+		var unit := snapshot.get_unit(entity_id)
+		if unit == null or not unit.can_attack or not unit.can_accept_attack_orders:
+			continue
+		last_result = simulation_host.submit_command(simulation_host.create_attack_move_command(0, world_position, entity_id))
+	if last_result == null:
+		last_command_status = GameText.t(&"STATUS_ATTACK_MOVE_FORMATION")
+		return null
 	if last_result != null and last_result.is_accepted():
 		intent_sequence += 1
 		pending_move_target = world_position
 		pending_move_active = true
 		move_intent_changed.emit(world_position, intent_sequence)
-		command_mode = CommandMode.NORMAL
 	last_command_status = GameText.t(&"STATUS_ATTACK_MOVE") % GameText.command_result(last_result)
 	return last_result
+
+
+func _selection_has_orderable_combat_unit() -> bool:
+	var snapshot := simulation_host.current_snapshot
+	if snapshot == null:
+		return false
+	for entity_id in selected_entity_ids:
+		var unit := snapshot.get_unit(entity_id)
+		if unit != null and unit.enabled and unit.can_attack and unit.can_accept_attack_orders:
+			return true
+	return false
 
 
 func harvest_with_selected() -> CommandValidationResult:
@@ -551,7 +638,7 @@ func _handle_key(event: InputEventKey) -> void:
 	if event.keycode == KEY_X and not event.ctrl_pressed and not event.alt_pressed:
 		stop_selected()
 		return
-	if event.keycode == KEY_T and not event.ctrl_pressed and not event.alt_pressed:
+	if event.keycode in [KEY_Q, KEY_T] and not event.ctrl_pressed and not event.alt_pressed:
 		begin_attack_move_targeting()
 		return
 	if event.keycode == KEY_H and not event.ctrl_pressed and not event.alt_pressed:

@@ -14,6 +14,7 @@ var desired_position: Vector2
 var is_recovering: bool
 var ticks_without_progress: int
 var is_attack_moving: bool
+var attack_move_destination: Vector2
 var faction_id: int
 var max_health: float
 var health: float
@@ -32,6 +33,8 @@ var last_seen_tick: int
 var last_seen_position: Vector2
 var definition_id: StringName
 var can_attack: bool
+var can_accept_attack_orders: bool
+var auto_retaliate: bool
 var can_harvest: bool
 var can_construct: bool
 var can_repair: bool
@@ -78,6 +81,7 @@ func _init(unit: UnitState = null, contact: KnowledgeContact = null) -> void:
 	is_recovering = unit.is_recovering
 	ticks_without_progress = unit.ticks_without_progress
 	is_attack_moving = unit.is_attack_moving
+	attack_move_destination = unit.attack_move_destination
 	faction_id = unit.faction_id
 	max_health = unit.max_health
 	health = unit.health
@@ -96,6 +100,8 @@ func _init(unit: UnitState = null, contact: KnowledgeContact = null) -> void:
 	last_seen_position = unit.last_seen_position
 	definition_id = unit.definition_id
 	can_attack = unit.can_attack
+	can_accept_attack_orders = unit.can_accept_attack_orders
+	auto_retaliate = unit.auto_retaliate
 	can_harvest = unit.can_harvest
 	can_construct = unit.can_construct
 	can_repair = unit.can_repair
@@ -134,6 +140,7 @@ func _apply_contact(contact: KnowledgeContact) -> void:
 	is_recovering = false
 	ticks_without_progress = 0
 	is_attack_moving = false
+	attack_move_destination = contact.position
 	faction_id = contact.faction_id
 	max_health = contact.max_health
 	health = contact.health
@@ -152,6 +159,8 @@ func _apply_contact(contact: KnowledgeContact) -> void:
 	last_seen_position = contact.position
 	definition_id = contact.definition_id
 	can_attack = false
+	can_accept_attack_orders = false
+	auto_retaliate = false
 	can_harvest = false
 	can_construct = false
 	can_repair = false
