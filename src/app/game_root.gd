@@ -8,7 +8,9 @@ extends Node
 @onready var selection_overlay: SelectionOverlay = $SelectionLayer/SelectionOverlay
 @onready var minimap: MinimapControl = $HUDLayer/Minimap
 @onready var task_panel: TaskPanel = $HUDLayer/TaskPanel
+@onready var resource_bar = $HUDLayer/ResourceBar
 @onready var debug_layer: DebugLayer = $DebugLayer
+@onready var pause_menu: PauseMenu = $PauseMenu
 
 
 func _ready() -> void:
@@ -19,10 +21,20 @@ func _ready() -> void:
 	input_controller.move_intent_changed.connect(_on_move_intent_changed)
 	input_controller.pending_intent_cleared.connect(world_presentation.clear_pending_move_target)
 	task_panel.simulation_host = simulation_host
+	task_panel.input_controller = input_controller
+	pause_menu.language_changed.connect(_on_language_changed)
+	_on_language_changed(TranslationServer.get_locale())
 
 
 func _on_move_intent_changed(target_position: Vector2, _intent_sequence: int) -> void:
 	world_presentation.set_pending_move_target(target_position)
+
+
+func _on_language_changed(_locale: String) -> void:
+	task_panel.refresh_locale()
+	resource_bar.refresh_locale()
+	input_controller.refresh_locale_status()
+	world_presentation.refresh_locale()
 
 
 func _process(_delta: float) -> void:
@@ -40,11 +52,13 @@ func _process(_delta: float) -> void:
 		input_controller.selected_entity_ids
 	)
 	task_panel.update_snapshot(simulation_host.current_snapshot)
+	resource_bar.update_snapshot(simulation_host.current_snapshot)
 	debug_layer.update_status(
 		simulation_host.current_snapshot,
 		input_controller.selected_entity_id,
 		simulation_host.get_queue_size(),
 		input_controller.last_command_status,
 		simulation_host.get_tick_timing_snapshot(),
-		simulation_host.get_true_state_snapshot_for_debug()
+		simulation_host.get_true_state_snapshot_for_debug(),
+		simulation_host.get_enemy_phase_name()
 	)

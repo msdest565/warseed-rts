@@ -31,9 +31,18 @@ var is_visible_to_local_player: bool
 var last_seen_tick: int
 var last_seen_position: Vector2
 var definition_id: StringName
+var can_attack: bool
+var can_harvest: bool
+var can_construct: bool
+var can_repair: bool
+var death_tick: int
 var harvest_ore_field_entity_id: int
 var harvest_refinery_entity_id: int
 var harvest_ticks_remaining: int
+var harvest_phase: UnitState.HarvestPhase
+var cargo_ore: int
+var work_kind: UnitState.WorkKind
+var work_target_building_id: int
 var control_state: UnitState.ControlState
 var assigned_agent_id: int
 var assigned_task_id: int
@@ -55,9 +64,11 @@ func _init(unit: UnitState = null, contact: KnowledgeContact = null) -> void:
 	position = unit.position
 	move_target = unit.move_target
 	path = unit.path.duplicate()
-	if unit.has_move_target and unit.path_index > 0:
-		path = path.slice(unit.path_index - 1)
-		path[0] = unit.position
+	if unit.has_move_target and not path.is_empty():
+		var snapshot_path_index := clampi(unit.path_index - 1, 0, path.size() - 1)
+		path = path.slice(snapshot_path_index)
+		if not path.is_empty():
+			path[0] = unit.position
 	is_moving = unit.has_move_target
 	controller_id = unit.controller_id
 	enabled = unit.enabled
@@ -84,9 +95,18 @@ func _init(unit: UnitState = null, contact: KnowledgeContact = null) -> void:
 	last_seen_tick = unit.last_seen_tick
 	last_seen_position = unit.last_seen_position
 	definition_id = unit.definition_id
+	can_attack = unit.can_attack
+	can_harvest = unit.can_harvest
+	can_construct = unit.can_construct
+	can_repair = unit.can_repair
+	death_tick = unit.death_tick
 	harvest_ore_field_entity_id = unit.harvest_ore_field_entity_id
 	harvest_refinery_entity_id = unit.harvest_refinery_entity_id
 	harvest_ticks_remaining = unit.harvest_ticks_remaining
+	harvest_phase = unit.harvest_phase
+	cargo_ore = unit.cargo_ore
+	work_kind = unit.work_kind
+	work_target_building_id = unit.work_target_building_id
 	control_state = unit.control_state
 	assigned_agent_id = unit.assigned_agent_id
 	assigned_task_id = unit.assigned_task_id
@@ -131,9 +151,18 @@ func _apply_contact(contact: KnowledgeContact) -> void:
 	last_seen_tick = contact.last_seen_tick
 	last_seen_position = contact.position
 	definition_id = contact.definition_id
+	can_attack = false
+	can_harvest = false
+	can_construct = false
+	can_repair = false
+	death_tick = contact.last_seen_tick if not contact.enabled else -1
 	harvest_ore_field_entity_id = 0
 	harvest_refinery_entity_id = 0
 	harvest_ticks_remaining = 0
+	harvest_phase = UnitState.HarvestPhase.IDLE
+	cargo_ore = 0
+	work_kind = UnitState.WorkKind.NONE
+	work_target_building_id = 0
 	control_state = UnitState.ControlState.DISABLED if not contact.enabled else UnitState.ControlState.UNASSIGNED
 	assigned_agent_id = 0
 	assigned_task_id = 0

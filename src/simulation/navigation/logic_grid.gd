@@ -98,6 +98,31 @@ func cell_to_world(cell: Vector2i) -> Vector2:
 	return WORLD_ORIGIN + Vector2(cell) * CELL_SIZE + Vector2.ONE * CELL_SIZE * 0.5
 
 
+func get_footprint_cells(world_position: Vector2, footprint_size: Vector2i) -> Array[Vector2i]:
+	var center := world_to_cell(world_position)
+	var first := center - Vector2i((footprint_size.x - 1) / 2, (footprint_size.y - 1) / 2)
+	var cells: Array[Vector2i] = []
+	for x in range(first.x, first.x + footprint_size.x):
+		for y in range(first.y, first.y + footprint_size.y):
+			cells.append(Vector2i(x, y))
+	return cells
+
+
+func get_footprint_work_cells(footprint_cells: Array[Vector2i]) -> Array[Vector2i]:
+	var footprint_lookup: Dictionary = {}
+	var cardinal_offsets: Array[Vector2i] = [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]
+	for cell in footprint_cells:
+		footprint_lookup[cell] = true
+	var candidates: Array[Vector2i] = []
+	for cell in footprint_cells:
+		for offset in cardinal_offsets:
+			var candidate: Vector2i = cell + offset
+			if not footprint_lookup.has(candidate) and not candidates.has(candidate) and not is_blocked(candidate):
+				candidates.append(candidate)
+	candidates.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y or (a.y == b.y and a.x < b.x))
+	return candidates
+
+
 func get_blocked_cells() -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
 	for cell_variant in blocked_cells.keys():

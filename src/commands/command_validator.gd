@@ -21,6 +21,10 @@ func validate(
 		return _validate_strategic_order(command as StrategicOrderCommand, units, formations, buildings, ore_fields, factions, faction_knowledge, logic_grid, battlefield_bounds, pathfinder, tasks)
 	if command is TaskControlCommand:
 		return _validate_task_control(command as TaskControlCommand, tasks)
+	if command is BuildBuildingCommand:
+		return _validate_build(command as BuildBuildingCommand, units, buildings, factions, building_catalog, logic_grid, battlefield_bounds, pathfinder)
+	if command is RepairBuildingCommand:
+		return _validate_repair(command as RepairBuildingCommand, units, buildings, logic_grid, pathfinder)
 	if command is HarvestCommand:
 		return _validate_harvest(command as HarvestCommand, units, buildings, ore_fields)
 	if command is ProduceUnitCommand:
@@ -28,7 +32,7 @@ func validate(
 	if command is StopCommand:
 		return _validate_stop(command as StopCommand, units, formations)
 	if command is AttackCommand:
-		return _validate_attack(command as AttackCommand, units, formations, faction_knowledge, logic_grid)
+		return _validate_attack(command as AttackCommand, units, formations, buildings, faction_knowledge, logic_grid)
 	if command is FormationMoveCommand:
 		return _validate_formation_move(command as FormationMoveCommand, units, formations, battlefield_bounds, pathfinder)
 	if command is UnitDispositionCommand:
@@ -54,7 +58,7 @@ func validate(
 	return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 
 
-func _validate_attack(command: AttackCommand, units: Dictionary, formations: Dictionary, faction_knowledge: Dictionary, logic_grid: LogicGrid) -> CommandValidationResult:
+func _validate_attack(command: AttackCommand, units: Dictionary, formations: Dictionary, buildings: Dictionary, faction_knowledge: Dictionary, logic_grid: LogicGrid) -> CommandValidationResult:
 	var attacker_ids: Array[int] = []
 	if command.formation_id != 0:
 		if not formations.has(command.formation_id):
@@ -65,30 +69,132 @@ func _validate_attack(command: AttackCommand, units: Dictionary, formations: Dic
 		attacker_ids.assign(formation.member_entity_ids)
 	else:
 		attacker_ids.append(command.target_entity_id)
+	var combat_attacker_ids: Array[int] = []
 	for entity_id in attacker_ids:
 		if not units.has(entity_id):
 			return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 		var attacker := units[entity_id] as UnitState
+		if not attacker.can_attack:
+			continue
+		combat_attacker_ids.append(entity_id)
 		var attacker_result := _validate_unit(attacker, command.issuer_id)
 		if not attacker_result.is_accepted():
 			return attacker_result
 		if command.issuer_kind == GameCommand.IssuerKind.AGENT and not _agent_can_control(attacker, command):
 			return _rejected(CommandValidationResult.Reason.AGENT_OVERRIDE_BLOCKED)
-	if not units.has(command.attack_target_entity_id):
+	if combat_attacker_ids.is_empty():
+		return _rejected(CommandValidationResult.Reason.INVALID_DEFINITION)
+	if not units.has(command.attack_target_entity_id) and not buildings.has(command.attack_target_entity_id):
 		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
-	var target := units[command.attack_target_entity_id] as UnitState
-	if not target.enabled:
+	var target_enabled := false
+	var target_faction_id := 0
+	var target_position := Vector2.ZERO
+	if units.has(command.attack_target_entity_id):
+		var target_unit := units[command.attack_target_entity_id] as UnitState
+		target_enabled = target_unit.enabled
+		target_faction_id = target_unit.faction_id
+		target_position = target_unit.position
+	else:
+		var target_building := buildings[command.attack_target_entity_id] as BuildingState
+		target_enabled = target_building.enabled
+		target_faction_id = target_building.faction_id
+		target_position = target_building.position
+	if not target_enabled:
 		return _rejected(CommandValidationResult.Reason.ENTITY_DISABLED)
 	if faction_knowledge.has(command.issuer_id) and logic_grid != null:
 		var knowledge := faction_knowledge[command.issuer_id] as FactionKnowledge
-		if target.faction_id != command.issuer_id and not knowledge.is_visible(logic_grid.world_to_cell(target.position)):
+		if target_faction_id != command.issuer_id and not knowledge.is_visible(logic_grid.world_to_cell(target_position)):
 			return _rejected(CommandValidationResult.Reason.HIDDEN_TARGET)
-	for entity_id in attacker_ids:
+	for entity_id in combat_attacker_ids:
 		var attacker := units[entity_id] as UnitState
-		if attacker.entity_id == target.entity_id:
+		if attacker.entity_id == command.attack_target_entity_id:
 			return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
-		if attacker.faction_id == target.faction_id:
+		if attacker.faction_id == target_faction_id:
 			return _rejected(CommandValidationResult.Reason.FRIENDLY_TARGET)
+	return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
+
+
+func _validate_build(
+	command: BuildBuildingCommand,
+	units: Dictionary,
+	buildings: Dictionary,
+	factions: Dictionary,
+	building_catalog: BuildingDefinitionCatalog,
+	logic_grid: LogicGrid,
+	battlefield_bounds: Rect2,
+	pathfinder: GridPathfinder
+) -> CommandValidationResult:
+	if not units.has(command.target_entity_id):
+		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+	var engineer := units[command.target_entity_id] as UnitState
+	var unit_result := _validate_unit(engineer, command.issuer_id)
+	if not unit_result.is_accepted():
+		return unit_result
+	if engineer.definition_id != &"engineer_vehicle":
+		return _rejected(CommandValidationResult.Reason.INVALID_DEFINITION)
+	if engineer.work_kind != UnitState.WorkKind.NONE:
+		return _rejected(CommandValidationResult.Reason.CONSTRUCTION_BUSY)
+	var definition := building_catalog.get_building(command.building_definition_id) if building_catalog != null else null
+	if definition == null:
+		return _rejected(CommandValidationResult.Reason.INVALID_DEFINITION)
+	if not factions.has(engineer.faction_id) or (factions[engineer.faction_id] as FactionState).ore < definition.build_cost:
+		return _rejected(CommandValidationResult.Reason.INSUFFICIENT_ORE)
+	if logic_grid == null or not _is_valid_position(command.build_position, battlefield_bounds):
+		return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
+	var footprint := logic_grid.get_footprint_cells(command.build_position, definition.footprint_size)
+	for cell in footprint:
+		if not logic_grid.is_in_bounds(cell) or logic_grid.is_blocked(cell):
+			return _rejected(CommandValidationResult.Reason.BUILDING_OCCUPIED)
+	for unit_variant in units.values():
+		var occupying_unit := unit_variant as UnitState
+		if occupying_unit.enabled and footprint.has(logic_grid.world_to_cell(occupying_unit.position)):
+			return _rejected(CommandValidationResult.Reason.BUILDING_OCCUPIED)
+	var work_cells := logic_grid.get_footprint_work_cells(footprint)
+	if work_cells.is_empty():
+		return _rejected(CommandValidationResult.Reason.PATH_UNAVAILABLE)
+	if pathfinder != null:
+		var reachable := false
+		for work_cell in work_cells:
+			if not pathfinder.find_path(engineer.position, logic_grid.cell_to_world(work_cell)).is_empty():
+				reachable = true
+				break
+		if not reachable:
+			return _rejected(CommandValidationResult.Reason.PATH_UNAVAILABLE)
+	return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
+
+
+func _validate_repair(
+	command: RepairBuildingCommand,
+	units: Dictionary,
+	buildings: Dictionary,
+	logic_grid: LogicGrid,
+	pathfinder: GridPathfinder
+) -> CommandValidationResult:
+	if not units.has(command.target_entity_id):
+		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+	var engineer := units[command.target_entity_id] as UnitState
+	var unit_result := _validate_unit(engineer, command.issuer_id)
+	if not unit_result.is_accepted():
+		return unit_result
+	if engineer.definition_id != &"engineer_vehicle":
+		return _rejected(CommandValidationResult.Reason.INVALID_DEFINITION)
+	if engineer.work_kind != UnitState.WorkKind.NONE:
+		return _rejected(CommandValidationResult.Reason.CONSTRUCTION_BUSY)
+	if not buildings.has(command.building_entity_id):
+		return _rejected(CommandValidationResult.Reason.INVALID_BUILDING)
+	var building := buildings[command.building_entity_id] as BuildingState
+	if not building.enabled or building.faction_id != engineer.faction_id or building.under_construction:
+		return _rejected(CommandValidationResult.Reason.INVALID_BUILDING)
+	if building.health >= building.max_health:
+		return _rejected(CommandValidationResult.Reason.BUILDING_FULL_HEALTH)
+	if logic_grid != null and pathfinder != null:
+		var reachable := false
+		for work_cell in logic_grid.get_footprint_work_cells(building.footprint_cells):
+			if not pathfinder.find_path(engineer.position, logic_grid.cell_to_world(work_cell)).is_empty():
+				reachable = true
+				break
+		if not reachable:
+			return _rejected(CommandValidationResult.Reason.PATH_UNAVAILABLE)
 	return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
 
 
@@ -155,7 +261,10 @@ func _validate_formation_move(
 func _validate_harvest(command: HarvestCommand, units: Dictionary, buildings: Dictionary, ore_fields: Dictionary) -> CommandValidationResult:
 	if not units.has(command.target_entity_id):
 		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
-	var unit_result := _validate_unit(units[command.target_entity_id] as UnitState, command.issuer_id)
+	var harvester := units[command.target_entity_id] as UnitState
+	if not harvester.can_harvest:
+		return _rejected(CommandValidationResult.Reason.INVALID_DEFINITION)
+	var unit_result := _validate_unit(harvester, command.issuer_id)
 	if not unit_result.is_accepted():
 		return unit_result
 	if command.issuer_kind == GameCommand.IssuerKind.AGENT and not _agent_can_control(units[command.target_entity_id] as UnitState, command):
@@ -165,7 +274,7 @@ func _validate_harvest(command: HarvestCommand, units: Dictionary, buildings: Di
 	if not buildings.has(command.refinery_building_entity_id):
 		return _rejected(CommandValidationResult.Reason.INVALID_BUILDING)
 	var refinery := buildings[command.refinery_building_entity_id] as BuildingState
-	if not refinery.enabled or refinery.faction_id != (units[command.target_entity_id] as UnitState).faction_id:
+	if not refinery.enabled or not refinery.operational or refinery.faction_id != (units[command.target_entity_id] as UnitState).faction_id:
 		return _rejected(CommandValidationResult.Reason.INVALID_BUILDING)
 	return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
 
@@ -176,7 +285,7 @@ func _validate_production(command: ProduceUnitCommand, buildings: Dictionary, fa
 	var building := buildings[command.target_entity_id] as BuildingState
 	var building_definition := building_catalog.get_building(building.definition_id)
 	var unit_definition := unit_catalog.get_unit(command.unit_definition_id)
-	if not building.enabled or building_definition == null or not building_definition.provides_factory or unit_definition == null:
+	if not building.enabled or not building.operational or building_definition == null or not building_definition.provides_factory or unit_definition == null:
 		return _rejected(CommandValidationResult.Reason.INVALID_DEFINITION)
 	if building.controller_id != command.issuer_id:
 		return _rejected(CommandValidationResult.Reason.NOT_CONTROLLER)
@@ -243,7 +352,7 @@ func _validate_strategic_order(
 				return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 			var formation := formations[command.formation_id] as FormationState
 			var probe := AttackCommand.new(command.command_id, command.issuer_id, command.issuer_kind, command.issued_tick, formation.leader_entity_id, command.objective_entity_id, formation.formation_id)
-			return _validate_attack(probe, units, formations, faction_knowledge, logic_grid)
+			return _validate_attack(probe, units, formations, buildings, faction_knowledge, logic_grid)
 	return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 
 

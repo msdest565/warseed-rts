@@ -8,6 +8,7 @@ func run() -> Array[String]:
 	_test_last_seen_contact_and_snapshot_copy(failures)
 	_test_hidden_attack_target_is_rejected(failures)
 	_test_enemy_raid_uses_last_seen_position(failures)
+	_test_enemy_strategy_phase_machine(failures)
 	return failures
 
 
@@ -26,6 +27,8 @@ func _test_faction_snapshot_filters_true_state(failures: Array[String]) -> void:
 func _test_last_seen_contact_and_snapshot_copy(failures: Array[String]) -> void:
 	var world := SimulationWorld.new()
 	var enemy := world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	enemy.position = (world.formations[SimulationWorld.DEFAULT_FORMATION_ID] as FormationState).anchor_position + Vector2(128.0, 0.0)
+	world._update_faction_knowledge()
 	var visible_snapshot := world.create_snapshot()
 	var visible_contact := visible_snapshot.get_unit(enemy.entity_id)
 	_expect(visible_contact != null and visible_contact.is_visible_to_local_player, "visible hostile should enter faction snapshot", failures)
@@ -64,25 +67,82 @@ func _test_hidden_attack_target_is_rejected(failures: Array[String]) -> void:
 func _test_enemy_raid_uses_last_seen_position(failures: Array[String]) -> void:
 	var world := SimulationWorld.new()
 	var raider := world.spawn_enemy_raid_unit(EnemyRaidAgent.RAID_UNIT_ID, EnemyRaidAgent.AGENT_ID, EnemyRaidAgent.TASK_ID)
+	world.spawn_enemy_raid_unit(EnemyRaidAgent.RAID_UNIT_ID - 1, EnemyRaidAgent.AGENT_ID, EnemyRaidAgent.TASK_ID)
 	world.enemy_raid_agent.spawned = true
+	world.enemy_raid_agent.phase = EnemyRaidAgent.Phase.RAIDING
+	world.current_tick = EnemyRaidAgent.STRATEGY_START_TICK
+	world.enemy_raid_agent.phase_started_tick = world.current_tick
 	raider.position = (world.units[1] as UnitState).position + Vector2(48.0, 0.0)
 	world._update_faction_knowledge()
 	world.enemy_raid_agent.last_order_tick = -EnemyRaidAgent.ORDER_INTERVAL_TICKS
 	world.enemy_raid_agent.advance(world)
 	world.advance_tick()
 	_expect(raider.attack_target_entity_id != 0, "enemy raid should attack a currently visible target", failures)
+	var attacked_id := raider.attack_target_entity_id
+	var health_before := (world.units[attacked_id] as UnitState).health
+	for _tick in range(4):
+		world.advance_tick()
+	_expect((world.units[attacked_id] as UnitState).health < health_before, "enemy raid projectiles should apply real damage", failures)
 	var old_positions: Dictionary = {}
 	for entity_id in range(1, 6):
 		var friendly := world.units[entity_id] as UnitState
 		old_positions[entity_id] = friendly.position
 		friendly.position = world.logic_grid.cell_to_world(Vector2i(40 + entity_id, 50))
+	var enemy_base := (world.buildings[SimulationWorld.ENEMY_COMMAND_CENTER_ID] as BuildingState).rally_position
+	raider.position = enemy_base
+	(world.units[EnemyRaidAgent.RAID_UNIT_ID - 1] as UnitState).position = enemy_base + Vector2(-32.0, 0.0)
 	world._update_faction_knowledge()
+	raider.attack_target_entity_id = 0
+	raider.has_move_target = false
+	raider.path = PackedVector2Array()
 	world.enemy_raid_agent.last_order_tick = world.current_tick - EnemyRaidAgent.ORDER_INTERVAL_TICKS
+	world.enemy_raid_agent.last_unit_order_tick[raider.entity_id] = world.current_tick - EnemyRaidAgent.ORDER_INTERVAL_TICKS
+	world.enemy_raid_agent.advance(world)
 	world.advance_tick()
+	_expect(old_positions.values().has(raider.move_target), "enemy raid should investigate a recorded last-seen contact", failures)
+	var tracks_hidden_truth := false
+	for entity_id in range(1, 6):
+		if raider.move_target.is_equal_approx((world.units[entity_id] as UnitState).position):
+			tracks_hidden_truth = true
+	_expect(not tracks_hidden_truth, "enemy raid must not track any hidden unit's true position", failures)
+
+
+func _test_enemy_strategy_phase_machine(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	var reached_raid := false
+	for _tick in range(1500):
+		world.advance_tick()
+		if world.enemy_raid_agent.phase == EnemyRaidAgent.Phase.RAIDING:
+			reached_raid = true
+			break
+	var history := world.enemy_raid_agent.phase_history
+	for expected_phase in [
+		EnemyRaidAgent.Phase.ECONOMY,
+		EnemyRaidAgent.Phase.EXPANSION,
+		EnemyRaidAgent.Phase.SCOUTING,
+		EnemyRaidAgent.Phase.CONTESTING,
+		EnemyRaidAgent.Phase.MUSTERING,
+		EnemyRaidAgent.Phase.RAIDING,
+	]:
+		_expect(history.has(expected_phase), "enemy strategy should reach phase %s through authoritative play" % EnemyRaidAgent.Phase.keys()[expected_phase], failures)
+	_expect(reached_raid, "enemy strategy should build a raid force within deterministic slice timing", failures)
+	var enemy_factory: BuildingState
+	for building_variant in world.buildings.values():
+		var building := building_variant as BuildingState
+		if building.faction_id == SimulationWorld.ENEMY_PLAYER_ID and building.definition_id == &"automated_factory":
+			enemy_factory = building
+			break
+	_expect(enemy_factory != null and enemy_factory.operational, "enemy expansion should construct an operational factory", failures)
+	_expect((world.units[SimulationWorld.ENEMY_HARVESTER_ID] as UnitState).harvest_ore_field_entity_id == SimulationWorld.DEFAULT_ORE_FIELD_ID, "enemy economy should use the real harvester round trip", failures)
+	world.enemy_raid_agent.phase_started_tick = world.current_tick - EnemyRaidAgent.RAID_DURATION_TICKS
 	world.advance_tick()
-	var expected_last_seen := old_positions[1] as Vector2
-	_expect(raider.move_target.is_equal_approx(expected_last_seen), "enemy raid should investigate the newest deterministic last-seen contact", failures)
-	_expect(not raider.move_target.is_equal_approx((world.units[1] as UnitState).position), "enemy raid must not track the hidden unit's true position", failures)
+	_expect(world.enemy_raid_agent.phase == EnemyRaidAgent.Phase.RETREATING, "expired raid should transition to retreat", failures)
+	var base_position := (world.buildings[SimulationWorld.ENEMY_COMMAND_CENTER_ID] as BuildingState).rally_position
+	for unit in world.enemy_raid_agent._combat_units(world):
+		unit.position = base_position
+		unit.has_move_target = false
+	world.advance_tick()
+	_expect(world.enemy_raid_agent.phase == EnemyRaidAgent.Phase.DEFENDING, "returned raid force should transition to base defense", failures)
 
 
 func _expect(condition: bool, message: String, failures: Array[String]) -> void:

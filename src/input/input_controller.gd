@@ -4,6 +4,11 @@ extends Node
 enum CommandMode {
 	NORMAL,
 	ATTACK_MOVE_TARGETING,
+	BUILD_FACTORY_TARGETING,
+	BUILD_SUPPORT_TARGETING,
+	REPAIR_TARGETING,
+	HARVEST_TARGETING,
+	DEFEND_TARGETING,
 }
 
 signal move_intent_changed(target_position: Vector2, intent_sequence: int)
@@ -14,11 +19,12 @@ const DRAG_THRESHOLD := 6.0
 
 var selected_entity_id: int = 0
 var selected_entity_ids: Array[int] = []
+var selected_building_id: int = 0
 var intent_sequence: int = 0
 var pending_move_target: Vector2
 var pending_move_active: bool = false
 var coalesced_count: int = 0
-var last_command_status: String = "Ready - select a vehicle"
+var last_command_status: String = ""
 var control_groups: Dictionary = {}
 var drag_start_screen: Vector2
 var drag_current_screen: Vector2
@@ -29,6 +35,14 @@ var command_mode: CommandMode = CommandMode.NORMAL
 @export var world_presentation: WorldPresentation
 @export var camera_controller: CameraController
 @export var selection_overlay: SelectionOverlay
+
+
+func _ready() -> void:
+	refresh_locale_status()
+
+
+func refresh_locale_status() -> void:
+	last_command_status = GameText.t(&"STATUS_READY")
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -44,6 +58,31 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if targeting_mouse.pressed and targeting_mouse.button_index == MOUSE_BUTTON_LEFT:
 			attack_move_selected_to(_screen_to_world(targeting_mouse.position))
+			return
+	if command_mode in [CommandMode.HARVEST_TARGETING, CommandMode.DEFEND_TARGETING] and event is InputEventMouseButton:
+		var target_mouse := event as InputEventMouseButton
+		if target_mouse.pressed and target_mouse.button_index == MOUSE_BUTTON_RIGHT:
+			cancel_command_mode()
+			return
+		if target_mouse.pressed and target_mouse.button_index == MOUSE_BUTTON_LEFT:
+			var target_position := _screen_to_world(target_mouse.position)
+			if command_mode == CommandMode.HARVEST_TARGETING:
+				harvest_selected_at(target_position)
+			else:
+				defend_selected_at(target_position)
+			return
+	if command_mode in [CommandMode.BUILD_FACTORY_TARGETING, CommandMode.BUILD_SUPPORT_TARGETING, CommandMode.REPAIR_TARGETING] and event is InputEventMouseButton:
+		var work_mouse := event as InputEventMouseButton
+		if work_mouse.pressed and work_mouse.button_index == MOUSE_BUTTON_RIGHT:
+			cancel_command_mode()
+			return
+		if work_mouse.pressed and work_mouse.button_index == MOUSE_BUTTON_LEFT:
+			var world_position := _screen_to_world(work_mouse.position)
+			if command_mode == CommandMode.REPAIR_TARGETING:
+				repair_selected_at(world_position)
+			else:
+				var definition_id: StringName = &"automated_factory" if command_mode == CommandMode.BUILD_FACTORY_TARGETING else &"forward_support_station"
+				build_selected_at(definition_id, world_position)
 			return
 	if event is InputEventMouseMotion and left_dragging:
 		drag_current_screen = (event as InputEventMouseMotion).position
@@ -66,16 +105,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		context_command_selected_at(_screen_to_world(mouse.position))
 
 
-func _finish_selection(screen_position: Vector2, additive: bool, single_unit: bool = false) -> void:
+func _finish_selection(screen_position: Vector2, additive: bool, select_formation: bool = false) -> void:
 	if drag_start_screen.distance_to(screen_position) <= DRAG_THRESHOLD:
-		select_at(_screen_to_world(screen_position), additive, single_unit)
+		select_at(_screen_to_world(screen_position), additive, select_formation)
 	else:
 		var world_start := _screen_to_world(drag_start_screen)
 		var world_end := _screen_to_world(screen_position)
 		select_in_rect(Rect2(world_start, world_end - world_start).abs(), additive)
 
 
-func select_at(world_position: Vector2, additive: bool = false, single_unit: bool = false) -> void:
+func select_at(world_position: Vector2, additive: bool = false, select_formation: bool = false) -> void:
 	var snapshot := simulation_host.current_snapshot
 	var best_id := 0
 	var best_distance := INF
@@ -89,11 +128,20 @@ func select_at(world_position: Vector2, additive: bool = false, single_unit: boo
 				best_id = unit.entity_id
 				best_distance = distance
 	if best_id == 0:
+		var building_id := _find_friendly_building_at(world_position)
+		if building_id != 0:
+			_set_building_selection(building_id)
+			last_command_status = GameText.t(&"STATUS_BUILDING_SELECTED") % GameText.building_name(snapshot.get_building(building_id).definition_id)
+			return
 		if not additive:
 			_set_selection([])
-			last_command_status = "Selection cleared"
+			last_command_status = GameText.t(&"STATUS_SELECTION_CLEARED")
 		return
-	var atom: Array[int] = [best_id] if single_unit else _get_selection_atom(best_id)
+	var atom: Array[int] = []
+	if select_formation:
+		atom = _get_selection_atom(best_id)
+	else:
+		atom.append(best_id)
 	if additive:
 		var all_selected := true
 		for entity_id in atom:
@@ -108,7 +156,7 @@ func select_at(world_position: Vector2, additive: bool = false, single_unit: boo
 		_set_selection(selected_entity_ids)
 	else:
 		_set_selection(atom)
-	last_command_status = "Selected %d unit(s)" % selected_entity_ids.size()
+	last_command_status = GameText.t(&"STATUS_SELECTED") % selected_entity_ids.size()
 
 
 func select_in_rect(world_rect: Rect2, additive: bool = false) -> void:
@@ -117,53 +165,49 @@ func select_in_rect(world_rect: Rect2, additive: bool = false) -> void:
 	if snapshot != null:
 		for unit in snapshot.units:
 			if _is_selectable(unit) and world_rect.has_point(unit.position):
-				matches.append_array(_get_selection_atom(unit.entity_id))
+				matches.append(unit.entity_id)
 	if matches.is_empty() and additive:
 		return
 	if additive:
 		matches.append_array(selected_entity_ids)
 	_set_selection(matches)
-	last_command_status = "Selected %d unit(s)" % selected_entity_ids.size()
+	last_command_status = GameText.t(&"STATUS_SELECTED") % selected_entity_ids.size()
 
 
 func context_command_selected_at(world_position: Vector2) -> CommandValidationResult:
 	var enemy_id := _find_attack_target_at(world_position)
 	if enemy_id != 0:
 		return attack_selected_target(enemy_id)
+	var ore_field_id := _find_ore_field_at(world_position)
+	if ore_field_id != 0 and _selected_harvester_id() != 0:
+		return _submit_harvest(_selected_harvester_id(), ore_field_id)
 	return move_selected_to(world_position)
 
 
 func attack_selected_target(attack_target_entity_id: int) -> CommandValidationResult:
 	if selected_entity_ids.is_empty():
-		last_command_status = "Rejected: select a vehicle first"
+		last_command_status = GameText.t(&"STATUS_SELECT_VEHICLE")
 		return null
 	var snapshot := simulation_host.current_snapshot
-	var formation_ids: Array[int] = []
-	var standalone_ids: Array[int] = []
-	for entity_id in selected_entity_ids:
-		var unit := snapshot.get_unit(entity_id)
-		if unit == null or not _is_selectable(unit):
-			continue
-		if unit.formation_id != 0:
-			if not formation_ids.has(unit.formation_id):
-				formation_ids.append(unit.formation_id)
-		else:
-			standalone_ids.append(entity_id)
-	formation_ids.sort()
-	standalone_ids.sort()
+	var command_targets := _partition_selection_for_commands(snapshot)
+	var formation_ids := command_targets["formations"] as Array[int]
+	var standalone_ids := command_targets["units"] as Array[int]
 	var last_result: CommandValidationResult
 	for formation_id in formation_ids:
 		last_result = simulation_host.submit_command(
 			simulation_host.create_attack_command(0, attack_target_entity_id, formation_id)
 		)
 	for entity_id in standalone_ids:
+		var attacker := snapshot.get_unit(entity_id)
+		if attacker == null or not attacker.can_attack:
+			continue
 		last_result = simulation_host.submit_command(
 			simulation_host.create_attack_command(entity_id, attack_target_entity_id)
 		)
 	if last_result != null and last_result.is_accepted():
 		pending_move_active = false
 		pending_intent_cleared.emit()
-	last_command_status = "Attack: %s" % last_result.describe() if last_result != null else "Rejected: no valid selection"
+	last_command_status = GameText.t(&"STATUS_ATTACK") % GameText.command_result(last_result) if last_result != null else GameText.t(&"STATUS_NO_VALID_SELECTION")
 	return last_result
 
 
@@ -181,6 +225,109 @@ func _find_attack_target_at(world_position: Vector2) -> int:
 		if distance <= hit_radius and (distance < best_distance or (is_equal_approx(distance, best_distance) and unit.entity_id < best_id)):
 			best_id = unit.entity_id
 			best_distance = distance
+	for building in snapshot.buildings:
+		if not building.enabled or building.faction_id == SimulationWorld.LOCAL_PLAYER_ID or not building.is_visible:
+			continue
+		var distance := building.position.distance_to(world_position)
+		if distance <= hit_radius * 1.8 and (distance < best_distance or (is_equal_approx(distance, best_distance) and building.entity_id < best_id)):
+			best_id = building.entity_id
+			best_distance = distance
+	return best_id
+
+
+func begin_build_targeting(building_definition_id: StringName) -> void:
+	if _selected_engineer_id() == 0:
+		last_command_status = GameText.t(&"STATUS_SELECT_ENGINEER")
+		return
+	command_mode = CommandMode.BUILD_FACTORY_TARGETING if building_definition_id == &"automated_factory" else CommandMode.BUILD_SUPPORT_TARGETING
+	last_command_status = GameText.t(&"STATUS_BUILD_TARGET")
+
+
+func build_selected_at(building_definition_id: StringName, world_position: Vector2) -> CommandValidationResult:
+	var engineer_id := _selected_engineer_id()
+	if engineer_id == 0:
+		last_command_status = GameText.t(&"STATUS_SELECT_ENGINEER")
+		return null
+	var result := simulation_host.submit_command(simulation_host.create_build_building_command(engineer_id, building_definition_id, world_position))
+	last_command_status = GameText.t(&"STATUS_BUILD") % [GameText.building_name(building_definition_id), GameText.command_result(result)]
+	if result.is_accepted():
+		command_mode = CommandMode.NORMAL
+	return result
+
+
+func begin_repair_targeting() -> void:
+	if _selected_engineer_id() == 0:
+		last_command_status = GameText.t(&"STATUS_SELECT_ENGINEER")
+		return
+	command_mode = CommandMode.REPAIR_TARGETING
+	last_command_status = GameText.t(&"STATUS_REPAIR_TARGET")
+
+
+func begin_defend_targeting() -> void:
+	var formation := simulation_host.current_snapshot.get_formation(SimulationWorld.DEFAULT_FORMATION_ID)
+	if formation == null:
+		last_command_status = GameText.t(&"DEFENSE_NO_FORMATION")
+		return
+	command_mode = CommandMode.DEFEND_TARGETING
+	last_command_status = GameText.t(&"STATUS_DEFEND_TARGET")
+
+
+func defend_selected_at(world_position: Vector2) -> CommandValidationResult:
+	var formation := simulation_host.current_snapshot.get_formation(SimulationWorld.DEFAULT_FORMATION_ID)
+	if formation == null:
+		last_command_status = GameText.t(&"DEFENSE_NO_FORMATION")
+		return null
+	var result := simulation_host.submit_command(simulation_host.create_strategic_order_command(
+		StrategicOrderCommand.OrderKind.DEFEND_AREA, formation.formation_id, 0, world_position, 160.0
+	))
+	last_command_status = GameText.t(&"STATUS_DEFEND") % GameText.command_result(result)
+	if result.is_accepted():
+		command_mode = CommandMode.NORMAL
+	return result
+
+
+func repair_selected_at(world_position: Vector2) -> CommandValidationResult:
+	var engineer_id := _selected_engineer_id()
+	var building_id := _find_friendly_building_at(world_position)
+	if engineer_id == 0 or building_id == 0:
+		last_command_status = GameText.t(&"STATUS_REPAIR_SELECTION")
+		return null
+	var result := simulation_host.submit_command(simulation_host.create_repair_building_command(engineer_id, building_id))
+	last_command_status = GameText.t(&"STATUS_REPAIR") % GameText.command_result(result)
+	if result.is_accepted():
+		command_mode = CommandMode.NORMAL
+	return result
+
+
+func _selected_engineer_id() -> int:
+	var snapshot := simulation_host.current_snapshot
+	for entity_id in selected_entity_ids:
+		var unit := snapshot.get_unit(entity_id)
+		if unit != null and unit.enabled and unit.definition_id == &"engineer_vehicle":
+			return entity_id
+	return 0
+
+
+func _selected_harvester_id() -> int:
+	var snapshot := simulation_host.current_snapshot
+	for entity_id in selected_entity_ids:
+		var unit := snapshot.get_unit(entity_id)
+		if unit != null and unit.enabled and unit.can_harvest:
+			return entity_id
+	return 0
+
+
+func _find_friendly_building_at(world_position: Vector2) -> int:
+	var snapshot := simulation_host.current_snapshot
+	var best_id := 0
+	var best_distance := INF
+	for building in snapshot.buildings:
+		if not building.enabled or building.faction_id != SimulationWorld.LOCAL_PLAYER_ID:
+			continue
+		var distance := building.position.distance_to(world_position)
+		if distance <= HIT_RADIUS_SCREEN * 2.0 and distance < best_distance:
+			best_id = building.entity_id
+			best_distance = distance
 	return best_id
 
 
@@ -192,29 +339,19 @@ func move_selected_to(world_position: Vector2) -> CommandValidationResult:
 	pending_move_active = true
 	move_intent_changed.emit(world_position, intent_sequence)
 	if selected_entity_ids.is_empty():
-		last_command_status = "Rejected: select a vehicle first"
+		last_command_status = GameText.t(&"STATUS_SELECT_VEHICLE")
 		pending_move_active = false
 		return null
-	var formation_ids: Array[int] = []
-	var standalone_ids: Array[int] = []
 	var snapshot := simulation_host.current_snapshot
-	for entity_id in selected_entity_ids:
-		var unit := snapshot.get_unit(entity_id)
-		if unit == null:
-			continue
-		if unit.formation_id != 0:
-			if not formation_ids.has(unit.formation_id):
-				formation_ids.append(unit.formation_id)
-		else:
-			standalone_ids.append(entity_id)
-	formation_ids.sort()
-	standalone_ids.sort()
+	var command_targets := _partition_selection_for_commands(snapshot)
+	var formation_ids := command_targets["formations"] as Array[int]
+	var standalone_ids := command_targets["units"] as Array[int]
 	var last_result: CommandValidationResult
 	for formation_id in formation_ids:
 		last_result = simulation_host.submit_command(simulation_host.create_formation_move_command(formation_id, world_position))
 	for entity_id in standalone_ids:
 		last_result = simulation_host.submit_command(simulation_host.create_move_command(entity_id, world_position))
-	last_command_status = last_result.describe() if last_result != null else "Rejected: no valid selection"
+	last_command_status = GameText.command_result(last_result) if last_result != null else GameText.t(&"STATUS_NO_VALID_SELECTION")
 	if last_result == null or not last_result.is_accepted():
 		pending_move_active = false
 	return last_result
@@ -222,22 +359,12 @@ func move_selected_to(world_position: Vector2) -> CommandValidationResult:
 
 func stop_selected() -> CommandValidationResult:
 	if selected_entity_ids.is_empty():
-		last_command_status = "Rejected: select a vehicle first"
+		last_command_status = GameText.t(&"STATUS_SELECT_VEHICLE")
 		return null
 	var snapshot := simulation_host.current_snapshot
-	var formation_ids: Array[int] = []
-	var standalone_ids: Array[int] = []
-	for entity_id in selected_entity_ids:
-		var unit := snapshot.get_unit(entity_id)
-		if unit == null:
-			continue
-		if unit.formation_id != 0:
-			if not formation_ids.has(unit.formation_id):
-				formation_ids.append(unit.formation_id)
-		else:
-			standalone_ids.append(entity_id)
-	formation_ids.sort()
-	standalone_ids.sort()
+	var command_targets := _partition_selection_for_commands(snapshot)
+	var formation_ids := command_targets["formations"] as Array[int]
+	var standalone_ids := command_targets["units"] as Array[int]
 	var last_result: CommandValidationResult
 	for formation_id in formation_ids:
 		last_result = simulation_host.submit_command(simulation_host.create_stop_command(0, formation_id))
@@ -246,21 +373,21 @@ func stop_selected() -> CommandValidationResult:
 	if last_result != null and last_result.is_accepted():
 		pending_move_active = false
 		pending_intent_cleared.emit()
-	last_command_status = "Stop: %s" % last_result.describe() if last_result != null else "Rejected: no valid selection"
+	last_command_status = GameText.t(&"STATUS_STOP") % GameText.command_result(last_result) if last_result != null else GameText.t(&"STATUS_NO_VALID_SELECTION")
 	return last_result
 
 
 func begin_attack_move_targeting() -> void:
 	if selected_entity_ids.is_empty():
-		last_command_status = "Rejected: select a formation first"
+		last_command_status = GameText.t(&"STATUS_SELECT_FORMATION")
 		return
 	command_mode = CommandMode.ATTACK_MOVE_TARGETING
-	last_command_status = "Attack-move: left click target, RMB/Esc cancel"
+	last_command_status = GameText.t(&"STATUS_ATTACK_MOVE_TARGET")
 
 
 func cancel_command_mode() -> void:
 	command_mode = CommandMode.NORMAL
-	last_command_status = "Attack-move cancelled"
+	last_command_status = GameText.t(&"STATUS_TARGETING_CANCELLED")
 
 
 func attack_move_selected_to(world_position: Vector2) -> CommandValidationResult:
@@ -271,7 +398,7 @@ func attack_move_selected_to(world_position: Vector2) -> CommandValidationResult
 		if unit != null and unit.formation_id != 0 and not formation_ids.has(unit.formation_id):
 			formation_ids.append(unit.formation_id)
 	if formation_ids.is_empty():
-		last_command_status = "Rejected: AttackMove requires a formation"
+		last_command_status = GameText.t(&"STATUS_ATTACK_MOVE_FORMATION")
 		return null
 	formation_ids.sort()
 	var last_result: CommandValidationResult
@@ -283,35 +410,87 @@ func attack_move_selected_to(world_position: Vector2) -> CommandValidationResult
 		pending_move_active = true
 		move_intent_changed.emit(world_position, intent_sequence)
 		command_mode = CommandMode.NORMAL
-	last_command_status = "AttackMove: %s" % last_result.describe() if last_result != null else "Rejected"
+	last_command_status = GameText.t(&"STATUS_ATTACK_MOVE") % GameText.command_result(last_result)
 	return last_result
 
 
 func harvest_with_selected() -> CommandValidationResult:
-	var harvester_id := 0
-	var snapshot := simulation_host.current_snapshot
-	for entity_id in selected_entity_ids:
-		var unit := snapshot.get_unit(entity_id)
-		if unit != null and unit.definition_id == &"harvester":
-			harvester_id = entity_id
-			break
+	var harvester_id := _selected_harvester_id()
 	if harvester_id == 0:
-		last_command_status = "Rejected: select the harvester"
+		last_command_status = GameText.t(&"STATUS_SELECT_HARVESTER")
 		return null
-	var result := simulation_host.submit_command(simulation_host.create_harvest_command(harvester_id, SimulationWorld.DEFAULT_ORE_FIELD_ID, SimulationWorld.PLAYER_COMMAND_CENTER_ID))
-	last_command_status = "Harvest: %s" % result.describe()
+	command_mode = CommandMode.HARVEST_TARGETING
+	last_command_status = GameText.t(&"STATUS_HARVEST_TARGET")
+	return null
+
+
+func harvest_selected_at(world_position: Vector2) -> CommandValidationResult:
+	var harvester_id := _selected_harvester_id()
+	var ore_field_id := _find_ore_field_at(world_position)
+	if harvester_id == 0 or ore_field_id == 0:
+		last_command_status = GameText.t(&"STATUS_HARVEST_SELECTION")
+		return null
+	return _submit_harvest(harvester_id, ore_field_id)
+
+
+func _submit_harvest(harvester_id: int, ore_field_id: int) -> CommandValidationResult:
+	var refinery_id := _closest_friendly_refinery(ore_field_id)
+	if refinery_id == 0:
+		last_command_status = GameText.t(&"STATUS_HARVEST_SELECTION")
+		return null
+	var result := simulation_host.submit_command(simulation_host.create_harvest_command(harvester_id, ore_field_id, refinery_id))
+	last_command_status = GameText.t(&"STATUS_HARVEST") % GameText.command_result(result)
+	if result.is_accepted():
+		command_mode = CommandMode.NORMAL
+	return result
+
+
+func _find_ore_field_at(world_position: Vector2) -> int:
+	var snapshot := simulation_host.current_snapshot
+	var best_id := 0
+	var best_distance := INF
+	for ore_field in snapshot.ore_fields:
+		var distance := ore_field.position.distance_to(world_position)
+		if ore_field.ore_remaining > 0 and distance <= HIT_RADIUS_SCREEN * 2.0 and distance < best_distance:
+			best_id = ore_field.entity_id
+			best_distance = distance
+	return best_id
+
+
+func _closest_friendly_refinery(ore_field_id: int) -> int:
+	var snapshot := simulation_host.current_snapshot
+	var ore_field := snapshot.get_ore_field(ore_field_id)
+	var best_id := 0
+	var best_distance := INF
+	if ore_field == null:
+		return 0
+	for building in snapshot.buildings:
+		if building.enabled and building.operational and building.faction_id == SimulationWorld.LOCAL_PLAYER_ID and building.definition_id == &"command_center":
+			var distance := building.position.distance_squared_to(ore_field.position)
+			if distance < best_distance:
+				best_id = building.entity_id
+				best_distance = distance
+	return best_id
+
+
+func produce_unit(unit_definition_id: StringName) -> CommandValidationResult:
+	if selected_building_id == 0:
+		last_command_status = GameText.t(&"STATUS_SELECT_FACTORY")
+		return null
+	var result := simulation_host.submit_command(simulation_host.create_produce_unit_command(selected_building_id, unit_definition_id))
+	last_command_status = GameText.t(&"STATUS_PRODUCE") % [GameText.unit_name(unit_definition_id), GameText.command_result(result)]
 	return result
 
 
 func produce_scout() -> CommandValidationResult:
 	var result := simulation_host.submit_command(simulation_host.create_produce_unit_command(SimulationWorld.PLAYER_FACTORY_ID, &"scout_vehicle"))
-	last_command_status = "Produce Scout: %s" % result.describe()
+	last_command_status = GameText.t(&"STATUS_PRODUCE") % [GameText.unit_name(&"scout_vehicle"), GameText.command_result(result)]
 	return result
 
 
 func assign_control_group(group_number: int) -> void:
 	control_groups[group_number] = selected_entity_ids.duplicate()
-	last_command_status = "Assigned group %d (%d units)" % [group_number, selected_entity_ids.size()]
+	last_command_status = GameText.t(&"STATUS_GROUP_ASSIGNED") % [group_number, selected_entity_ids.size()]
 
 
 func recall_control_group(group_number: int, additive: bool = false) -> void:
@@ -324,17 +503,17 @@ func recall_control_group(group_number: int, additive: bool = false) -> void:
 	for entity_id in stored:
 		var unit := snapshot.get_unit(entity_id)
 		if unit != null and _is_selectable(unit):
-			recalled.append_array(_get_selection_atom(entity_id))
+			recalled.append(entity_id)
 	_set_selection(recalled)
-	last_command_status = "Recalled group %d (%d units)" % [group_number, selected_entity_ids.size()]
+	last_command_status = GameText.t(&"STATUS_GROUP_RECALLED") % [group_number, selected_entity_ids.size()]
 
 
 func set_selected_disposition(disposition: UnitDispositionCommand.Disposition, destination_formation_id: int = 0) -> CommandValidationResult:
 	if selected_entity_ids.size() != 1:
-		last_command_status = "Rejected: Alt-select one unit first"
+		last_command_status = GameText.t(&"STATUS_ALT_SELECT")
 		return null
 	var result := simulation_host.submit_command(simulation_host.create_unit_disposition_command(selected_entity_id, disposition, destination_formation_id))
-	last_command_status = "Disposition %s: %s" % [UnitDispositionCommand.Disposition.keys()[disposition], result.describe()]
+	last_command_status = GameText.t(&"STATUS_DISPOSITION") % [UnitDispositionCommand.Disposition.keys()[disposition], GameText.command_result(result)]
 	return result
 
 
@@ -366,6 +545,15 @@ func _handle_key(event: InputEventKey) -> void:
 	if event.keycode == KEY_P and not event.ctrl_pressed and not event.alt_pressed:
 		produce_scout()
 		return
+	if event.keycode == KEY_B and not event.ctrl_pressed and not event.alt_pressed:
+		begin_build_targeting(&"automated_factory")
+		return
+	if event.keycode == KEY_N and not event.ctrl_pressed and not event.alt_pressed:
+		begin_build_targeting(&"forward_support_station")
+		return
+	if event.keycode == KEY_V and not event.ctrl_pressed and not event.alt_pressed:
+		begin_repair_targeting()
+		return
 	var group_number := _keycode_to_group(event.keycode)
 	if group_number == 0:
 		return
@@ -391,9 +579,38 @@ func _get_selection_atom(entity_id: int) -> Array[int]:
 	if formation != null:
 		for member_id in formation.member_entity_ids:
 			var member := snapshot.get_unit(member_id)
-			if member != null and _is_selectable(member):
+			if member != null and _is_selectable(member) and member.formation_id == unit.formation_id:
 				result.append(member_id)
 	return result
+
+
+func _partition_selection_for_commands(snapshot: WorldSnapshot) -> Dictionary:
+	var complete_formations: Array[int] = []
+	var standalone_units: Array[int] = []
+	var candidate_formations: Array[int] = []
+	for entity_id in selected_entity_ids:
+		var unit := snapshot.get_unit(entity_id) if snapshot != null else null
+		if unit != null and _is_selectable(unit) and unit.formation_id != 0 and not candidate_formations.has(unit.formation_id):
+			candidate_formations.append(unit.formation_id)
+	for formation_id in candidate_formations:
+		var formation := snapshot.get_formation(formation_id)
+		if formation == null:
+			continue
+		var complete := true
+		for member_id in formation.member_entity_ids:
+			var member := snapshot.get_unit(member_id)
+			if member == null or not _is_selectable(member) or member.formation_id != formation_id or not selected_entity_ids.has(member_id):
+				complete = false
+				break
+		if complete:
+			complete_formations.append(formation_id)
+	for entity_id in selected_entity_ids:
+		var unit := snapshot.get_unit(entity_id) if snapshot != null else null
+		if unit != null and _is_selectable(unit) and not complete_formations.has(unit.formation_id):
+			standalone_units.append(entity_id)
+	complete_formations.sort()
+	standalone_units.sort()
+	return {"formations": complete_formations, "units": standalone_units}
 
 
 func prune_selection() -> void:
@@ -414,7 +631,15 @@ func _set_selection(entity_ids: Array[int]) -> void:
 	selected_entity_ids.assign(unique.keys())
 	selected_entity_ids.sort()
 	selected_entity_id = selected_entity_ids[0] if not selected_entity_ids.is_empty() else 0
-	world_presentation.set_selected_entities(selected_entity_ids, selected_entity_id)
+	selected_building_id = 0
+	world_presentation.set_selected_entities(selected_entity_ids, selected_entity_id, selected_building_id)
+
+
+func _set_building_selection(building_id: int) -> void:
+	selected_entity_ids.clear()
+	selected_entity_id = 0
+	selected_building_id = building_id
+	world_presentation.set_selected_entities([], 0, selected_building_id)
 
 
 func _is_selectable(unit: UnitSnapshot) -> bool:

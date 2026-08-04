@@ -6,7 +6,7 @@
 script = ExtResource("1")
 max_health = 220.0
 armor = 8.0
-attack_power = 8.0
+attack_power = 0.0
 attack_range = 220.0
 attacks_per_second = 1.0
 projectile_speed = 400.0

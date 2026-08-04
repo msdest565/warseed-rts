@@ -8,7 +8,14 @@ var controller_id: int
 var position: Vector2
 var max_health: float
 var health: float
+var armor: float
 var enabled: bool
+var operational: bool
+var under_construction: bool
+var construction_ticks_total: int
+var construction_ticks_remaining: int
+var builder_entity_id: int
+var footprint_cells: Array[Vector2i]
 var rally_position: Vector2
 var production_definition_id: StringName
 var production_ticks_remaining: int
@@ -25,7 +32,14 @@ func _init(building: BuildingState = null, contact: KnowledgeContact = null) -> 
 		position = contact.position
 		max_health = contact.max_health
 		health = contact.health
+		armor = 0.0
 		enabled = contact.enabled
+		operational = contact.enabled
+		under_construction = false
+		construction_ticks_total = 0
+		construction_ticks_remaining = 0
+		builder_entity_id = 0
+		footprint_cells = []
 		rally_position = contact.position
 		production_definition_id = &""
 		production_ticks_remaining = 0
@@ -39,7 +53,14 @@ func _init(building: BuildingState = null, contact: KnowledgeContact = null) -> 
 	position = building.position
 	max_health = building.max_health
 	health = building.health
+	armor = building.armor
 	enabled = building.enabled
+	operational = building.operational
+	under_construction = building.under_construction
+	construction_ticks_total = building.construction_ticks_total
+	construction_ticks_remaining = building.construction_ticks_remaining
+	builder_entity_id = building.builder_entity_id
+	footprint_cells.assign(building.footprint_cells)
 	rally_position = building.rally_position
 	production_definition_id = building.production_definition_id
 	production_ticks_remaining = building.production_ticks_remaining

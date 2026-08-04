@@ -14,4 +14,4 @@ func _draw() -> void:
 	var radius := 30.0 if ore_remaining > 0 else 12.0
 	draw_circle(Vector2.ZERO, radius, Color("d8a83e"))
 	draw_circle(Vector2(-16.0, 8.0), radius * 0.55, Color("f2c94c"))
-	draw_string(ThemeDB.fallback_font, Vector2(-28.0, 48.0), "ORE %d" % ore_remaining, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 12, Color("f8e7ae"))
+	draw_string(ThemeDB.fallback_font, Vector2(-45.0, 48.0), GameText.t(&"ORE_LABEL") % ore_remaining, HORIZONTAL_ALIGNMENT_CENTER, 90.0, 12, Color("f8e7ae"))

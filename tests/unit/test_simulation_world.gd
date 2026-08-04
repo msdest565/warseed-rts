@@ -9,8 +9,23 @@ func run() -> Array[String]:
 	_test_snapshot_is_value_copy(failures)
 	_test_deterministic_replay(failures)
 	_test_default_formation_and_snapshot_copy(failures)
+	_test_formation_member_snapshot_without_unit_path(failures)
 	_test_stuck_detection_and_recovery(failures)
+	_test_destroyed_unit_wreck_expires(failures)
 	return failures
+
+
+func _test_destroyed_unit_wreck_expires(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	var enemy := world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	enemy.enabled = false
+	enemy.health = 0.0
+	enemy.death_tick = world.current_tick
+	for _tick in range(SimulationWorld.WRECK_LIFETIME_TICKS):
+		world.advance_tick()
+	_expect(world.units.has(enemy.entity_id), "destroyed unit should remain briefly as a wreck", failures)
+	world.advance_tick()
+	_expect(not world.units.has(enemy.entity_id), "expired unit wreck should be removed from authoritative state", failures)
 
 
 func _test_fixed_tick_movement(failures: Array[String]) -> void:
@@ -48,7 +63,8 @@ func _test_deterministic_replay(failures: Array[String]) -> void:
 func _test_default_formation_and_snapshot_copy(failures: Array[String]) -> void:
 	var world := SimulationWorld.new()
 	var snapshot := world.create_snapshot()
-	_expect(snapshot.units.size() == 6, "default world should create five formation members and one enemy", failures)
+	_expect(snapshot.units.size() == 5, "local snapshot should hide the distant enemy at match start", failures)
+	_expect(world.create_true_state_snapshot().units.size() == 8, "true state should contain player formation plus enemy garrison, harvester, and engineer", failures)
 	var old_mode := snapshot.get_formation(1).mode
 	var old_slot := snapshot.get_unit(5).formation_slot_id
 	var command := FormationMoveCommand.new(1, 1, GameCommand.IssuerKind.PLAYER, 0, 1, 1, Vector2(800.0, 336.0))
@@ -79,6 +95,18 @@ func _test_stuck_detection_and_recovery(failures: Array[String]) -> void:
 			saw_stuck = true
 	_expect(saw_stuck, "no-progress unit should emit UNIT_STUCK at threshold", failures)
 	_expect(unit.recovery_attempts == 1, "stuck unit should perform one bounded recovery attempt", failures)
+
+
+func _test_formation_member_snapshot_without_unit_path(failures: Array[String]) -> void:
+	var unit := UnitState.new(77, Vector2(320.0, 240.0), 180.0, SimulationWorld.LOCAL_PLAYER_ID)
+	unit.formation_id = SimulationWorld.DEFAULT_FORMATION_ID
+	unit.following_formation = true
+	unit.has_move_target = true
+	unit.path_index = 1
+	unit.path = PackedVector2Array()
+	var snapshot := UnitSnapshot.new(unit)
+	_expect(snapshot.is_moving, "formation member should remain marked moving when its route is owned by the formation", failures)
+	_expect(snapshot.path.is_empty(), "formation-owned movement should allow an empty per-unit snapshot path", failures)
 
 
 func _moving_world(target: Vector2) -> SimulationWorld:

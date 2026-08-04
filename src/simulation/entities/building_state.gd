@@ -8,7 +8,14 @@ var controller_id: int
 var position: Vector2
 var max_health: float
 var health: float
+var armor: float = 0.0
 var enabled: bool = true
+var operational: bool = true
+var under_construction: bool = false
+var construction_ticks_total: int = 0
+var construction_ticks_remaining: int = 0
+var builder_entity_id: int = 0
+var footprint_cells: Array[Vector2i] = []
 var rally_position: Vector2
 var production_definition_id: StringName
 var production_ticks_remaining: int = 0

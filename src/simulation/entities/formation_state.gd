@@ -60,6 +60,26 @@ func _init(new_formation_id: int, new_member_entity_ids: Array[int], new_anchor_
 		slot_by_entity_id[member_entity_ids[slot_id]] = slot_id
 
 
+func remove_member(entity_id: int) -> void:
+	member_entity_ids.erase(entity_id)
+	rebuild_slots()
+
+
+func add_member(entity_id: int) -> int:
+	if not member_entity_ids.has(entity_id):
+		member_entity_ids.append(entity_id)
+	rebuild_slots()
+	return get_slot_id(entity_id)
+
+
+func rebuild_slots() -> void:
+	member_entity_ids.sort()
+	slot_by_entity_id.clear()
+	for slot_id in range(member_entity_ids.size()):
+		slot_by_entity_id[member_entity_ids[slot_id]] = slot_id
+	leader_entity_id = member_entity_ids[0] if not member_entity_ids.is_empty() else 0
+
+
 func get_slot_id(entity_id: int) -> int:
 	return int(slot_by_entity_id.get(entity_id, -1))
 

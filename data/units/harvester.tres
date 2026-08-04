@@ -11,4 +11,6 @@ move_speed = 120.0
 production_cost = 200
 production_ticks = 30
 cargo_capacity = 20
+can_attack = false
+can_harvest = true
 combat = ExtResource("2")

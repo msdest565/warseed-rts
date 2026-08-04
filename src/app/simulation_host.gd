@@ -154,6 +154,29 @@ func create_produce_unit_command(factory_entity_id: int, unit_definition_id: Str
 	)
 
 
+func create_build_building_command(engineer_entity_id: int, building_definition_id: StringName, build_position: Vector2) -> BuildBuildingCommand:
+	return BuildBuildingCommand.new(
+		world.allocate_command_id(),
+		SimulationWorld.LOCAL_PLAYER_ID,
+		GameCommand.IssuerKind.PLAYER,
+		world.current_tick,
+		engineer_entity_id,
+		building_definition_id,
+		build_position
+	)
+
+
+func create_repair_building_command(engineer_entity_id: int, building_entity_id: int) -> RepairBuildingCommand:
+	return RepairBuildingCommand.new(
+		world.allocate_command_id(),
+		SimulationWorld.LOCAL_PLAYER_ID,
+		GameCommand.IssuerKind.PLAYER,
+		world.current_tick,
+		engineer_entity_id,
+		building_entity_id
+	)
+
+
 func create_strategic_order_command(
 	order_kind: StrategicOrderCommand.OrderKind,
 	formation_id: int,
@@ -217,3 +240,7 @@ func get_interpolation_alpha() -> float:
 
 func get_queue_size() -> int:
 	return world.command_queue.size()
+
+
+func get_enemy_phase_name() -> String:
+	return world.enemy_raid_agent.phase_name()

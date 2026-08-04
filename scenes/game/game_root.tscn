@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://src/app/game_root.gd" id="1_game_root"]
 [ext_resource type="Script" path="res://src/app/simulation_host.gd" id="2_simulation_host"]
@@ -11,6 +11,7 @@
 [ext_resource type="Script" path="res://src/ui/minimap_control.gd" id="9_minimap"]
 [ext_resource type="Script" path="res://src/ui/task_panel.gd" id="10_task_panel"]
 [ext_resource type="Script" path="res://src/ui/pause_menu.gd" id="11_pause_menu"]
+[ext_resource type="Script" path="res://src/ui/resource_bar.gd" id="12_resource_bar"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_panel"]
 bg_color = Color(0.035, 0.055, 0.063, 0.92)
@@ -66,10 +67,17 @@ script = ExtResource("8_selection")
 [node name="HUDLayer" type="CanvasLayer" parent="."]
 
 [node name="TaskPanel" type="PanelContainer" parent="HUDLayer"]
-offset_left = 16.0
-offset_top = 16.0
-offset_right = 396.0
-offset_bottom = 300.0
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -560.0
+offset_top = -224.0
+offset_right = 560.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 0
 theme_override_styles/panel = SubResource("StyleBox_panel")
 script = ExtResource("10_task_panel")
 
@@ -109,31 +117,94 @@ size_flags_horizontal = 3
 text = "Attack"
 
 [node name="TaskStatus" type="Label" parent="HUDLayer/TaskPanel/Layout"]
-custom_minimum_size = Vector2(360, 96)
+custom_minimum_size = Vector2(360, 44)
 layout_mode = 2
+visible = false
 theme_override_colors/font_color = Color(0.76, 0.84, 0.85, 1)
 theme_override_font_sizes/font_size = 11
 text = "No active assignment"
 autowrap_mode = 2
 
-[node name="TaskControls" type="HBoxContainer" parent="HUDLayer/TaskPanel/Layout"]
+[node name="BuildFactory" type="Button" parent="HUDLayer/TaskPanel/Layout/Orders"]
 layout_mode = 2
-theme_override_constants/separation = 6
+size_flags_horizontal = 3
+text = "Build Factory"
 
-[node name="Pause" type="Button" parent="HUDLayer/TaskPanel/Layout/TaskControls"]
+[node name="BuildSupport" type="Button" parent="HUDLayer/TaskPanel/Layout/Orders"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Build Support"
+
+[node name="Repair" type="Button" parent="HUDLayer/TaskPanel/Layout/Orders"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Repair"
+
+[node name="Pause" type="Button" parent="HUDLayer/TaskPanel/Layout/Orders"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Pause"
 
-[node name="Resume" type="Button" parent="HUDLayer/TaskPanel/Layout/TaskControls"]
+[node name="Resume" type="Button" parent="HUDLayer/TaskPanel/Layout/Orders"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Resume"
 
-[node name="Cancel" type="Button" parent="HUDLayer/TaskPanel/Layout/TaskControls"]
+[node name="Cancel" type="Button" parent="HUDLayer/TaskPanel/Layout/Orders"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Cancel"
+
+[node name="Production" type="HBoxContainer" parent="HUDLayer/TaskPanel/Layout"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Harvest" type="Button" parent="HUDLayer/TaskPanel/Layout/Production"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Harvest"
+
+[node name="Harvester" type="Button" parent="HUDLayer/TaskPanel/Layout/Production"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Harvester"
+
+[node name="Engineer" type="Button" parent="HUDLayer/TaskPanel/Layout/Production"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Engineer"
+
+[node name="Scout" type="Button" parent="HUDLayer/TaskPanel/Layout/Production"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Scout"
+
+[node name="Assault" type="Button" parent="HUDLayer/TaskPanel/Layout/Production"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Assault"
+
+[node name="Missile" type="Button" parent="HUDLayer/TaskPanel/Layout/Production"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Missile"
+
+[node name="ResourceBar" type="PanelContainer" parent="HUDLayer"]
+offset_left = 16.0
+offset_top = 32.0
+offset_right = 216.0
+offset_bottom = 74.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBox_panel")
+script = ExtResource("12_resource_bar")
+
+[node name="Label" type="Label" parent="HUDLayer/ResourceBar"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.78, 0.28, 1)
+theme_override_font_sizes/font_size = 18
+text = "Gold: 0"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="Minimap" type="Control" parent="HUDLayer"]
 custom_minimum_size = Vector2(300, 200)
@@ -144,9 +215,9 @@ anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = -316.0
-offset_top = -216.0
+offset_top = -520.0
 offset_right = -16.0
-offset_bottom = -16.0
+offset_bottom = -320.0
 grow_horizontal = 0
 grow_vertical = 0
 mouse_filter = 0
@@ -198,9 +269,9 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -170.0
-offset_top = -104.0
+offset_top = -148.0
 offset_right = 170.0
-offset_bottom = 104.0
+offset_bottom = 148.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBox_panel")
@@ -221,6 +292,15 @@ horizontal_alignment = 1
 custom_minimum_size = Vector2(280, 44)
 layout_mode = 2
 text = "Continue"
+
+[node name="LanguageLabel" type="Label" parent="PauseMenu/Backdrop/Menu/Content"]
+layout_mode = 2
+text = "Language"
+horizontal_alignment = 1
+
+[node name="LanguageSelector" type="OptionButton" parent="PauseMenu/Backdrop/Menu/Content"]
+custom_minimum_size = Vector2(280, 40)
+layout_mode = 2
 
 [node name="Exit" type="Button" parent="PauseMenu/Backdrop/Menu/Content"]
 custom_minimum_size = Vector2(280, 44)

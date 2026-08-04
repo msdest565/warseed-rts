@@ -13,9 +13,9 @@ func _init(new_logic_grid: LogicGrid, new_metrics: SimulationMetrics = null) -> 
 	metrics = new_metrics
 	_astar.region = Rect2i(Vector2i.ZERO, LogicGrid.GRID_SIZE)
 	_astar.cell_size = Vector2.ONE
-	_astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_NEVER
-	_astar.default_compute_heuristic = AStarGrid2D.HEURISTIC_MANHATTAN
-	_astar.default_estimate_heuristic = AStarGrid2D.HEURISTIC_MANHATTAN
+	_astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	_astar.default_compute_heuristic = AStarGrid2D.HEURISTIC_OCTILE
+	_astar.default_estimate_heuristic = AStarGrid2D.HEURISTIC_OCTILE
 	_astar.update()
 	for cell in logic_grid.get_blocked_cells():
 		_astar.set_point_solid(cell, true)
@@ -62,7 +62,21 @@ func _find_path_internal(from_position: Vector2, to_position: Vector2) -> Packed
 		world_path.append(logic_grid.cell_to_world(cell))
 	world_path[0] = from_position
 	world_path[world_path.size() - 1] = to_position
-	return world_path
+	return _simplify_path(world_path)
+
+
+func _simplify_path(path: PackedVector2Array) -> PackedVector2Array:
+	if path.size() <= 2:
+		return path
+	var simplified := PackedVector2Array([path[0]])
+	var anchor_index := 0
+	while anchor_index < path.size() - 1:
+		var next_index := path.size() - 1
+		while next_index > anchor_index + 1 and not logic_grid.is_segment_walkable(path[anchor_index], path[next_index]):
+			next_index -= 1
+		simplified.append(path[next_index])
+		anchor_index = next_index
+	return simplified
 
 
 func find_path_to_first_reachable(

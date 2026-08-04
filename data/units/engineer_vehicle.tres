@@ -10,5 +10,7 @@ display_name = "Engineer Vehicle"
 move_speed = 150.0
 production_cost = 175
 production_ticks = 25
+can_attack = false
+can_construct = true
 can_repair = true
 combat = ExtResource("2")

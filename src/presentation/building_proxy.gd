@@ -2,6 +2,10 @@ class_name BuildingProxy
 extends Node2D
 
 var snapshot: BuildingSnapshot
+var selected: bool = false:
+	set(value):
+		selected = value
+		queue_redraw()
 
 
 func apply_snapshot(building: BuildingSnapshot) -> void:
@@ -23,9 +27,16 @@ func _draw() -> void:
 		size = Vector2(72.0, 54.0)
 	draw_rect(Rect2(-size * 0.5, size), color, true)
 	draw_rect(Rect2(-size * 0.5, size), Color("d7e3bb"), false, 3.0)
+	if selected:
+		draw_rect(Rect2(-size * 0.5 - Vector2(6.0, 6.0), size + Vector2(12.0, 12.0)), Color("f2c94c"), false, 3.0)
 	var health_ratio := snapshot.health / snapshot.max_health if snapshot.max_health > 0.0 else 0.0
 	draw_rect(Rect2(-size.x * 0.5, -size.y * 0.5 - 10.0, size.x, 5.0), Color("172126"), true)
 	draw_rect(Rect2(-size.x * 0.5 + 1.0, -size.y * 0.5 - 9.0, (size.x - 2.0) * health_ratio, 3.0), Color("65c466"), true)
-	draw_string(ThemeDB.fallback_font, Vector2(-size.x * 0.5, size.y * 0.5 + 18.0), str(snapshot.definition_id), HORIZONTAL_ALIGNMENT_LEFT, -1.0, 12, Color("dce8e8"))
+	draw_string(ThemeDB.fallback_font, Vector2(-size.x * 0.75, size.y * 0.5 + 17.0), GameText.building_name(snapshot.definition_id), HORIZONTAL_ALIGNMENT_CENTER, size.x * 1.5, 11, Color("dce8e8"))
+	draw_string(ThemeDB.fallback_font, Vector2(-size.x * 0.75, size.y * 0.5 + 31.0), GameText.faction_name(snapshot.faction_id), HORIZONTAL_ALIGNMENT_CENTER, size.x * 1.5, 10, Color("9fb4b5"))
+	if snapshot.under_construction:
+		var progress := 1.0 - float(snapshot.construction_ticks_remaining) / maxf(1.0, snapshot.construction_ticks_total)
+		draw_rect(Rect2(-size.x * 0.5, size.y * 0.5 + 35.0, size.x, 4.0), Color("172126"), true)
+		draw_rect(Rect2(-size.x * 0.5, size.y * 0.5 + 35.0, size.x * progress, 4.0), Color("f2c94c"), true)
 	if not snapshot.production_definition_id.is_empty():
 		draw_arc(Vector2.ZERO, size.x * 0.32, 0.0, TAU, 30, Color("f2c94c"), 3.0)

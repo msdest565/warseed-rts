@@ -22,8 +22,10 @@ func validate() -> DataValidationResult:
 			result.add(DataValidationResult.Reason.EMPTY_DISPLAY_NAME, "buildings[%d] has empty display_name" % index)
 		if not is_finite(building.max_health) or building.max_health <= 0.0:
 			result.add(DataValidationResult.Reason.INVALID_MAX_HEALTH, "buildings[%d] has invalid max_health" % index)
-		if building.build_cost < 0 or building.production_cost < 0 or building.production_ticks < 0:
+		if building.build_cost < 0 or building.build_ticks <= 0 or building.production_cost < 0 or building.production_ticks < 0:
 			result.add(DataValidationResult.Reason.INVALID_COST, "buildings[%d] has invalid economy values" % index)
+		if building.footprint_size.x <= 0 or building.footprint_size.y <= 0:
+			result.add(DataValidationResult.Reason.INVALID_COST, "buildings[%d] has invalid footprint" % index)
 	return result
 
 

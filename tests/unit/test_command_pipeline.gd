@@ -57,6 +57,7 @@ func _test_rejections(failures: Array[String]) -> void:
 func _test_player_and_agent_share_pipeline(failures: Array[String]) -> void:
 	for issuer_kind in [GameCommand.IssuerKind.PLAYER, GameCommand.IssuerKind.AGENT]:
 		var world := SimulationWorld.new(true, issuer_kind == GameCommand.IssuerKind.AGENT)
+		_reveal_default_enemy(world)
 		var command := MoveCommand.new(1, 1, issuer_kind, 0, 1, Vector2(500.0, 360.0))
 		if issuer_kind == GameCommand.IssuerKind.AGENT:
 			command.agent_id = SimulationWorld.TEST_AGENT_ID
@@ -114,6 +115,7 @@ func _test_stop_and_attack_move_commands(failures: Array[String]) -> void:
 func _test_attack_command_validation_and_supersession(failures: Array[String]) -> void:
 	for issuer_kind in [GameCommand.IssuerKind.PLAYER, GameCommand.IssuerKind.AGENT]:
 		var world := SimulationWorld.new(true, issuer_kind == GameCommand.IssuerKind.AGENT)
+		_reveal_default_enemy(world)
 		var attack := AttackCommand.new(1, 1, issuer_kind, 0, 1, SimulationWorld.DEFAULT_ENEMY_UNIT_ID, 1)
 		if issuer_kind == GameCommand.IssuerKind.AGENT:
 			attack.agent_id = SimulationWorld.TEST_AGENT_ID
@@ -125,10 +127,12 @@ func _test_attack_command_validation_and_supersession(failures: Array[String]) -
 	var friendly := AttackCommand.new(1, 1, GameCommand.IssuerKind.PLAYER, 0, 1, 2, 1)
 	_expect(friendly_world.submit_command(friendly).reason == CommandValidationResult.Reason.FRIENDLY_TARGET, "friendly attack target should be rejected structurally", failures)
 	(friendly_world.units[5] as UnitState).controller_id = 9
+	_reveal_default_enemy(friendly_world)
 	var uncontrolled := AttackCommand.new(2, 1, GameCommand.IssuerKind.PLAYER, 0, 1, SimulationWorld.DEFAULT_ENEMY_UNIT_ID, 1)
 	_expect(friendly_world.submit_command(uncontrolled).reason == CommandValidationResult.Reason.NOT_CONTROLLER, "one uncontrolled member should reject whole attack", failures)
 
 	var supersession_world := SimulationWorld.new()
+	_reveal_default_enemy(supersession_world)
 	var attack := AttackCommand.new(1, 1, GameCommand.IssuerKind.PLAYER, 0, 1, SimulationWorld.DEFAULT_ENEMY_UNIT_ID, 1)
 	var stop := StopCommand.new(2, 1, GameCommand.IssuerKind.PLAYER, 0, 1, 1)
 	_expect(supersession_world.submit_command(attack).is_accepted(), "attack before stop should be accepted", failures)
@@ -136,6 +140,12 @@ func _test_attack_command_validation_and_supersession(failures: Array[String]) -
 	_expect(supersession_world.command_queue.size() == 1, "stop should supersede pending attack for formation", failures)
 	supersession_world.advance_tick()
 	_expect((supersession_world.units[1] as UnitState).attack_target_entity_id == 0, "superseded attack must not apply", failures)
+
+
+func _reveal_default_enemy(world: SimulationWorld) -> void:
+	var enemy := world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	enemy.position = (world.formations[SimulationWorld.DEFAULT_FORMATION_ID] as FormationState).anchor_position + Vector2(128.0, 0.0)
+	world._update_faction_knowledge()
 
 
 func _expect(condition: bool, message: String, failures: Array[String]) -> void:

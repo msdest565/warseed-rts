@@ -67,7 +67,8 @@ func _test_player_takeover_blocks_agent_and_rejoins(failures: Array[String]) -> 
 	)
 	blocked_agent_command.agent_id = SimulationWorld.TEST_AGENT_ID
 	blocked_agent_command.task_id = SimulationWorld.TEST_TASK_ID
-	_expect(world.submit_command(blocked_agent_command).reason == CommandValidationResult.Reason.AGENT_OVERRIDE_BLOCKED, "agent must not overwrite a player-controlled member", failures)
+	_expect(world.submit_command(blocked_agent_command).is_accepted(), "remaining formation should continue after a member detaches", failures)
+	_expect((world.units[5] as UnitState).control_state == UnitState.ControlState.TEMPORARILY_OVERRIDDEN, "agent must not overwrite a detached player-controlled member", failures)
 	world.advance_tick()
 
 	var return_command := UnitDispositionCommand.new(
@@ -104,15 +105,16 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	panel.develop_button = panel.get_node("Layout/Orders/Develop")
 	panel.defend_button = panel.get_node("Layout/Orders/Defend")
 	panel.attack_button = panel.get_node("Layout/Orders/Attack")
-	panel.pause_button = panel.get_node("Layout/TaskControls/Pause")
-	panel.resume_button = panel.get_node("Layout/TaskControls/Resume")
-	panel.cancel_button = panel.get_node("Layout/TaskControls/Cancel")
+	panel.pause_button = panel.get_node("Layout/Orders/Pause")
+	panel.resume_button = panel.get_node("Layout/Orders/Resume")
+	panel.cancel_button = panel.get_node("Layout/Orders/Cancel")
 	panel.simulation_host = host
 	panel._ready()
 	pause_menu.backdrop = pause_menu.get_node("Backdrop")
 	pause_menu.continue_button = pause_menu.get_node("Backdrop/Menu/Content/Continue")
 	pause_menu.exit_button = pause_menu.get_node("Backdrop/Menu/Content/Exit")
 	pause_menu._ready()
+	game._ready()
 	_expect(panel.simulation_host == host, "task panel should accept the authoritative simulation host", failures)
 	panel.develop_button.pressed.emit()
 	_expect(host.get_queue_size() == 1, "Develop button should submit a strategic command through the host", failures)
@@ -120,6 +122,13 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	_expect(Engine.get_main_loop().paused and pause_menu.backdrop.visible, "ESC menu should pause the game and remain visible", failures)
 	pause_menu.close()
 	_expect(not Engine.get_main_loop().paused and not pause_menu.backdrop.visible, "Continue should resume the game and hide the menu", failures)
+	pause_menu._select_language(0)
+	_expect(pause_menu.language_changed.is_connected(Callable(game, "_on_language_changed")), "pause menu language signal should be connected to the game root", failures)
+	_expect(TranslationServer.get_locale() == "zh_CN", "language menu should switch the runtime locale to Chinese", failures)
+	_expect(pause_menu.title_label.text == "游戏暂停" and panel.title_label.text == "指挥网络", "Chinese selection should immediately refresh pause menu and HUD", failures)
+	pause_menu._select_language(1)
+	_expect(TranslationServer.get_locale() == "en", "language menu should switch the runtime locale to English", failures)
+	_expect(pause_menu.title_label.text == "PAUSED" and panel.title_label.text == "COMMAND NETWORK", "English selection should immediately refresh pause menu and HUD", failures)
 	game.free()
 
 

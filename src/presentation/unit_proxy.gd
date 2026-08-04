@@ -15,6 +15,8 @@ var health_ratio: float = 1.0
 var enabled: bool = true
 var attack_target_entity_id: int = 0
 var definition_id: StringName = &"scout_vehicle"
+var cargo_ore: int = 0
+var work_kind: UnitState.WorkKind = UnitState.WorkKind.NONE
 var selected: bool = false:
 	set(value):
 		selected = value
@@ -36,6 +38,8 @@ func apply_snapshot(unit: UnitSnapshot) -> void:
 	enabled = unit.enabled
 	attack_target_entity_id = unit.attack_target_entity_id
 	definition_id = unit.definition_id
+	cargo_ore = unit.cargo_ore
+	work_kind = unit.work_kind
 	queue_redraw()
 
 
@@ -69,8 +73,12 @@ func _draw() -> void:
 			draw_line(Vector2(-8.0, 6.0), Vector2(25.0, 10.0), Color("f2c94c"), 5.0)
 		elif definition_id == &"harvester":
 			draw_rect(Rect2(-18.0, -10.0, 18.0, 20.0), Color("d8a83e"), true)
+			if cargo_ore > 0:
+				draw_circle(Vector2(-9.0, 0.0), 6.0, Color("f2c94c"))
 		elif definition_id == &"engineer_vehicle":
 			draw_line(Vector2(-6.0, 10.0), Vector2(18.0, -12.0), Color("7fd5cc"), 5.0)
+			if work_kind != UnitState.WorkKind.NONE:
+				draw_arc(Vector2.ZERO, 20.0, 0.0, TAU, 28, Color("f2c94c"), 2.0)
 		else:
 			draw_line(Vector2.ZERO, Vector2(23.0, 0.0), ACCENT_COLOR, 4.0)
 		draw_rect(Rect2(-24.0, -28.0, 48.0, 5.0), Color("172126"), true)
@@ -84,3 +92,4 @@ func _draw() -> void:
 		14,
 		Color("dce8e8")
 	)
+	draw_string(ThemeDB.fallback_font, Vector2(-38.0, 55.0), GameText.unit_name(definition_id), HORIZONTAL_ALIGNMENT_CENTER, 76.0, 10, Color("9fb4b5"))

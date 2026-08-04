@@ -9,6 +9,20 @@ enum ControlState {
 	DISABLED,
 }
 
+enum HarvestPhase {
+	IDLE,
+	TO_FIELD,
+	LOADING,
+	TO_REFINERY,
+	UNLOADING,
+}
+
+enum WorkKind {
+	NONE,
+	CONSTRUCT,
+	REPAIR,
+}
+
 var entity_id: int
 var position: Vector2
 var move_target: Vector2
@@ -44,9 +58,18 @@ var is_visible_to_local_player: bool = true
 var last_seen_tick: int = 0
 var last_seen_position: Vector2
 var definition_id: StringName = &"scout_vehicle"
+var can_attack: bool = true
+var can_harvest: bool = false
+var can_construct: bool = false
+var can_repair: bool = false
+var death_tick: int = -1
 var harvest_ore_field_entity_id: int = 0
 var harvest_refinery_entity_id: int = 0
 var harvest_ticks_remaining: int = 0
+var harvest_phase: HarvestPhase = HarvestPhase.IDLE
+var cargo_ore: int = 0
+var work_kind: WorkKind = WorkKind.NONE
+var work_target_building_id: int = 0
 var control_state: ControlState = ControlState.PLAYER_CONTROLLED
 var assigned_agent_id: int = 0
 var assigned_task_id: int = 0

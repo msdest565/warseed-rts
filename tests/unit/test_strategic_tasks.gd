@@ -26,7 +26,7 @@ func _test_develop_resource_completes_visible_work(failures: Array[String]) -> v
 	)
 	_expect(world.submit_command(order).is_accepted(), "develop-resource order should enter the shared command queue", failures)
 	var original_ore_remaining := ore_field.ore_remaining
-	for _tick in range(80):
+	for _tick in range(180):
 		world.advance_tick()
 		var task := world.tasks.get(1) as TaskState
 		if task != null and task.lifecycle == TaskState.Lifecycle.COMPLETED:
@@ -65,6 +65,8 @@ func _test_attack_target_advances_and_completes(failures: Array[String]) -> void
 	var world := SimulationWorld.new()
 	var formation := world.formations[SimulationWorld.DEFAULT_FORMATION_ID] as FormationState
 	var enemy := world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	enemy.position = formation.anchor_position + Vector2(128.0, 0.0)
+	world._update_faction_knowledge()
 	var order := StrategicOrderCommand.new(
 		world.allocate_command_id(), 1, world.current_tick,
 		StrategicOrderCommand.OrderKind.ATTACK_TARGET,
@@ -112,7 +114,7 @@ func _test_complete_vertical_slice(failures: Array[String]) -> void:
 		world.allocate_command_id(), 1, world.current_tick,
 		StrategicOrderCommand.OrderKind.DEVELOP_RESOURCE, 0, ore_field.entity_id, ore_field.position
 	))
-	_advance_until_terminal(world, 1, 90)
+	_advance_until_terminal(world, 1, 180)
 	_expect((world.tasks[1] as TaskState).lifecycle == TaskState.Lifecycle.COMPLETED, "slice should complete resource development", failures)
 
 	var formation := world.formations[SimulationWorld.DEFAULT_FORMATION_ID] as FormationState
@@ -138,6 +140,8 @@ func _test_complete_vertical_slice(failures: Array[String]) -> void:
 	_expect((world.tasks[2] as TaskState).lifecycle == TaskState.Lifecycle.COMPLETED, "slice should resume and complete defense", failures)
 
 	var enemy := world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	enemy.position = formation.anchor_position + Vector2(128.0, 0.0)
+	world._update_faction_knowledge()
 	world.submit_command(StrategicOrderCommand.new(
 		world.allocate_command_id(), 1, world.current_tick,
 		StrategicOrderCommand.OrderKind.ATTACK_TARGET, formation.formation_id, enemy.entity_id, enemy.position

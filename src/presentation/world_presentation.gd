@@ -3,6 +3,7 @@ extends Node2D
 
 var selected_entity_id: int = 0
 var selected_entity_ids: Array[int] = []
+var selected_building_id: int = 0
 var previous_snapshot: WorldSnapshot
 var current_snapshot: WorldSnapshot
 var interpolation_alpha: float = 0.0
@@ -16,6 +17,16 @@ var _projectile_positions: Dictionary = {}
 @onready var units_root: Node2D = $Units
 @onready var buildings_root: Node2D = $Buildings
 @onready var ore_fields_root: Node2D = $OreFields
+
+
+func refresh_locale() -> void:
+	for proxy in _proxies.values():
+		(proxy as UnitProxy).queue_redraw()
+	for proxy in _building_proxies.values():
+		(proxy as BuildingProxy).queue_redraw()
+	for proxy in _ore_field_proxies.values():
+		(proxy as OreFieldProxy).queue_redraw()
+	queue_redraw()
 
 
 func set_snapshots(previous: WorldSnapshot, current: WorldSnapshot, alpha: float) -> void:
@@ -32,12 +43,13 @@ func set_snapshots(previous: WorldSnapshot, current: WorldSnapshot, alpha: float
 
 
 func set_selected_entity(entity_id: int) -> void:
-	set_selected_entities([entity_id] if entity_id != 0 else [], entity_id)
+	set_selected_entities([entity_id] if entity_id != 0 else [], entity_id, 0)
 
 
-func set_selected_entities(entity_ids: Array[int], primary_entity_id: int) -> void:
+func set_selected_entities(entity_ids: Array[int], primary_entity_id: int, building_id: int = 0) -> void:
 	selected_entity_ids = entity_ids.duplicate()
 	selected_entity_id = primary_entity_id
+	selected_building_id = building_id
 	var selected_formation_id := 0
 	if current_snapshot != null:
 		var selected_unit := current_snapshot.get_unit(selected_entity_id)
@@ -48,6 +60,9 @@ func set_selected_entities(entity_ids: Array[int], primary_entity_id: int) -> vo
 		proxy.selected = selected_entity_ids.has(proxy.entity_id)
 		var unit := current_snapshot.get_unit(proxy.entity_id) if current_snapshot != null else null
 		proxy.formation_member = selected_formation_id != 0 and unit != null and unit.formation_id == selected_formation_id
+	for proxy_variant in _building_proxies.values():
+		var building_proxy := proxy_variant as BuildingProxy
+		building_proxy.selected = building_proxy.snapshot != null and building_proxy.snapshot.entity_id == selected_building_id
 
 
 func set_pending_move_target(target_position: Vector2) -> void:
@@ -83,7 +98,7 @@ func _sync_proxies() -> void:
 		if not active_ids.has(entity_id):
 			(_proxies[entity_id] as UnitProxy).queue_free()
 			_proxies.erase(entity_id)
-	set_selected_entities(selected_entity_ids, selected_entity_id)
+	set_selected_entities(selected_entity_ids, selected_entity_id, selected_building_id)
 	_update_proxy_positions()
 
 
@@ -101,6 +116,7 @@ func _sync_building_proxies() -> void:
 		if not active_ids.has(entity_id):
 			(_building_proxies[entity_id] as BuildingProxy).queue_free()
 			_building_proxies.erase(entity_id)
+	set_selected_entities(selected_entity_ids, selected_entity_id, selected_building_id)
 
 
 func _sync_ore_field_proxies() -> void:
@@ -168,9 +184,14 @@ func _draw() -> void:
 		return
 	if unit.attack_target_entity_id != 0:
 		var attack_target := current_snapshot.get_unit(unit.attack_target_entity_id)
-		if attack_target != null:
-			draw_line(unit.position, attack_target.position, Color(0.92, 0.27, 0.22, 0.85), 2.0)
-			draw_arc(attack_target.position, 34.0, 0.0, TAU, 40, Color("ed5b4f"), 2.0)
+		var target_position := attack_target.position if attack_target != null else Vector2.ZERO
+		if attack_target == null:
+			var target_building := current_snapshot.get_building(unit.attack_target_entity_id)
+			if target_building != null:
+				target_position = target_building.position
+		if target_position != Vector2.ZERO:
+			draw_line(unit.position, target_position, Color(0.92, 0.27, 0.22, 0.85), 2.0)
+			draw_arc(target_position, 34.0, 0.0, TAU, 40, Color("ed5b4f"), 2.0)
 	if unit.formation_id != 0:
 		var formation := current_snapshot.get_formation(unit.formation_id)
 		if formation != null and formation.is_moving:

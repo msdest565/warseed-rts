@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_grid_conversion_and_static_obstacles(failures)
 	_test_path_routes_through_wall_gap(failures)
+	_test_clear_route_uses_direct_shortest_path(failures)
 	_test_blocked_destination_is_rejected(failures)
 	_test_world_follows_path_without_crossing_wall(failures)
 	_test_formation_degrades_through_gap(failures)
@@ -38,6 +39,18 @@ func _test_path_routes_through_wall_gap(failures: Array[String]) -> void:
 	_expect(uses_gap, "path should route through the only wall gap", failures)
 
 
+func _test_clear_route_uses_direct_shortest_path(failures: Array[String]) -> void:
+	var grid := LogicGrid.new()
+	var pathfinder := GridPathfinder.new(grid)
+	var start := grid.cell_to_world(Vector2i(2, 2))
+	var target := grid.cell_to_world(Vector2i(14, 9))
+	var path := pathfinder.find_path(start, target)
+	_expect(path.size() == 2, "unobstructed A* route should simplify to one direct segment", failures)
+	if path.size() >= 2:
+		_expect(is_equal_approx(_path_length(path), start.distance_to(target)), "unobstructed route should have Euclidean shortest-path length", failures)
+		_expect(grid.is_segment_walkable(path[0], path[1]), "shortest direct segment must remain walkable", failures)
+
+
 func _test_blocked_destination_is_rejected(failures: Array[String]) -> void:
 	var world := SimulationWorld.new()
 	var blocked_target := world.logic_grid.cell_to_world(Vector2i(11, 4))
@@ -65,11 +78,18 @@ func _test_world_follows_path_without_crossing_wall(failures: Array[String]) -> 
 
 func _test_formation_degrades_through_gap(failures: Array[String]) -> void:
 	var world := SimulationWorld.new()
+	var formation_state := world.formations[1] as FormationState
+	formation_state.anchor_position = world.logic_grid.cell_to_world(Vector2i(40, 32))
+	formation_state.target_position = formation_state.anchor_position
+	for entity_id in formation_state.member_entity_ids:
+		var member := world.units[entity_id] as UnitState
+		member.position = formation_state.anchor_position + formation_state.get_wide_offset(member.formation_slot_id)
+		member.desired_position = member.position
 	var blocked_before := world.logic_grid.get_blocked_cells()
 	var slot_ids: Dictionary = {}
 	for unit in world.create_snapshot().units:
 		slot_ids[unit.entity_id] = unit.formation_slot_id
-	var command := FormationMoveCommand.new(1, 1, GameCommand.IssuerKind.PLAYER, 0, 1, 1, Vector2(800.0, 336.0))
+	var command := FormationMoveCommand.new(1, 1, GameCommand.IssuerKind.PLAYER, 0, 1, 1, world.logic_grid.cell_to_world(Vector2i(55, 32)))
 	_expect(world.submit_command(command).is_accepted(), "formation route through gap should be accepted", failures)
 	var saw_column := false
 	var saw_wide_after_column := false
@@ -157,3 +177,10 @@ func _test_path_cache_reuses_and_invalidates(failures: Array[String]) -> void:
 func _expect(condition: bool, message: String, failures: Array[String]) -> void:
 	if not condition:
 		failures.append(message)
+
+
+func _path_length(path: PackedVector2Array) -> float:
+	var total := 0.0
+	for index in range(1, path.size()):
+		total += path[index - 1].distance_to(path[index])
+	return total

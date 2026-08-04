@@ -42,3 +42,4 @@ export_credentials.cfg
 # Local UI verification captures
 /ui-verification*.png
 /ui-verification*.png.import
+.codex_artifacts/
