@@ -99,6 +99,7 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	var host := game.get_node("SimulationHost") as SimulationHost
 	var panel := game.get_node("HUDLayer/TaskPanel") as TaskPanel
 	var pause_menu := game.get_node("PauseMenu") as PauseMenu
+	var camera := game.get_node("CameraController") as CameraController
 	host._ready()
 	panel.mission_label = panel.get_node("Layout/Mission")
 	panel.task_label = panel.get_node("Layout/TaskStatus")
@@ -115,6 +116,9 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	pause_menu.exit_button = pause_menu.get_node("Backdrop/Menu/Content/Exit")
 	pause_menu._ready()
 	game._ready()
+	camera.zoom = Vector2.ONE
+	var camera_limits := camera.get_center_limits(Vector2(1280.0, 720.0))
+	_expect(camera_limits.end.y + 360.0 >= CameraController.WORLD_RECT.end.y + 250.0, "camera should overscroll below the map enough to reveal terrain behind the bottom command bar", failures)
 	_expect(panel.simulation_host == host, "task panel should accept the authoritative simulation host", failures)
 	panel.develop_button.pressed.emit()
 	_expect(host.get_queue_size() == 1, "Develop button should submit a strategic command through the host", failures)

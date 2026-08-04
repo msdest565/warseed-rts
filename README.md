@@ -43,7 +43,7 @@
 
 ## 当前状态
 
-项目已完成首个离线指挥链技术切片：精确单选与框选、五类单位职责隔离、三类建筑选择与生产、目标式真实矿车往返、工程车施工/维修、动态建筑占格、对角最短路径、单位与建筑的统一弹丸战斗、纯手动胜利链、阵营知识、玩家接管与归队、三项高层委托，以及敌方经济/扩张/侦察/争矿/扩军/袭击/撤退/回防阶段机均已接入 10 Hz 权威模拟。左上金币条、底部中央指挥栏、任务路线可视化和中英双语 UI 同步可用；玩家基地位于地图左上角，敌方基地位于右下角。项目自有 runner 当前通过 12 个测试套件，Windows debug export 已在具备同版本模板的环境验证。
+项目已完成首个离线指挥链技术切片：精确单选与框选、五类单位职责隔离、三类建筑选择与生产、双方独立矿区与真实矿车往返、敌方矿车采矿中自卫、工程车施工/维修、动态建筑占格、对角最短路径、单位与建筑的统一弹丸战斗、纯手动胜利链、阵营知识、玩家接管与归队、三项高层委托，以及敌方经济/扩张/侦察/争矿/扩军/袭击/撤退/回防阶段机均已接入 10 Hz 权威模拟。单矿车可直接领取唯一已知矿区任务，相机支持地图边缘外平移以补偿底部菜单遮挡。左上金币条、底部中央指挥栏、任务路线可视化和中英双语 UI 同步可用；玩家基地位于地图左上角，敌方基地位于右下角。项目自有 runner 当前通过 12 个测试套件和 6 分钟权威切片 smoke，Windows debug export 已在具备同版本模板的环境验证。
 
 这仍不是完整 15—20 分钟 MVP。下一阶段重点是 5—8 分钟垂直切片人工试玩与数值调优、任务并发策略、CI、操作反馈和正式美术。详细状态见[当前进展与下一步](docs/STATUS_AND_NEXT_STEPS.md)。
 
@@ -58,6 +58,7 @@
 ```powershell
 & <godot-console> --headless --editor --path . --quit
 & <godot-console> --headless --path . --script res://tests/test_runner.gd
+& <godot-console> --headless --path . --script res://tests/vertical_slice_smoke.gd
 & <godot-console> --headless --path . --quit-after 3
 & <godot-console> --headless --path . --export-debug "Windows Desktop" "build/windows/warseed-debug.exe"
 & .\build\windows\warseed-debug.exe --headless --quit-after 3

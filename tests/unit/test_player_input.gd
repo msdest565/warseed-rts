@@ -121,10 +121,8 @@ func _test_role_filtered_attack_and_targeted_orders(failures: Array[String]) -> 
 	host.world._update_faction_knowledge()
 	host.current_snapshot = host.world.create_snapshot()
 	input.select_at(host.current_snapshot.get_unit(1).position)
-	input.harvest_with_selected()
-	_expect(input.command_mode == InputController.CommandMode.HARVEST_TARGETING, "harvest should enter ore targeting mode", failures)
-	var harvest_result := input.harvest_selected_at(ore.position)
-	_expect(harvest_result != null and harvest_result.is_accepted(), "clicking a visible ore field should issue harvest", failures)
+	var harvest_result := input.harvest_with_selected()
+	_expect(harvest_result != null and harvest_result.is_accepted(), "one selected harvester should immediately take the only known ore assignment", failures)
 	host.advance_tick()
 	input._set_selection([1, 2, 3, 4, 5])
 	var enemy := host.world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState

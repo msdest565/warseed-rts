@@ -26,6 +26,9 @@ func _test_scenario_and_differentiated_data(failures: Array[String]) -> void:
 	var enemy_spawn := LogicGrid.MAP_DEFINITION.enemy_spawn_cell
 	_expect(player_spawn.x < LogicGrid.GRID_SIZE.x / 2 and player_spawn.y < LogicGrid.GRID_SIZE.y / 2, "player base should start in the upper-left quadrant", failures)
 	_expect(enemy_spawn.x > LogicGrid.GRID_SIZE.x / 2 and enemy_spawn.y > LogicGrid.GRID_SIZE.y / 2, "enemy base should start in the lower-right quadrant", failures)
+	var enemy_ore := world.ore_fields[SimulationWorld.ENEMY_ORE_FIELD_ID] as OreFieldState
+	_expect(enemy_ore.position.distance_to((world.buildings[SimulationWorld.ENEMY_COMMAND_CENTER_ID] as BuildingState).position) < 320.0, "enemy ore field should be located near the enemy base", failures)
+	_expect(enemy_ore.position.distance_to((world.ore_fields[SimulationWorld.DEFAULT_ORE_FIELD_ID] as OreFieldState).position) > 1600.0, "player and enemy ore fields should be spatially separated", failures)
 
 
 func _test_real_harvest_trip_and_production_pipeline(failures: Array[String]) -> void:

@@ -35,6 +35,8 @@ Godot 节点、HUD、动画和 Agent 不得绕过该边界修改位置、生命�
 - 普通点击可选择己方建筑并显示选择框；选中可运行的兵工厂后，可从底部生产栏主动生产全部五类单位；
 - 单位能力由数据明确声明：矿车只采矿、工程车只施工/维修，只有侦察车、突击车和导弹车响应攻击、防守与移动攻击；混合选择下达战斗命令不会中断工人任务；
 - 防守命令进入地图目标模式，可点击指定防守中心与固定半径；采矿命令可点击指定已知矿区；
+- 单独选择一辆我方矿车时，点击采矿按钮或按 `H` 会直接分配唯一已知矿区；存在多个已知矿区时才进入目标选择；
+- 相机允许左右各 96、顶部 72、底部 260 屏幕像素的地图外平移，地图底边可移到指挥栏上方；
 - 96x64 逻辑格、支持安全对角移动的 AStarGrid2D、Octile 启发式、可见直线段精简、路径缓存、稳定编队槽位、窄通道纵队和卡住恢复；
 - typed 单位/战斗/建筑 Resource catalog 与数据校验；
 - 权威弹丸、护甲伤害、追击、AttackMove 自动接敌和死亡 tombstone；单位残骸保留 7 秒后从权威状态、编队和阵营接触记录中清理；
@@ -49,7 +51,8 @@ Godot 节点、HUD、动画和 Agent 不得绕过该边界修改位置、生命�
 - 阵营、建筑、矿点及 immutable snapshots；
 - HarvestCommand、ProduceUnitCommand、BuildBuildingCommand、RepairBuildingCommand；
 - 矿车实际前往矿区、装载货物、返回指挥中心并卸载后，阵营矿石才增加；
-- 玩家和敌方矿车均遵守同一往返采集链；敌方战斗单位的投射物会实际命中并扣除玩家单位生命；
+- 玩家和敌方各有独立矿区，矿车均遵守同一往返采集链；敌方矿车在采矿中可自卫，但不会加入袭击编队或取消采矿任务；
+- 敌方战斗单位与矿车自卫投射物会实际命中并扣除玩家单位生命；
 - 工程车按目标位置施工，建筑经历未完工到可运行状态的权威 tick 进度；
 - 建筑足迹动态占用逻辑格，改变时触发导航修订；建筑被摧毁后释放占格；
 - 工程车可通过权威维修 tick 恢复己方受损建筑生命；
@@ -96,6 +99,7 @@ Godot 节点、HUD、动画和 Agent 不得绕过该边界修改位置、生命�
 
 ```text
 WARSEED tests passed: 12 suites
+WARSEED vertical slice: ticks=3600 ... damage=29 destroyed=3 player_ore=1200 enemy_ore=560 enemy_gold=1240
 ```
 
 覆盖：命令管线、固定 tick、对角最短路径/导航/编队、观测指标、typed data、地图、精确单选/框选/局部编队命令、脱队成员边界、新生产单位与建筑选择、五类单位生产、职责过滤、目标式采矿/防守、敌方实际伤害、残骸超时清理、单位与建筑弹丸战斗、手动胜利、建筑施工/占格/完工/维修、真实矿车装卸往返、对角基地布局、经济与胜负、阵营知识、敌方 last-seen 边界、敌方八阶段经济与作战循环、三项高层任务、接管/归队、工程 UI 命令、右键建筑攻击、中英文即时刷新、完整切片和主场景 UI 控件。
@@ -115,6 +119,7 @@ Windows Desktop debug export 已在此前具备 `4.6.3.stable.mono` export templ
 ```powershell
 & <godot-console> --headless --editor --path . --quit
 & <godot-console> --headless --path . --script res://tests/test_runner.gd
+& <godot-console> --headless --path . --script res://tests/vertical_slice_smoke.gd
 & <godot-console> --headless --path . --quit-after 3
 & <godot-console> --headless --path . --export-debug "Windows Desktop" "build/windows/warseed-debug.exe"
 & .\build\windows\warseed-debug.exe --headless --quit-after 3
@@ -147,10 +152,10 @@ Windows Desktop debug export 已在此前具备 `4.6.3.stable.mono` export templ
 
 ## 6. 下一步
 
-1. 对敌方阶段机和现有三项高层委托进行完整人工试玩，形成稳定、可读的 5—8 分钟垂直切片；
-2. 校准采集、施工、维修、生产、单位速度、射程、伤害、袭击规模和撤退阈值；
+1. 使用现有 6 分钟自动基线进行完整人工试玩，确认敌方 4 轮循环、资源余量和 UI 可读性是否符合实际操作感受；
+2. 根据人工记录继续校准施工、维修、单位速度、射程、伤害、袭击规模和撤退阈值；采集量、敌方资源寿命和袭击周期已有首轮自动基线；
 3. 设计任务并发与资源仲裁规则，逐步解除三项委托只能串行执行的限制；
-4. 增加 CI 的 headless tests 和 Windows export smoke，并在本机补装同版本 export templates；
+4. 将 12 套 headless tests 与 `vertical_slice_smoke.gd` 接入 CI，并在本机补装同版本 export templates；
 5. 迭代选择反馈、命令反馈、程序化占位图形与音效，明确正式美术资产管线；
 6. Gate G 人工试玩通过后，再扩展 15—20 分钟完整 MVP。
 

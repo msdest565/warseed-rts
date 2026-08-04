@@ -16,6 +16,7 @@ const PLAYER_SUPPORT_ID := 2003
 const ENEMY_COMMAND_CENTER_ID := 2101
 const FIRST_CONSTRUCTED_BUILDING_ID := 2200
 const DEFAULT_ORE_FIELD_ID := 3001
+const ENEMY_ORE_FIELD_ID := 3002
 const TEST_AGENT_ID := 101
 const TEST_TASK_ID := 1
 const UNIT_CATALOG: UnitDefinitionCatalog = preload("res://data/units/unit_catalog.tres")
@@ -84,6 +85,7 @@ func _setup_default_scenario() -> void:
 	_create_default_enemy()
 	_create_default_buildings()
 	ore_fields[DEFAULT_ORE_FIELD_ID] = OreFieldState.new(DEFAULT_ORE_FIELD_ID, logic_grid.cell_to_world(Vector2i(20, 10)), 1200)
+	ore_fields[ENEMY_ORE_FIELD_ID] = OreFieldState.new(ENEMY_ORE_FIELD_ID, logic_grid.cell_to_world(LogicGrid.MAP_DEFINITION.enemy_spawn_cell + Vector2i(-6, 3)), 1800)
 
 
 func _create_default_buildings() -> void:
@@ -141,6 +143,11 @@ func _add_enemy_agent_unit(entity_id: int, definition_id: StringName, cell: Vect
 	unit.control_state = UnitState.ControlState.AGENT_ASSIGNED
 	unit.assigned_agent_id = EnemyRaidAgent.AGENT_ID
 	unit.assigned_task_id = EnemyRaidAgent.TASK_ID
+	if definition_id == &"harvester":
+		unit.can_attack = true
+		unit.attack_damage = 12.0
+		unit.attack_range = 144.0
+		unit.attack_cooldown_ticks = 14
 	units[entity_id] = unit
 
 
@@ -940,7 +947,9 @@ func _apply_attack(command: AttackCommand) -> void:
 		var unit := units[entity_id] as UnitState
 		if not unit.can_attack:
 			continue
-		_cancel_unit_job(unit)
+		var preserve_harvest := unit.can_harvest and unit.harvest_ore_field_entity_id != 0
+		if not preserve_harvest:
+			_cancel_unit_job(unit)
 		if command.formation_id != 0:
 			var formation := formations[command.formation_id] as FormationState
 			unit.formation_id = formation.formation_id
@@ -948,15 +957,16 @@ func _apply_attack(command: AttackCommand) -> void:
 			unit.following_formation = true
 		else:
 			_remove_unit_from_formation(unit)
-		unit.has_move_target = false
-		unit.path = PackedVector2Array()
-		unit.path_index = 0
-		unit.move_target = unit.position
-		unit.desired_position = unit.position
-		unit.is_recovering = false
-		unit.recovery_path = PackedVector2Array()
-		unit.recovery_path_index = 0
-		unit.is_attack_moving = false
+		if not preserve_harvest:
+			unit.has_move_target = false
+			unit.path = PackedVector2Array()
+			unit.path_index = 0
+			unit.move_target = unit.position
+			unit.desired_position = unit.position
+			unit.is_recovering = false
+			unit.recovery_path = PackedVector2Array()
+			unit.recovery_path_index = 0
+			unit.is_attack_moving = false
 		unit.attack_target_entity_id = command.attack_target_entity_id
 		events.append(SimulationEvent.new(
 			current_tick,

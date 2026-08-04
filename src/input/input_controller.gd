@@ -419,6 +419,10 @@ func harvest_with_selected() -> CommandValidationResult:
 	if harvester_id == 0:
 		last_command_status = GameText.t(&"STATUS_SELECT_HARVESTER")
 		return null
+	if selected_entity_ids.size() == 1:
+		var ore_field_id := _single_available_ore_field_id()
+		if ore_field_id != 0:
+			return _submit_harvest(harvester_id, ore_field_id)
 	command_mode = CommandMode.HARVEST_TARGETING
 	last_command_status = GameText.t(&"STATUS_HARVEST_TARGET")
 	return null
@@ -455,6 +459,17 @@ func _find_ore_field_at(world_position: Vector2) -> int:
 			best_id = ore_field.entity_id
 			best_distance = distance
 	return best_id
+
+
+func _single_available_ore_field_id() -> int:
+	var result := 0
+	for ore_field in simulation_host.current_snapshot.ore_fields:
+		if ore_field.ore_remaining <= 0:
+			continue
+		if result != 0:
+			return 0
+		result = ore_field.entity_id
+	return result
 
 
 func _closest_friendly_refinery(ore_field_id: int) -> int:

@@ -6,6 +6,10 @@ const MIN_ZOOM := 1.0
 const MAX_ZOOM := 2.5
 const ZOOM_STEP := 0.2
 const PAN_SPEED := 600.0
+const OVERSCROLL_LEFT_SCREEN := 96.0
+const OVERSCROLL_TOP_SCREEN := 72.0
+const OVERSCROLL_RIGHT_SCREEN := 96.0
+const OVERSCROLL_BOTTOM_SCREEN := 260.0
 
 var middle_dragging: bool = false
 
@@ -73,9 +77,13 @@ func get_visible_world_rect() -> Rect2:
 
 
 func clamp_to_bounds() -> void:
-	var viewport_size := get_viewport_rect().size
+	var limits := get_center_limits(get_viewport_rect().size)
+	position.x = WORLD_RECT.get_center().x if limits.size.x < 0.0 else clampf(position.x, limits.position.x, limits.end.x)
+	position.y = WORLD_RECT.get_center().y if limits.size.y < 0.0 else clampf(position.y, limits.position.y, limits.end.y)
+
+
+func get_center_limits(viewport_size: Vector2) -> Rect2:
 	var half_visible := viewport_size * 0.5 / zoom
-	var minimum := WORLD_RECT.position + half_visible
-	var maximum := WORLD_RECT.end - half_visible
-	position.x = WORLD_RECT.get_center().x if minimum.x > maximum.x else clampf(position.x, minimum.x, maximum.x)
-	position.y = WORLD_RECT.get_center().y if minimum.y > maximum.y else clampf(position.y, minimum.y, maximum.y)
+	var minimum := WORLD_RECT.position + half_visible - Vector2(OVERSCROLL_LEFT_SCREEN, OVERSCROLL_TOP_SCREEN) / zoom
+	var maximum := WORLD_RECT.end - half_visible + Vector2(OVERSCROLL_RIGHT_SCREEN, OVERSCROLL_BOTTOM_SCREEN) / zoom
+	return Rect2(minimum, maximum - minimum)

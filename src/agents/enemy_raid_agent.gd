@@ -19,9 +19,9 @@ const STRATEGY_START_TICK := 300
 const ORDER_INTERVAL_TICKS := 10
 const SCOUT_TIMEOUT_TICKS := 140
 const CONTEST_TIMEOUT_TICKS := 140
-const RAID_DURATION_TICKS := 320
-const RETREAT_TIMEOUT_TICKS := 220
-const DEFEND_DURATION_TICKS := 160
+const RAID_DURATION_TICKS := 400
+const RETREAT_TIMEOUT_TICKS := 240
+const DEFEND_DURATION_TICKS := 220
 const RAID_FORCE_SIZE := 3
 const ENEMY_FACTORY_POSITION := Vector2i(79, 51)
 const SCOUT_POSITION := Vector2i(53, 32)
@@ -40,6 +40,7 @@ func advance(world: SimulationWorld) -> void:
 		return
 	_claim_enemy_units(world)
 	_ensure_harvest(world)
+	_defend_harvester(world)
 	match phase:
 		Phase.ECONOMY:
 			if world.current_tick >= STRATEGY_START_TICK:
@@ -163,7 +164,7 @@ func _ensure_harvest(world: SimulationWorld) -> void:
 	var harvester := world.units.get(SimulationWorld.ENEMY_HARVESTER_ID) as UnitState
 	if harvester == null or not harvester.enabled or harvester.harvest_ore_field_entity_id != 0:
 		return
-	var ore_field := world.ore_fields.get(SimulationWorld.DEFAULT_ORE_FIELD_ID) as OreFieldState
+	var ore_field := world.ore_fields.get(SimulationWorld.ENEMY_ORE_FIELD_ID) as OreFieldState
 	var refinery := world.buildings.get(SimulationWorld.ENEMY_COMMAND_CENTER_ID) as BuildingState
 	if ore_field == null or ore_field.ore_remaining <= 0 or refinery == null or not refinery.enabled:
 		return
@@ -172,6 +173,16 @@ func _ensure_harvest(world: SimulationWorld) -> void:
 		world.current_tick, harvester.entity_id, ore_field.entity_id, refinery.entity_id
 	)
 	_submit(command, world)
+
+
+func _defend_harvester(world: SimulationWorld) -> void:
+	var harvester := world.units.get(SimulationWorld.ENEMY_HARVESTER_ID) as UnitState
+	if harvester == null or not harvester.enabled or not harvester.can_attack or harvester.harvest_ore_field_entity_id == 0:
+		return
+	var snapshot := world.create_faction_snapshot(SimulationWorld.ENEMY_PLAYER_ID)
+	var target_id := _best_visible_target(snapshot, harvester.position, harvester.attack_range)
+	if target_id != 0:
+		_submit_attack(harvester, target_id, world)
 
 
 func _submit_production(definition_id: StringName, world: SimulationWorld) -> void:
@@ -248,7 +259,7 @@ func _combat_units(world: SimulationWorld) -> Array[UnitState]:
 	entity_ids.sort()
 	for entity_id in entity_ids:
 		var unit := world.units[entity_id] as UnitState
-		if unit.enabled and unit.faction_id == SimulationWorld.ENEMY_PLAYER_ID and unit.entity_id != SimulationWorld.DEFAULT_ENEMY_UNIT_ID and unit.can_attack:
+		if unit.enabled and unit.faction_id == SimulationWorld.ENEMY_PLAYER_ID and unit.entity_id != SimulationWorld.DEFAULT_ENEMY_UNIT_ID and unit.can_attack and not unit.can_harvest and not unit.can_construct:
 			result.append(unit)
 	return result
 

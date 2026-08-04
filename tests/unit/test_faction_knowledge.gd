@@ -8,6 +8,7 @@ func run() -> Array[String]:
 	_test_last_seen_contact_and_snapshot_copy(failures)
 	_test_hidden_attack_target_is_rejected(failures)
 	_test_enemy_raid_uses_last_seen_position(failures)
+	_test_enemy_harvester_mines_and_defends_itself(failures)
 	_test_enemy_strategy_phase_machine(failures)
 	return failures
 
@@ -133,7 +134,9 @@ func _test_enemy_strategy_phase_machine(failures: Array[String]) -> void:
 			enemy_factory = building
 			break
 	_expect(enemy_factory != null and enemy_factory.operational, "enemy expansion should construct an operational factory", failures)
-	_expect((world.units[SimulationWorld.ENEMY_HARVESTER_ID] as UnitState).harvest_ore_field_entity_id == SimulationWorld.DEFAULT_ORE_FIELD_ID, "enemy economy should use the real harvester round trip", failures)
+	_expect((world.units[SimulationWorld.ENEMY_HARVESTER_ID] as UnitState).harvest_ore_field_entity_id == SimulationWorld.ENEMY_ORE_FIELD_ID, "enemy economy should use its own real harvester round trip", failures)
+	_expect((world.ore_fields[SimulationWorld.ENEMY_ORE_FIELD_ID] as OreFieldState).ore_remaining < 1800, "enemy economy should extract from the enemy-side ore field", failures)
+	_expect((world.ore_fields[SimulationWorld.DEFAULT_ORE_FIELD_ID] as OreFieldState).ore_remaining == 1200, "enemy harvester must not consume the player-side ore field", failures)
 	world.enemy_raid_agent.phase_started_tick = world.current_tick - EnemyRaidAgent.RAID_DURATION_TICKS
 	world.advance_tick()
 	_expect(world.enemy_raid_agent.phase == EnemyRaidAgent.Phase.RETREATING, "expired raid should transition to retreat", failures)
@@ -143,6 +146,24 @@ func _test_enemy_strategy_phase_machine(failures: Array[String]) -> void:
 		unit.has_move_target = false
 	world.advance_tick()
 	_expect(world.enemy_raid_agent.phase == EnemyRaidAgent.Phase.DEFENDING, "returned raid force should transition to base defense", failures)
+
+
+func _test_enemy_harvester_mines_and_defends_itself(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	world.current_tick = EnemyRaidAgent.STRATEGY_START_TICK
+	var harvester := world.units[SimulationWorld.ENEMY_HARVESTER_ID] as UnitState
+	var local_scout := world.units[3] as UnitState
+	local_scout.position = harvester.position + Vector2(-48.0, 0.0)
+	local_scout.following_formation = false
+	world._update_faction_knowledge()
+	var health_before := local_scout.health
+	world.enemy_raid_agent.advance(world)
+	for _tick in range(6):
+		world.advance_tick()
+	_expect(harvester.can_attack, "enemy harvester should have a defensive weapon", failures)
+	_expect(harvester.harvest_ore_field_entity_id == SimulationWorld.ENEMY_ORE_FIELD_ID, "enemy harvester should keep its own ore assignment while defending", failures)
+	_expect(local_scout.health < health_before, "enemy harvester self-defense should apply real projectile damage", failures)
+	_expect(not world.enemy_raid_agent._combat_units(world).has(harvester), "enemy harvester should not abandon mining to join raid forces", failures)
 
 
 func _expect(condition: bool, message: String, failures: Array[String]) -> void:
