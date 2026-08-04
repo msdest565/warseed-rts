@@ -36,6 +36,7 @@
 - [MVP 范围](docs/MVP_SCOPE.md)
 - [系统设计](docs/SYSTEM_DESIGN.md)
 - [Godot 技术方案](docs/TECHNICAL_PLAN.md)
+- [AI 权限、难度与决策树设计](docs/AI_DESIGN_AND_DECISION_TREES.md)
 - [当前进展、AI 交接与下一步](docs/STATUS_AND_NEXT_STEPS.md)
 - [AI handoff（英文简版）](docs/AI_HANDOFF.md)
 - [开发路线图](docs/ROADMAP.md)

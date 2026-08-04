@@ -175,6 +175,8 @@ Windows Desktop debug export 与导出的 `warseed-debug.console.exe --headless 
 - 图形使用程序化占位绘制，不是最终美术；
 - 语言可在运行时切换，但当前不跨启动持久化玩家选择；
 
+AI 下一阶段的权限模型、分层决策频率、敌方难度参数、完整决策树、策略模板与验收矩阵已经整理在 [`AI_DESIGN_AND_DECISION_TREES.md`](AI_DESIGN_AND_DECISION_TREES.md)。该文档是后续规则 AI 实现基线；其中明确标记了现有能力、下一阶段和长期设计，不能把设计项视为当前已实现功能。
+
 ## 6. 下一步
 
 1. 使用现有 6 分钟自动基线进行完整人工试玩，记录经济断点、Q 追击体验、敌方压力、资源余量和 HUD 扫读时间；
@@ -182,7 +184,7 @@ Windows Desktop debug export 与导出的 `warseed-debug.console.exe --headless 
 3. 增加保持位置、巡逻、护卫和追击距离规则，并把前排/后排、不同射程停位和防守越界统一为可测试的战术状态机；
 4. 实现支援站范围维修/补给与工程车单位维修，并补充 AI 的维修/撤退目标选择；
 5. 在现有工业/战场双域并行基础上，引入多个独立战斗编队、侦察专用任务和任意任务图；
-6. 增加敌方难度参数、路线风险评估、兵种克制和更长经济恢复测试，再按人工记录校准速度、射程、伤害、袭击规模与撤退阈值；
+6. 按 [`AI_DESIGN_AND_DECISION_TREES.md`](AI_DESIGN_AND_DECISION_TREES.md) 先实现数据化难度档、我方 Agent 授权检查、路线风险评估、有限追击、双阈值撤退和基于已观察敌情的兵种克制，再扩展多编队策略并按人工记录校准反应时间、袭击规模与撤退阈值；
 7. 将 12 套 headless tests 与 `vertical_slice_smoke.gd` 接入 CI，恢复 Windows export 复验，并迭代战争迷雾视觉、命令音效和正式美术资产管线；
 8. Gate G 人工试玩通过后，再扩展 15—20 分钟完整 MVP。
 
