@@ -25,6 +25,7 @@ const RAID_FORCE_SIZE := 3
 const ENEMY_FACTORY_POSITION := Vector2i(79, 51)
 const ENEMY_SUPPORT_POSITION := Vector2i(84, 48)
 const SCOUT_POSITION := Vector2i(53, 32)
+const COMBAT_DEFINITION_IDS: Array[StringName] = [&"scout_vehicle", &"assault_vehicle", &"missile_vehicle"]
 const DEFAULT_DIFFICULTY: EnemyDifficultyProfile = preload("res://data/ai/enemy_normal.tres")
 
 var phase: Phase = Phase.ECONOMY
@@ -155,7 +156,8 @@ func _advance_expansion(world: SimulationWorld) -> void:
 func _advance_scouting(world: SimulationWorld) -> void:
 	var scout := _first_combat_unit(world, &"scout_vehicle")
 	if scout == null:
-		_submit_production(&"scout_vehicle", world)
+		if _queued_definition_count(&"scout_vehicle", world) == 0:
+			_submit_production(&"scout_vehicle", world)
 		return
 	var destination := world.logic_grid.cell_to_world(SCOUT_POSITION)
 	_submit_move(scout, destination, world)
@@ -266,6 +268,8 @@ func _maintain_economy_units(world: SimulationWorld) -> void:
 			harvester_count += 1
 		if unit.can_construct:
 			engineer_count += 1
+	harvester_count += _queued_definition_count(&"harvester", world)
+	engineer_count += _queued_definition_count(&"engineer_vehicle", world)
 	if harvester_count < difficulty_profile.target_harvester_count:
 		_submit_production(&"harvester", world)
 	elif engineer_count == 0:
@@ -275,7 +279,10 @@ func _maintain_economy_units(world: SimulationWorld) -> void:
 func _maintain_combat_reserve(world: SimulationWorld) -> void:
 	if phase in [Phase.ECONOMY, Phase.EXPANSION] or _enemy_factory(world) == null:
 		return
-	if _combat_units(world).size() < difficulty_profile.combat_reserve_size:
+	var committed_combat := _combat_units(world).size()
+	for definition_id in COMBAT_DEFINITION_IDS:
+		committed_combat += _queued_definition_count(definition_id, world)
+	if committed_combat < difficulty_profile.combat_reserve_size:
 		_submit_production(_next_combat_definition(world), world)
 
 
@@ -319,8 +326,8 @@ func _maintain_engineering(world: SimulationWorld) -> void:
 func _submit_production(definition_id: StringName, world: SimulationWorld) -> void:
 	if production_reserved_tick == world.current_tick:
 		return
-	var factory := _enemy_factory(world)
-	if factory == null or not factory.operational or not factory.production_definition_id.is_empty():
+	var factory := _production_building(definition_id, world)
+	if factory == null:
 		return
 	var definition := SimulationWorld.UNIT_CATALOG.get_unit(definition_id)
 	var faction := world.factions.get(SimulationWorld.ENEMY_PLAYER_ID) as FactionState
@@ -332,6 +339,31 @@ func _submit_production(definition_id: StringName, world: SimulationWorld) -> vo
 	)
 	if _submit(command, world):
 		production_reserved_tick = world.current_tick
+
+
+func _production_building(definition_id: StringName, world: SimulationWorld) -> BuildingState:
+	var building_ids := world.buildings.keys()
+	building_ids.sort()
+	for building_id in building_ids:
+		var building := world.buildings[building_id] as BuildingState
+		var building_definition := SimulationWorld.BUILDING_CATALOG.get_building(building.definition_id)
+		if building.enabled and building.operational and building.faction_id == SimulationWorld.ENEMY_PLAYER_ID and building_definition != null and building_definition.can_produce(definition_id) and building.production_count() < BuildingState.MAX_PRODUCTION_QUEUE_SIZE:
+			return building
+	return null
+
+
+func _queued_definition_count(definition_id: StringName, world: SimulationWorld) -> int:
+	var count := 0
+	for building_variant in world.buildings.values():
+		var building := building_variant as BuildingState
+		if not building.enabled or building.faction_id != SimulationWorld.ENEMY_PLAYER_ID:
+			continue
+		if building.production_definition_id == definition_id:
+			count += 1
+		for queued_definition_id in building.production_queue:
+			if queued_definition_id == definition_id:
+				count += 1
+	return count
 
 
 func _submit_attack(unit: UnitState, target_entity_id: int, world: SimulationWorld) -> void:

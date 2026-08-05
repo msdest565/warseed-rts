@@ -114,6 +114,9 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	panel.pause_button = panel.get_node("Margin/Layout/Operations/Grid/Pause")
 	panel.resume_button = panel.get_node("Margin/Layout/Operations/Grid/Resume")
 	panel.cancel_button = panel.get_node("Margin/Layout/Operations/Grid/Cancel")
+	panel.production_queue_label = panel.get_node("Margin/Layout/ProductionSection/Queue")
+	panel.cancel_production_button = panel.get_node("Margin/Layout/ProductionSection/Controls/CancelProduction")
+	panel.rally_button = panel.get_node("Margin/Layout/ProductionSection/Controls/Rally")
 	panel.simulation_host = host
 	panel._ready()
 	workflow_panel.title_label = workflow_panel.get_node("Margin/Layout/Title")
@@ -135,6 +138,7 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	_expect(panel.has_node("Margin/Layout/Intel") and panel.has_node("Margin/Layout/Strategic") and panel.has_node("Margin/Layout/Operations") and panel.has_node("Margin/Layout/ProductionSection"), "task panel should separate intelligence, strategy, operations, and production", failures)
 	_expect(panel.has_node("Margin/Layout/Strategic/Scout"), "strategy controls should expose selected-unit reconnaissance", failures)
 	_expect(panel.production_buttons.size() == 5, "production section should retain all five unit controls", failures)
+	_expect(panel.has_node("Margin/Layout/ProductionSection/Queue") and panel.has_node("Margin/Layout/ProductionSection/Controls/Rally"), "production section should expose queue state and rally controls", failures)
 	_expect(panel.build_factory_button.text.contains("300") and panel.production_buttons[4].text.contains("350"), "construction and production controls should expose authoritative ore costs", failures)
 	_expect(workflow_panel != null and workflow_panel.has_node("Margin/Layout/UnitFlows") and workflow_panel.has_node("Margin/Layout/Tasks"), "left workflow panel should expose unit work and delegated tasks", failures)
 	_expect(hover_tooltip != null, "game scene should include the delayed contextual tooltip layer", failures)
@@ -188,6 +192,13 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	input_controller.selected_building_id = SimulationWorld.PLAYER_FACTORY_ID
 	panel.update_snapshot(host.current_snapshot)
 	_expect(not panel.production_buttons[2].disabled and panel.production_buttons[4].disabled, "production controls should distinguish affordable and unaffordable unit costs", failures)
+	_expect(panel.production_buttons[0].disabled and panel.production_buttons[1].disabled, "automated factory should disable economic units outside its catalog", failures)
+	(world_faction(host) as FactionState).ore = 500
+	host.current_snapshot = host.world.create_snapshot()
+	input_controller.selected_building_id = SimulationWorld.PLAYER_COMMAND_CENTER_ID
+	panel.update_snapshot(host.current_snapshot)
+	_expect(not panel.production_buttons[0].disabled and not panel.production_buttons[1].disabled and panel.production_buttons[2].disabled, "command center should enable only harvester and engineer production", failures)
+	_expect(panel.production_queue_label.text == "Queue 0 / 5" and panel.rally_button.disabled == false, "selected production building should expose queue capacity and rally targeting", failures)
 	host.advance_tick()
 	host.advance_tick()
 	input_controller._set_selection([4])

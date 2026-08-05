@@ -26,6 +26,12 @@ func validate() -> DataValidationResult:
 			result.add(DataValidationResult.Reason.INVALID_COST, "buildings[%d] has invalid economy values" % index)
 		if building.footprint_size.x <= 0 or building.footprint_size.y <= 0:
 			result.add(DataValidationResult.Reason.INVALID_COST, "buildings[%d] has invalid footprint" % index)
+		var production_ids: Dictionary = {}
+		for unit_definition_id in building.production_catalog:
+			if unit_definition_id.is_empty() or production_ids.has(unit_definition_id):
+				result.add(DataValidationResult.Reason.INVALID_COST, "buildings[%d] has an invalid production catalog" % index)
+			else:
+				production_ids[unit_definition_id] = true
 	return result
 
 

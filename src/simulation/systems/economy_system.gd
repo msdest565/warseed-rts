@@ -92,10 +92,20 @@ func advance(
 			unit.assigned_task_id = EnemyRaidAgent.TASK_ID
 		units[allocated_id] = unit
 		events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.UNIT_PRODUCED, allocated_id, "factory=%d;definition=%s" % [building.entity_id, definition.definition_id]))
+		if unit.position.distance_to(building.production_rally_position) > LogicGrid.CELL_SIZE:
+			_start_path(unit, building.production_rally_position, pathfinder)
 		allocated_id += 1
-		building.production_definition_id = &""
-		building.production_ticks_remaining = 0
-		building.production_cost_paid = 0
+		if building.production_queue.is_empty():
+			building.production_definition_id = &""
+			building.production_ticks_remaining = 0
+			building.production_cost_paid = 0
+		else:
+			var next_definition_id: StringName = building.production_queue.pop_front()
+			var next_definition: UnitDefinition = unit_catalog.get_unit(next_definition_id)
+			building.production_definition_id = next_definition.definition_id
+			building.production_ticks_remaining = next_definition.production_ticks
+			building.production_cost_paid = next_definition.production_cost
+			events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.PRODUCTION_STARTED, building.entity_id, "definition=%s;cost=%d" % [next_definition.definition_id, next_definition.production_cost]))
 	return allocated_id
 
 

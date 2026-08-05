@@ -12,3 +12,4 @@ build_cost = 300
 build_ticks = 60
 footprint_size = Vector2i(3, 3)
 provides_factory = true
+production_catalog = Array[StringName]([&"scout_vehicle", &"assault_vehicle", &"missile_vehicle"])

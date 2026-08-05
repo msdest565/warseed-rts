@@ -198,6 +198,7 @@ func _add_building(entity_id: int, definition_id: StringName, faction_id: int, p
 	building.armor = definition.armor
 	building.footprint_cells = logic_grid.get_footprint_cells(position, definition.footprint_size)
 	building.rally_position = _default_work_position(building.footprint_cells, position)
+	building.production_rally_position = _default_production_rally_position(position)
 	buildings[entity_id] = building
 	_set_building_occupancy(building, true)
 
@@ -298,9 +299,36 @@ func submit_command(command: GameCommand) -> CommandValidationResult:
 func validate_command(command: GameCommand) -> CommandValidationResult:
 	_update_faction_knowledge()
 	var result := command_validator.validate(command, units, BATTLEFIELD_BOUNDS, pathfinder, formations, buildings, ore_fields, factions, UNIT_CATALOG, BUILDING_CATALOG, faction_knowledge, logic_grid, tasks)
+	if result.is_accepted() and command is ProduceUnitCommand:
+		result = _validate_pending_production(command as ProduceUnitCommand)
 	if result.is_accepted() and not _agent_authorization_allows(command):
 		return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.AGENT_NOT_AUTHORIZED)
 	return result
+
+
+func _validate_pending_production(command: ProduceUnitCommand) -> CommandValidationResult:
+	var building := buildings.get(command.target_entity_id) as BuildingState
+	var definition := UNIT_CATALOG.get_unit(command.unit_definition_id)
+	if building == null or definition == null:
+		return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.INVALID_DEFINITION)
+	var pending_for_building := 0
+	var pending_cost := 0
+	for queued_command in command_queue.snapshot():
+		if not queued_command is ProduceUnitCommand:
+			continue
+		var queued_production := queued_command as ProduceUnitCommand
+		var queued_building := buildings.get(queued_production.target_entity_id) as BuildingState
+		var queued_definition := UNIT_CATALOG.get_unit(queued_production.unit_definition_id)
+		if queued_building != null and queued_building.faction_id == building.faction_id and queued_definition != null:
+			pending_cost += queued_definition.production_cost
+		if queued_production.target_entity_id == building.entity_id:
+			pending_for_building += 1
+	if building.production_count() + pending_for_building >= BuildingState.MAX_PRODUCTION_QUEUE_SIZE:
+		return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.PRODUCTION_QUEUE_FULL)
+	var faction := factions.get(building.faction_id) as FactionState
+	if faction == null or faction.ore - pending_cost < definition.production_cost:
+		return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.INSUFFICIENT_ORE)
+	return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
 
 
 func _agent_authorization_allows(command: GameCommand) -> bool:
@@ -962,10 +990,18 @@ func _apply_command(command: GameCommand) -> void:
 		var factory := buildings[production.target_entity_id] as BuildingState
 		var definition := UNIT_CATALOG.get_unit(production.unit_definition_id)
 		(factions[factory.faction_id] as FactionState).ore -= definition.production_cost
-		factory.production_definition_id = definition.definition_id
-		factory.production_ticks_remaining = definition.production_ticks
-		factory.production_cost_paid = definition.production_cost
-		events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.PRODUCTION_STARTED, factory.entity_id, "definition=%s;cost=%d" % [definition.definition_id, definition.production_cost]))
+		if factory.production_definition_id.is_empty():
+			_start_building_production(factory, definition)
+		else:
+			factory.production_queue.append(definition.definition_id)
+			events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.PRODUCTION_QUEUED, factory.entity_id, "definition=%s;position=%d;cost=%d" % [definition.definition_id, factory.production_count() - 1, definition.production_cost]))
+	elif command is CancelProductionCommand:
+		_apply_cancel_production(command as CancelProductionCommand)
+	elif command is SetRallyPointCommand:
+		var rally := command as SetRallyPointCommand
+		var rally_building := buildings[rally.target_entity_id] as BuildingState
+		rally_building.production_rally_position = rally.rally_position
+		events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.RALLY_POINT_SET, rally_building.entity_id, "position=%.1f,%.1f" % [rally.rally_position.x, rally.rally_position.y]))
 	elif command is StopCommand:
 		_apply_stop(command as StopCommand)
 	elif command is AttackCommand:
@@ -1056,6 +1092,7 @@ func _apply_build(command: BuildBuildingCommand) -> void:
 	building.builder_entity_id = engineer.entity_id
 	building.footprint_cells = logic_grid.get_footprint_cells(snapped_position, definition.footprint_size)
 	building.rally_position = _default_work_position(building.footprint_cells, snapped_position)
+	building.production_rally_position = _default_production_rally_position(snapped_position)
 	buildings[building.entity_id] = building
 	_set_building_occupancy(building, true)
 	_prepare_manual_worker(engineer)
@@ -1063,6 +1100,41 @@ func _apply_build(command: BuildBuildingCommand) -> void:
 	engineer.work_target_building_id = building.entity_id
 	_start_unit_path_to_building(engineer, building)
 	events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.BUILDING_PLACED, building.entity_id, "definition=%s;builder=%d;cost=%d" % [definition.definition_id, engineer.entity_id, definition.build_cost]))
+
+
+func _start_building_production(building: BuildingState, definition: UnitDefinition) -> void:
+	building.production_definition_id = definition.definition_id
+	building.production_ticks_remaining = definition.production_ticks
+	building.production_cost_paid = definition.production_cost
+	events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.PRODUCTION_STARTED, building.entity_id, "definition=%s;cost=%d" % [definition.definition_id, definition.production_cost]))
+
+
+func _default_production_rally_position(building_position: Vector2) -> Vector2:
+	var outward_x := 1.0 if building_position.x < BATTLEFIELD_BOUNDS.size.x * 0.5 else -1.0
+	return building_position + Vector2(outward_x * LogicGrid.CELL_SIZE * 5.0, 0.0)
+
+
+func _apply_cancel_production(command: CancelProductionCommand) -> void:
+	var building := buildings[command.target_entity_id] as BuildingState
+	var refund := 0
+	var cancelled_definition: StringName
+	if command.queue_index == 0:
+		cancelled_definition = building.production_definition_id
+		refund = floori(building.production_cost_paid * 0.75)
+		building.production_definition_id = &""
+		building.production_ticks_remaining = 0
+		building.production_cost_paid = 0
+		if not building.production_queue.is_empty():
+			var next_definition_id: StringName = building.production_queue.pop_front()
+			_start_building_production(building, UNIT_CATALOG.get_unit(next_definition_id))
+	else:
+		var waiting_index := command.queue_index - 1
+		cancelled_definition = building.production_queue[waiting_index]
+		var definition: UnitDefinition = UNIT_CATALOG.get_unit(cancelled_definition)
+		refund = definition.production_cost if definition != null else 0
+		building.production_queue.remove_at(waiting_index)
+	(factions[building.faction_id] as FactionState).ore += refund
+	events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.PRODUCTION_CANCELLED, building.entity_id, "definition=%s;refund=%d;index=%d" % [cancelled_definition, refund, command.queue_index]))
 
 
 func _apply_repair(command: RepairBuildingCommand) -> void:

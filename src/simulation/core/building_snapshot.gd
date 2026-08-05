@@ -17,8 +17,10 @@ var construction_ticks_remaining: int
 var builder_entity_id: int
 var footprint_cells: Array[Vector2i]
 var rally_position: Vector2
+var production_rally_position: Vector2
 var production_definition_id: StringName
 var production_ticks_remaining: int
+var production_queue: Array[StringName]
 var is_visible: bool = true
 var last_seen_tick: int = -1
 
@@ -41,8 +43,10 @@ func _init(building: BuildingState = null, contact: KnowledgeContact = null) -> 
 		builder_entity_id = 0
 		footprint_cells = []
 		rally_position = contact.position
+		production_rally_position = contact.position
 		production_definition_id = &""
 		production_ticks_remaining = 0
+		production_queue = []
 		is_visible = false
 		last_seen_tick = contact.last_seen_tick
 		return
@@ -62,5 +66,7 @@ func _init(building: BuildingState = null, contact: KnowledgeContact = null) -> 
 	builder_entity_id = building.builder_entity_id
 	footprint_cells.assign(building.footprint_cells)
 	rally_position = building.rally_position
+	production_rally_position = building.production_rally_position
 	production_definition_id = building.production_definition_id
 	production_ticks_remaining = building.production_ticks_remaining
+	production_queue.assign(building.production_queue)

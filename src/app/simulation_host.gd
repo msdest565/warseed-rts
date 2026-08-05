@@ -154,6 +154,28 @@ func create_produce_unit_command(factory_entity_id: int, unit_definition_id: Str
 	)
 
 
+func create_cancel_production_command(building_entity_id: int, queue_index: int = 0) -> CancelProductionCommand:
+	return CancelProductionCommand.new(
+		world.allocate_command_id(),
+		SimulationWorld.LOCAL_PLAYER_ID,
+		GameCommand.IssuerKind.PLAYER,
+		world.current_tick,
+		building_entity_id,
+		queue_index
+	)
+
+
+func create_set_rally_point_command(building_entity_id: int, rally_position: Vector2) -> SetRallyPointCommand:
+	return SetRallyPointCommand.new(
+		world.allocate_command_id(),
+		SimulationWorld.LOCAL_PLAYER_ID,
+		GameCommand.IssuerKind.PLAYER,
+		world.current_tick,
+		building_entity_id,
+		rally_position
+	)
+
+
 func create_build_building_command(engineer_entity_id: int, building_definition_id: StringName, build_position: Vector2) -> BuildBuildingCommand:
 	return BuildBuildingCommand.new(
 		world.allocate_command_id(),

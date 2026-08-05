@@ -8,6 +8,7 @@ func run() -> Array[String]:
 	_test_difficulty_profiles_and_reaction_windows(failures)
 	_test_target_scoring_prefers_combat_threat(failures)
 	_test_observed_composition_changes_production(failures)
+	_test_enemy_production_commitments(failures)
 	_test_chase_limit(failures)
 	return failures
 
@@ -162,6 +163,29 @@ func _test_observed_composition_changes_production(failures: Array[String]) -> v
 	world._update_faction_knowledge()
 	_expect(world.enemy_raid_agent._next_combat_definition(world) == &"assault_vehicle", "hard AI should produce frontline assault units after observing a missile-heavy force", failures)
 	_expect(world.enemy_raid_agent.last_observed_composition.contains("missile=3.0"), "counter planning should report only the composition present in faction knowledge", failures)
+
+
+func _test_enemy_production_commitments(failures: Array[String]) -> void:
+	var economy_world := SimulationWorld.new()
+	(economy_world.factions[SimulationWorld.ENEMY_PLAYER_ID] as FactionState).ore = 5000
+	economy_world.current_tick = economy_world.enemy_raid_agent.difficulty_profile.opening_delay_ticks
+	for _tick in range(8):
+		economy_world.advance_tick()
+	var enemy_center := economy_world.buildings[SimulationWorld.ENEMY_COMMAND_CENTER_ID] as BuildingState
+	_expect(enemy_center.production_count() == 1 and enemy_center.production_definition_id == &"harvester", "enemy economy should count committed harvesters instead of filling the command-center queue", failures)
+
+	var combat_world := SimulationWorld.new()
+	(combat_world.factions[SimulationWorld.ENEMY_PLAYER_ID] as FactionState).ore = 5000
+	combat_world._add_building(2190, &"automated_factory", SimulationWorld.ENEMY_PLAYER_ID, combat_world.logic_grid.cell_to_world(Vector2i(76, 54)))
+	combat_world.current_tick = combat_world.enemy_raid_agent.difficulty_profile.opening_delay_ticks
+	combat_world.enemy_raid_agent.phase = EnemyRaidAgent.Phase.MUSTERING
+	combat_world.enemy_raid_agent.phase_started_tick = combat_world.current_tick
+	for _tick in range(10):
+		combat_world.advance_tick()
+	var committed_combat := combat_world.enemy_raid_agent._combat_units(combat_world).size()
+	for definition_id in EnemyRaidAgent.COMBAT_DEFINITION_IDS:
+		committed_combat += combat_world.enemy_raid_agent._queued_definition_count(definition_id, combat_world)
+	_expect(committed_combat == combat_world.enemy_raid_agent.difficulty_profile.combat_reserve_size, "enemy AI should reserve exactly its configured combat force across completed and queued units", failures)
 
 
 func _test_chase_limit(failures: Array[String]) -> void:

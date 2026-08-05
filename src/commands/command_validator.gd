@@ -29,6 +29,10 @@ func validate(
 		return _validate_harvest(command as HarvestCommand, units, buildings, ore_fields)
 	if command is ProduceUnitCommand:
 		return _validate_production(command as ProduceUnitCommand, buildings, factions, unit_catalog, building_catalog)
+	if command is CancelProductionCommand:
+		return _validate_cancel_production(command as CancelProductionCommand, buildings)
+	if command is SetRallyPointCommand:
+		return _validate_rally_point(command as SetRallyPointCommand, buildings, building_catalog, battlefield_bounds, pathfinder)
 	if command is StopCommand:
 		return _validate_stop(command as StopCommand, units, formations)
 	if command is AttackCommand:
@@ -320,14 +324,47 @@ func _validate_production(command: ProduceUnitCommand, buildings: Dictionary, fa
 	var building := buildings[command.target_entity_id] as BuildingState
 	var building_definition := building_catalog.get_building(building.definition_id)
 	var unit_definition := unit_catalog.get_unit(command.unit_definition_id)
-	if not building.enabled or not building.operational or building_definition == null or not building_definition.provides_factory or unit_definition == null:
+	if not building.enabled or not building.operational or building_definition == null or unit_definition == null or not building_definition.can_produce(command.unit_definition_id):
 		return _rejected(CommandValidationResult.Reason.INVALID_DEFINITION)
 	if building.controller_id != command.issuer_id:
 		return _rejected(CommandValidationResult.Reason.NOT_CONTROLLER)
-	if not building.production_definition_id.is_empty():
-		return _rejected(CommandValidationResult.Reason.PRODUCTION_BUSY)
+	if building.production_count() >= BuildingState.MAX_PRODUCTION_QUEUE_SIZE:
+		return _rejected(CommandValidationResult.Reason.PRODUCTION_QUEUE_FULL)
 	if not factions.has(building.faction_id) or (factions[building.faction_id] as FactionState).ore < unit_definition.production_cost:
 		return _rejected(CommandValidationResult.Reason.INSUFFICIENT_ORE)
+	return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
+
+
+func _validate_cancel_production(command: CancelProductionCommand, buildings: Dictionary) -> CommandValidationResult:
+	if not buildings.has(command.target_entity_id):
+		return _rejected(CommandValidationResult.Reason.INVALID_BUILDING)
+	var building := buildings[command.target_entity_id] as BuildingState
+	if not building.enabled or building.controller_id != command.issuer_id:
+		return _rejected(CommandValidationResult.Reason.NOT_CONTROLLER)
+	if command.queue_index < 0 or command.queue_index >= building.production_count():
+		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+	return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
+
+
+func _validate_rally_point(
+	command: SetRallyPointCommand,
+	buildings: Dictionary,
+	building_catalog: BuildingDefinitionCatalog,
+	battlefield_bounds: Rect2,
+	pathfinder: GridPathfinder
+) -> CommandValidationResult:
+	if not buildings.has(command.target_entity_id) or building_catalog == null:
+		return _rejected(CommandValidationResult.Reason.INVALID_BUILDING)
+	var building := buildings[command.target_entity_id] as BuildingState
+	var definition := building_catalog.get_building(building.definition_id)
+	if not building.enabled or not building.operational or building.controller_id != command.issuer_id:
+		return _rejected(CommandValidationResult.Reason.NOT_CONTROLLER)
+	if definition == null or definition.production_catalog.is_empty():
+		return _rejected(CommandValidationResult.Reason.INVALID_DEFINITION)
+	if not _is_valid_position(command.rally_position, battlefield_bounds):
+		return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
+	if pathfinder != null and pathfinder.find_path(building.rally_position, command.rally_position).is_empty():
+		return _rejected(CommandValidationResult.Reason.PATH_UNAVAILABLE)
 	return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
 
 
@@ -367,7 +404,7 @@ func _validate_strategic_order(
 			return _rejected(CommandValidationResult.Reason.TASK_CONFLICT)
 	match command.order_kind:
 		StrategicOrderCommand.OrderKind.DEVELOP_RESOURCE:
-			if not ore_fields.has(command.objective_entity_id) or not buildings.has(SimulationWorld.PLAYER_FACTORY_ID) or not buildings.has(SimulationWorld.PLAYER_COMMAND_CENTER_ID):
+			if not ore_fields.has(command.objective_entity_id) or not buildings.has(SimulationWorld.PLAYER_COMMAND_CENTER_ID):
 				return _rejected(CommandValidationResult.Reason.INVALID_RESOURCE)
 			if not factions.has(command.issuer_id):
 				return _rejected(CommandValidationResult.Reason.NOT_CONTROLLER)

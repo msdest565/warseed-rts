@@ -29,7 +29,9 @@ Clone and open the root `project.godot`. For command-line verification:
 - Grid navigation, formation slots, narrow-corridor column behavior and stuck recovery.
 - Typed catalogs for five unit types, combat values and three building types.
 - Authoritative projectiles, armor damage, pursuit and deterministic combat.
-- Factions, buildings, ore fields, harvesting, production and faction victory state.
+- Factions, buildings, 10000-primary/8000-expansion ore fields per side, harvesting, production and faction victory state.
+- Building-specific production catalogs, five-item FIFO queues, full/partial cancellation refunds and editable production rally points.
+- One-second bilingual cursor-following descriptions for units, buildings and ore fields.
 - Faction-scoped visibility, stale contacts and `last_seen_tick`; normal UI consumes faction snapshots.
 - Task lifecycle, blocked reasons, player takeover, Agent override rejection and path-based explicit rejoin.
 - Strategic develop-resource, selected-unit defend-area, attack-target and scout-area orders; pause/resume/cancel controls.
@@ -41,6 +43,6 @@ Clone and open the root `project.godot`. For command-line verification:
 
 ## Important limits
 
-This is a technical vertical slice, not the complete MVP. Production queues and building-specific catalogs, unit repair/support logistics, multi-squad task graphs, patrol/escort/hold commands, production art and real 5-8 minute playtest tuning remain.
+This is a technical vertical slice, not the complete MVP. Unit repair/support logistics, multi-squad task graphs, patrol/escort/hold commands, resource reservation priorities, production art and real 5-8 minute playtest tuning remain.
 
-The next priority is production responsibility/queues, shared tactical hold/patrol/escort behavior, support logistics and multi-squad task planning. Preserve the authoritative boundary and do not commit `.godot/`, `build/`, logs, screenshots or credentials.
+The next priority is shared tactical hold/patrol/escort behavior, support logistics, resource reservation priorities and multi-squad task planning. Preserve the authoritative boundary and do not commit `.godot/`, `build/`, logs, screenshots or credentials.

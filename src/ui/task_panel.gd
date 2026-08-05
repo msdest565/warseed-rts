@@ -9,6 +9,7 @@ extends PanelContainer
 @onready var strategic_title_label: Label = $Margin/Layout/Strategic/Title
 @onready var operations_title_label: Label = $Margin/Layout/Operations/Title
 @onready var production_title_label: Label = $Margin/Layout/ProductionSection/Title
+@onready var production_queue_label: Label = $Margin/Layout/ProductionSection/Queue
 @onready var develop_button: Button = $Margin/Layout/Strategic/Develop
 @onready var defend_button: Button = $Margin/Layout/Strategic/Defend
 @onready var scout_button: Button = $Margin/Layout/Strategic/Scout
@@ -20,6 +21,8 @@ extends PanelContainer
 @onready var resume_button: Button = $Margin/Layout/Operations/Grid/Resume
 @onready var cancel_button: Button = $Margin/Layout/Operations/Grid/Cancel
 @onready var harvest_button: Button = $Margin/Layout/Operations/Grid/Harvest
+@onready var cancel_production_button: Button = $Margin/Layout/ProductionSection/Controls/CancelProduction
+@onready var rally_button: Button = $Margin/Layout/ProductionSection/Controls/Rally
 @onready var production_buttons: Array[Button] = [
 	$Margin/Layout/ProductionSection/Grid/Harvester,
 	$Margin/Layout/ProductionSection/Grid/Engineer,
@@ -55,13 +58,15 @@ func _ready() -> void:
 	resume_button.pressed.connect(_control_task.bind(TaskControlCommand.Action.RESUME))
 	cancel_button.pressed.connect(_control_task.bind(TaskControlCommand.Action.CANCEL))
 	harvest_button.pressed.connect(_begin_harvest)
+	cancel_production_button.pressed.connect(_cancel_production)
+	rally_button.pressed.connect(_begin_rally)
 	for index in range(production_buttons.size()):
 		production_buttons[index].pressed.connect(_produce.bind(PRODUCTION_DEFINITIONS[index]))
 	refresh_locale()
 
 
 func refresh_locale() -> void:
-	for control in [title_label, mission_label, selection_title_label, selection_label, task_label, strategic_title_label, operations_title_label, production_title_label, develop_button, defend_button, scout_button, attack_button, build_factory_button, build_support_button, repair_button, pause_button, resume_button, cancel_button, harvest_button]:
+	for control in [title_label, mission_label, selection_title_label, selection_label, task_label, strategic_title_label, operations_title_label, production_title_label, production_queue_label, develop_button, defend_button, scout_button, attack_button, build_factory_button, build_support_button, repair_button, pause_button, resume_button, cancel_button, harvest_button, cancel_production_button, rally_button]:
 		(control as Control).auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	for button in production_buttons:
 		button.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
@@ -81,6 +86,8 @@ func refresh_locale() -> void:
 	resume_button.text = GameText.t(&"TASK_RESUME")
 	cancel_button.text = GameText.t(&"TASK_CANCEL")
 	harvest_button.text = GameText.t(&"ORDER_HARVEST")
+	cancel_production_button.text = GameText.t(&"CANCEL_PRODUCTION")
+	rally_button.text = GameText.t(&"SET_RALLY_POINT")
 	for index in range(production_buttons.size()):
 		production_buttons[index].text = _production_button_text(PRODUCTION_DEFINITIONS[index])
 	if current_task_id == 0:
@@ -134,9 +141,14 @@ func update_snapshot(snapshot: WorldSnapshot) -> void:
 	build_support_button.disabled = not engineer_available or available_ore < _building_cost(&"forward_support_station")
 	repair_button.disabled = not engineer_available
 	var selected_factory := snapshot.get_building(input_controller.selected_building_id) if input_controller != null else null
-	var factory_available := selected_factory != null and selected_factory.enabled and selected_factory.operational and selected_factory.definition_id == &"automated_factory" and selected_factory.production_definition_id.is_empty()
+	var building_definition := SimulationWorld.BUILDING_CATALOG.get_building(selected_factory.definition_id) if selected_factory != null else null
+	var factory_available := selected_factory != null and selected_factory.enabled and selected_factory.operational and building_definition != null and not building_definition.production_catalog.is_empty() and selected_factory.production_queue.size() + int(not selected_factory.production_definition_id.is_empty()) < BuildingState.MAX_PRODUCTION_QUEUE_SIZE
 	for index in range(production_buttons.size()):
-		production_buttons[index].disabled = not factory_available or available_ore < _unit_cost(PRODUCTION_DEFINITIONS[index])
+		production_buttons[index].disabled = not factory_available or not building_definition.can_produce(PRODUCTION_DEFINITIONS[index]) or available_ore < _unit_cost(PRODUCTION_DEFINITIONS[index])
+	var production_count := selected_factory.production_queue.size() + int(not selected_factory.production_definition_id.is_empty()) if selected_factory != null else 0
+	cancel_production_button.disabled = production_count == 0
+	rally_button.disabled = selected_factory == null or not selected_factory.enabled or not selected_factory.operational or building_definition == null or building_definition.production_catalog.is_empty()
+	production_queue_label.text = GameText.t(&"PRODUCTION_QUEUE") % [production_count, BuildingState.MAX_PRODUCTION_QUEUE_SIZE]
 	harvest_button.disabled = input_controller == null or input_controller._selected_harvester_id() == 0
 	_update_mission(snapshot.mission)
 	_update_selection(snapshot)
@@ -193,6 +205,11 @@ func _update_selection(snapshot: WorldSnapshot) -> void:
 				selection_label.text += "\n" + GameText.t(&"SELECTION_PRODUCING") % [
 					GameText.unit_name(building.production_definition_id), building.production_ticks_remaining,
 				]
+			if not building.production_queue.is_empty():
+				var queued_names: Array[String] = []
+				for definition_id in building.production_queue:
+					queued_names.append(GameText.unit_name(definition_id))
+				selection_label.text += "\n" + GameText.t(&"SELECTION_QUEUE") % ", ".join(queued_names)
 			return
 	if input_controller.selected_entity_ids.is_empty():
 		selection_label.text = GameText.t(&"SELECTION_NONE")
@@ -268,6 +285,22 @@ func _begin_repair() -> void:
 func _begin_harvest() -> void:
 	if input_controller != null:
 		input_controller.harvest_with_selected()
+
+
+func _cancel_production() -> void:
+	if input_controller == null or input_controller.selected_building_id == 0:
+		return
+	var building := simulation_host.current_snapshot.get_building(input_controller.selected_building_id)
+	if building == null:
+		return
+	var queue_index := building.production_queue.size()
+	var result := simulation_host.submit_command(simulation_host.create_cancel_production_command(building.entity_id, queue_index))
+	last_status = GameText.t(&"STATUS_CANCEL_PRODUCTION") % GameText.command_result(result)
+
+
+func _begin_rally() -> void:
+	if input_controller != null:
+		input_controller.begin_rally_targeting()
 
 
 func get_hover_context(screen_position: Vector2) -> Dictionary:

@@ -12,3 +12,4 @@ build_cost = 500
 build_ticks = 100
 footprint_size = Vector2i(4, 3)
 provides_command_center = true
+production_catalog = Array[StringName]([&"harvester", &"engineer_vehicle"])

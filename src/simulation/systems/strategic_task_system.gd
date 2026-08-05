@@ -48,11 +48,11 @@ func _advance_develop_resource(task: TaskState, world: SimulationWorld) -> void:
 		return
 	_ensure_harvest_orders(task, refinery, world)
 	if task.phase == TaskState.Phase.PREPARING:
-		var factory := _find_faction_building(world, task.faction_id, &"automated_factory", true)
+		var factory := refinery
 		if factory == null:
-			_block(task, world, TaskState.BlockedReason.PRODUCTION_UNAVAILABLE, "No operational factory is available")
+			_block(task, world, TaskState.BlockedReason.PRODUCTION_UNAVAILABLE, "No operational command center is available")
 			return
-		if factory.production_definition_id.is_empty() and _count_definition(world, task.faction_id, &"harvester") <= task.expected_unit_count:
+		if factory.production_count() < BuildingState.MAX_PRODUCTION_QUEUE_SIZE and _count_definition(world, task.faction_id, &"harvester") <= task.expected_unit_count:
 			var production := ProduceUnitCommand.new(
 				world.allocate_command_id(),
 				task.faction_id,

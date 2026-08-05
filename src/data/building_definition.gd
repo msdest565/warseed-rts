@@ -14,4 +14,9 @@ extends Resource
 @export var provides_command_center: bool = false
 @export var provides_factory: bool = false
 @export var provides_support: bool = false
+@export var production_catalog: Array[StringName] = []
 @export_range(0.0, 10000.0) var sight_range: float = 256.0
+
+
+func can_produce(unit_definition_id: StringName) -> bool:
+	return production_catalog.has(unit_definition_id)

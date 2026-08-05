@@ -1,6 +1,8 @@
 class_name BuildingState
 extends RefCounted
 
+const MAX_PRODUCTION_QUEUE_SIZE := 5
+
 var entity_id: int
 var definition_id: StringName
 var faction_id: int
@@ -17,9 +19,11 @@ var construction_ticks_remaining: int = 0
 var builder_entity_id: int = 0
 var footprint_cells: Array[Vector2i] = []
 var rally_position: Vector2
+var production_rally_position: Vector2
 var production_definition_id: StringName
 var production_ticks_remaining: int = 0
 var production_cost_paid: int = 0
+var production_queue: Array[StringName] = []
 
 
 func _init(
@@ -38,3 +42,8 @@ func _init(
 	max_health = new_max_health
 	health = new_max_health
 	rally_position = new_position + Vector2(80.0, 0.0)
+	production_rally_position = rally_position
+
+
+func production_count() -> int:
+	return production_queue.size() + int(not production_definition_id.is_empty())

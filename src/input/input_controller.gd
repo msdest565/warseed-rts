@@ -10,6 +10,7 @@ enum CommandMode {
 	HARVEST_TARGETING,
 	DEFEND_TARGETING,
 	SCOUT_TARGETING,
+	RALLY_TARGETING,
 }
 
 signal move_intent_changed(target_position: Vector2, intent_sequence: int)
@@ -71,7 +72,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if targeting_mouse.pressed and targeting_mouse.button_index == MOUSE_BUTTON_LEFT:
 			attack_or_move_selected_at(_screen_to_world(targeting_mouse.position))
 			return
-	if command_mode in [CommandMode.HARVEST_TARGETING, CommandMode.DEFEND_TARGETING, CommandMode.SCOUT_TARGETING] and event is InputEventMouseButton:
+	if command_mode in [CommandMode.HARVEST_TARGETING, CommandMode.DEFEND_TARGETING, CommandMode.SCOUT_TARGETING, CommandMode.RALLY_TARGETING] and event is InputEventMouseButton:
 		var target_mouse := event as InputEventMouseButton
 		if target_mouse.pressed and target_mouse.button_index == MOUSE_BUTTON_RIGHT:
 			cancel_command_mode()
@@ -82,6 +83,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				harvest_selected_at(target_position)
 			elif command_mode == CommandMode.SCOUT_TARGETING:
 				scout_selected_at(target_position)
+			elif command_mode == CommandMode.RALLY_TARGETING:
+				set_selected_rally_point(target_position)
 			else:
 				defend_selected_at(target_position)
 			return
@@ -667,6 +670,39 @@ func produce_unit(unit_definition_id: StringName) -> CommandValidationResult:
 		return null
 	var result := simulation_host.submit_command(simulation_host.create_produce_unit_command(selected_building_id, unit_definition_id))
 	last_command_status = GameText.t(&"STATUS_PRODUCE") % [GameText.unit_name(unit_definition_id), GameText.command_result(result)]
+	return result
+
+
+func cancel_selected_production() -> CommandValidationResult:
+	if selected_building_id == 0:
+		last_command_status = GameText.t(&"STATUS_SELECT_PRODUCTION_BUILDING")
+		return null
+	var result := simulation_host.submit_command(simulation_host.create_cancel_production_command(selected_building_id))
+	last_command_status = GameText.t(&"STATUS_CANCEL_PRODUCTION") % GameText.command_result(result)
+	return result
+
+
+func begin_rally_targeting() -> void:
+	if selected_building_id == 0:
+		last_command_status = GameText.t(&"STATUS_SELECT_PRODUCTION_BUILDING")
+		return
+	var building := simulation_host.current_snapshot.get_building(selected_building_id)
+	var definition := SimulationWorld.BUILDING_CATALOG.get_building(building.definition_id) if building != null else null
+	if definition == null or definition.production_catalog.is_empty():
+		last_command_status = GameText.t(&"STATUS_SELECT_PRODUCTION_BUILDING")
+		return
+	command_mode = CommandMode.RALLY_TARGETING
+	last_command_status = GameText.t(&"STATUS_RALLY_TARGET")
+
+
+func set_selected_rally_point(world_position: Vector2) -> CommandValidationResult:
+	if selected_building_id == 0:
+		last_command_status = GameText.t(&"STATUS_SELECT_PRODUCTION_BUILDING")
+		return null
+	var result := simulation_host.submit_command(simulation_host.create_set_rally_point_command(selected_building_id, world_position))
+	last_command_status = GameText.t(&"STATUS_RALLY") % GameText.command_result(result)
+	if result.is_accepted():
+		command_mode = CommandMode.NORMAL
 	return result
 
 

@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_scenario_and_differentiated_data(failures)
 	_test_real_harvest_trip_and_production_pipeline(failures)
+	_test_production_catalog_queue_cancel_and_rally(failures)
 	_test_construction_occupancy_and_repair(failures)
 	_test_manual_building_destruction_victory(failures)
 	return failures
@@ -70,10 +71,61 @@ func _test_real_harvest_trip_and_production_pipeline(failures: Array[String]) ->
 	world.advance_tick()
 	var ore_after_payment := faction.ore
 	_expect(ore_after_payment == ore_before + EconomySystem.HARVEST_AMOUNT - 100, "production cost should be paid at tick boundary", failures)
-	_expect(world.submit_command(ProduceUnitCommand.new(3, 1, GameCommand.IssuerKind.PLAYER, world.current_tick, SimulationWorld.PLAYER_FACTORY_ID, &"scout_vehicle")).reason == CommandValidationResult.Reason.PRODUCTION_BUSY, "busy factory should reject another order", failures)
-	for _tick in range(20):
+	_expect(world.submit_command(ProduceUnitCommand.new(3, 1, GameCommand.IssuerKind.PLAYER, world.current_tick, SimulationWorld.PLAYER_FACTORY_ID, &"scout_vehicle")).is_accepted(), "busy factory should accept another valid item into its queue", failures)
+	world.advance_tick()
+	_expect((world.buildings[SimulationWorld.PLAYER_FACTORY_ID] as BuildingState).production_queue == [&"scout_vehicle"], "second production order should remain in the authoritative waiting queue", failures)
+	for _tick in range(19):
 		world.advance_tick()
 	_expect(world.create_snapshot().get_unit(1100) != null, "completed production should create a snapshot-visible unit", failures)
+
+
+func _test_production_catalog_queue_cancel_and_rally(failures: Array[String]) -> void:
+	var catalog_world := SimulationWorld.new()
+	var factory_harvester := ProduceUnitCommand.new(catalog_world.allocate_command_id(), 1, GameCommand.IssuerKind.PLAYER, 0, SimulationWorld.PLAYER_FACTORY_ID, &"harvester")
+	var center_scout := ProduceUnitCommand.new(catalog_world.allocate_command_id(), 1, GameCommand.IssuerKind.PLAYER, 0, SimulationWorld.PLAYER_COMMAND_CENTER_ID, &"scout_vehicle")
+	var center_harvester := ProduceUnitCommand.new(catalog_world.allocate_command_id(), 1, GameCommand.IssuerKind.PLAYER, 0, SimulationWorld.PLAYER_COMMAND_CENTER_ID, &"harvester")
+	_expect(catalog_world.submit_command(factory_harvester).reason == CommandValidationResult.Reason.INVALID_DEFINITION, "factory should reject economic units outside its production catalog", failures)
+	_expect(catalog_world.submit_command(center_scout).reason == CommandValidationResult.Reason.INVALID_DEFINITION, "command center should reject combat units outside its production catalog", failures)
+	_expect(catalog_world.submit_command(center_harvester).is_accepted(), "command center should produce harvesters through the shared command pipeline", failures)
+
+	var queue_world := SimulationWorld.new()
+	(queue_world.factions[SimulationWorld.LOCAL_PLAYER_ID] as FactionState).ore = 1000
+	for index in range(BuildingState.MAX_PRODUCTION_QUEUE_SIZE):
+		var queued := ProduceUnitCommand.new(queue_world.allocate_command_id(), 1, GameCommand.IssuerKind.PLAYER, 0, SimulationWorld.PLAYER_FACTORY_ID, &"scout_vehicle")
+		_expect(queue_world.submit_command(queued).is_accepted(), "production slot %d should be accepted" % index, failures)
+	var overflow := ProduceUnitCommand.new(queue_world.allocate_command_id(), 1, GameCommand.IssuerKind.PLAYER, 0, SimulationWorld.PLAYER_FACTORY_ID, &"scout_vehicle")
+	_expect(queue_world.submit_command(overflow).reason == CommandValidationResult.Reason.PRODUCTION_QUEUE_FULL, "sixth item should be rejected by the five-item queue limit", failures)
+	queue_world.advance_tick()
+	var queued_factory := queue_world.buildings[SimulationWorld.PLAYER_FACTORY_ID] as BuildingState
+	_expect(queued_factory.production_count() == BuildingState.MAX_PRODUCTION_QUEUE_SIZE, "accepted production commands should preserve FIFO queue state", failures)
+	var ore_after_queue := (queue_world.factions[1] as FactionState).ore
+	var cancel_waiting := CancelProductionCommand.new(queue_world.allocate_command_id(), 1, GameCommand.IssuerKind.PLAYER, queue_world.current_tick, queued_factory.entity_id, queued_factory.production_count() - 1)
+	_expect(queue_world.submit_command(cancel_waiting).is_accepted(), "player should be able to cancel a waiting production item", failures)
+	queue_world.advance_tick()
+	_expect((queue_world.factions[1] as FactionState).ore == ore_after_queue + 100, "waiting production cancellation should refund its full cost", failures)
+
+	var cancel_world := SimulationWorld.new()
+	(cancel_world.factions[1] as FactionState).ore = 1000
+	var assault := ProduceUnitCommand.new(cancel_world.allocate_command_id(), 1, GameCommand.IssuerKind.PLAYER, 0, SimulationWorld.PLAYER_FACTORY_ID, &"assault_vehicle")
+	cancel_world.submit_command(assault)
+	cancel_world.advance_tick()
+	var cancel_active := CancelProductionCommand.new(cancel_world.allocate_command_id(), 1, GameCommand.IssuerKind.PLAYER, cancel_world.current_tick, SimulationWorld.PLAYER_FACTORY_ID, 0)
+	_expect(cancel_world.submit_command(cancel_active).is_accepted(), "player should be able to cancel active production", failures)
+	cancel_world.advance_tick()
+	_expect((cancel_world.factions[1] as FactionState).ore == 937, "active cancellation should refund 75 percent of the paid 250 ore", failures)
+
+	var rally_world := SimulationWorld.new()
+	var rally_position := rally_world.logic_grid.cell_to_world(Vector2i(24, 12))
+	var rally := SetRallyPointCommand.new(rally_world.allocate_command_id(), 1, GameCommand.IssuerKind.PLAYER, 0, SimulationWorld.PLAYER_FACTORY_ID, rally_position)
+	_expect(rally_world.submit_command(rally).is_accepted(), "reachable production rally point should validate", failures)
+	rally_world.advance_tick()
+	var rally_factory := rally_world.buildings[SimulationWorld.PLAYER_FACTORY_ID] as BuildingState
+	_expect(rally_factory.production_rally_position == rally_position, "rally point should apply only at the authoritative tick boundary", failures)
+	rally_world.submit_command(ProduceUnitCommand.new(rally_world.allocate_command_id(), 1, GameCommand.IssuerKind.PLAYER, rally_world.current_tick, rally_factory.entity_id, &"scout_vehicle"))
+	for _tick in range(22):
+		rally_world.advance_tick()
+	var rallied_unit := rally_world.units.get(1100) as UnitState
+	_expect(rallied_unit != null and rallied_unit.has_move_target and rallied_unit.move_target == rally_position, "completed units should automatically path toward the configured rally point", failures)
 
 
 func _test_construction_occupancy_and_repair(failures: Array[String]) -> void:
