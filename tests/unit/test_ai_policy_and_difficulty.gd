@@ -5,12 +5,161 @@ extends RefCounted
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_friendly_agent_authorization(failures)
+	_test_autonomous_reconnaissance_and_defense_run_in_parallel(failures)
+	_test_autonomous_counterattack_preempts_routine_defense(failures)
+	_test_autonomous_base_threat_triggers_emergency_defense(failures)
+	_test_long_autonomous_run_reclaims_temporary_formations(failures)
 	_test_difficulty_profiles_and_reaction_windows(failures)
 	_test_target_scoring_prefers_combat_threat(failures)
 	_test_observed_composition_changes_production(failures)
 	_test_enemy_production_commitments(failures)
 	_test_chase_limit(failures)
 	return failures
+
+
+func _test_autonomous_reconnaissance_and_defense_run_in_parallel(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	world.set_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, AgentPolicy.Authorization.AUTONOMOUS)
+	world.advance_tick()
+	world.advance_tick()
+	var defense: TaskState
+	var scout_task: TaskState
+	for task_variant in world.tasks.values():
+		var task := task_variant as TaskState
+		if task.agent_id != StrategicTaskSystem.BATTLEFIELD_AGENT_ID:
+			continue
+		if task.kind == TaskState.Kind.DEFEND_AREA:
+			defense = task
+		elif task.kind == TaskState.Kind.SCOUT_AREA:
+			scout_task = task
+	_expect(defense != null and scout_task != null, "autonomous battlefield AI should run routine defense and reconnaissance in parallel", failures)
+	if defense == null or scout_task == null:
+		return
+	_expect(not _ids_overlap(defense.participant_entity_ids, scout_task.participant_entity_ids), "parallel autonomous tasks must not assign one unit to conflicting work", failures)
+	_expect(not world.pathfinder.find_path((world.units[3] as UnitState).position, scout_task.target_position).is_empty(), "autonomous reconnaissance should choose a reachable frontier", failures)
+	var initial_position := (world.units[3] as UnitState).position
+	var furthest_distance := 0.0
+	for _tick in range(80):
+		world.advance_tick()
+		furthest_distance = maxf(furthest_distance, (world.units[3] as UnitState).position.distance_to(initial_position))
+	_expect(furthest_distance >= 96.0, "autonomous scout should make visible progress toward its reconnaissance area", failures)
+	_expect(scout_task.lifecycle in [TaskState.Lifecycle.COMPLETED, TaskState.Lifecycle.EXECUTING], "reachable reconnaissance should not become permanently blocked", failures)
+
+
+func _test_autonomous_counterattack_preempts_routine_defense(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	world.set_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, AgentPolicy.Authorization.AUTONOMOUS)
+	world.advance_tick()
+	world.advance_tick()
+	var routine_defense: TaskState
+	var scout_task: TaskState
+	for task_variant in world.tasks.values():
+		var task := task_variant as TaskState
+		if task.kind == TaskState.Kind.DEFEND_AREA:
+			routine_defense = task
+		elif task.kind == TaskState.Kind.SCOUT_AREA:
+			scout_task = task
+	if routine_defense == null or scout_task == null:
+		_expect(false, "counterattack fixture requires autonomous defense and scout tasks", failures)
+		return
+	var scout := world.units[scout_task.participant_entity_ids[0]] as UnitState
+	var scout_formation := world.formations[scout_task.formation_id] as FormationState
+	scout.position = world.logic_grid.cell_to_world(Vector2i(38, 28))
+	scout_formation.anchor_position = scout.position
+	scout_formation.is_moving = false
+	var enemy := world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	enemy.position = scout.position + Vector2(64.0, 0.0)
+	world._update_faction_knowledge()
+	var attack_task: TaskState
+	for _tick in range(12):
+		world.advance_tick()
+		for task_variant in world.tasks.values():
+			var task := task_variant as TaskState
+			if task.kind == TaskState.Kind.ATTACK_TARGET and task.target_entity_id == enemy.entity_id and task.lifecycle == TaskState.Lifecycle.EXECUTING:
+				attack_task = task
+		if attack_task != null:
+			break
+	_expect(attack_task != null, "autonomous AI should create a counterattack shortly after a scout reveals a distant hostile", failures)
+	_expect(routine_defense.lifecycle == TaskState.Lifecycle.CANCELLED, "counterattack should legally preempt lower-priority routine defense", failures)
+	if attack_task != null:
+		for _tick in range(3):
+			world.advance_tick()
+		var responding := false
+		for entity_id in attack_task.participant_entity_ids:
+			var unit := world.units[entity_id] as UnitState
+			responding = responding or unit.attack_target_entity_id == enemy.entity_id or unit.has_move_target or (world.formations[attack_task.formation_id] as FormationState).is_moving
+		_expect(responding, "counterattack participants should pursue or engage through the authoritative command chain", failures)
+
+
+func _test_autonomous_base_threat_triggers_emergency_defense(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	var base := world.buildings[SimulationWorld.PLAYER_COMMAND_CENTER_ID] as BuildingState
+	var enemy := world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	enemy.position = base.position + Vector2(96.0, 0.0)
+	world._update_faction_knowledge()
+	world.set_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, AgentPolicy.Authorization.AUTONOMOUS)
+	for _tick in range(4):
+		world.advance_tick()
+	var emergency_defense: TaskState
+	for task_variant in world.tasks.values():
+		var task := task_variant as TaskState
+		if task.kind == TaskState.Kind.DEFEND_AREA and task.priority == SimulationWorld.AUTONOMY_PRIORITY_BASE_THREAT:
+			emergency_defense = task
+			break
+	_expect(emergency_defense != null, "visible hostiles near the command center should trigger emergency defense", failures)
+	if emergency_defense != null:
+		var has_response := false
+		for entity_id in emergency_defense.participant_entity_ids:
+			var unit := world.units[entity_id] as UnitState
+			has_response = has_response or unit.attack_target_entity_id == enemy.entity_id
+		_expect(has_response, "emergency defenders should issue the same authoritative attack effect as player units", failures)
+		var scout_task: TaskState
+		for task_variant in world.tasks.values():
+			var task := task_variant as TaskState
+			if task.kind == TaskState.Kind.SCOUT_AREA and task.lifecycle == TaskState.Lifecycle.EXECUTING:
+				scout_task = task
+				break
+		if scout_task != null:
+			var scout := world.units[scout_task.participant_entity_ids[0]] as UnitState
+			var scout_formation := world.formations[scout_task.formation_id] as FormationState
+			scout.position = world.logic_grid.cell_to_world(Vector2i(40, 28))
+			scout_formation.anchor_position = scout.position
+			scout_formation.is_moving = false
+			enemy.position = scout.position + Vector2(64.0, 0.0)
+			world._update_faction_knowledge()
+			var redeployed := false
+			for _tick in range(12):
+				world.advance_tick()
+				for task_variant in world.tasks.values():
+					var task := task_variant as TaskState
+					if task.kind == TaskState.Kind.ATTACK_TARGET and task.target_entity_id == enemy.entity_id and task.lifecycle == TaskState.Lifecycle.EXECUTING:
+						redeployed = true
+				if redeployed:
+					break
+			_expect(redeployed, "AI should leave emergency defense promptly after the base threat moves to a distant observed area", failures)
+
+
+func _test_long_autonomous_run_reclaims_temporary_formations(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	world.set_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, AgentPolicy.Authorization.AUTONOMOUS)
+	for _tick in range(600):
+		world.advance_tick()
+	_expect(world.formations.size() <= 6, "completed autonomous task formations should be reclaimed instead of accumulating every decision cycle", failures)
+	var active_participants: Dictionary = {}
+	for task_variant in world.tasks.values():
+		var task := task_variant as TaskState
+		if task.lifecycle not in [TaskState.Lifecycle.WAITING, TaskState.Lifecycle.PREPARING, TaskState.Lifecycle.EXECUTING, TaskState.Lifecycle.PAUSED, TaskState.Lifecycle.BLOCKED]:
+			continue
+		for entity_id in task.participant_entity_ids:
+			_expect(not active_participants.has(entity_id), "long autonomous run must preserve exclusive ownership per unit", failures)
+			active_participants[entity_id] = task.task_id
+
+
+func _ids_overlap(first: Array[int], second: Array[int]) -> bool:
+	for entity_id in first:
+		if second.has(entity_id):
+			return true
+	return false
 
 
 func _test_friendly_agent_authorization(failures: Array[String]) -> void:

@@ -46,6 +46,7 @@ var engagement_state: EngagementState = EngagementState.NONE
 var order_destination: Vector2
 var order_target_entity_id: int = 0
 var pursuit_target_cell: Vector2i = Vector2i(-1, -1)
+var last_repath_tick: int = -1000000
 
 
 func _init(new_formation_id: int, new_member_entity_ids: Array[int], new_anchor_position: Vector2) -> void:

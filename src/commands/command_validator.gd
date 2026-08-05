@@ -397,10 +397,23 @@ func _validate_strategic_order(
 	tasks: Dictionary
 ) -> CommandValidationResult:
 	var requested_industrial := command.order_kind == StrategicOrderCommand.OrderKind.DEVELOP_RESOURCE
+	var requested_participants := _strategic_participant_ids(command, units, formations)
 	for task_variant in tasks.values():
 		var task := task_variant as TaskState
 		var task_industrial := task.kind == TaskState.Kind.DEVELOP_RESOURCE
-		if task.kind != TaskState.Kind.FORMATION_MOVE_TEST and task.faction_id in [0, command.issuer_id] and task_industrial == requested_industrial and task.lifecycle in [TaskState.Lifecycle.WAITING, TaskState.Lifecycle.PREPARING, TaskState.Lifecycle.EXECUTING, TaskState.Lifecycle.PAUSED, TaskState.Lifecycle.BLOCKED]:
+		if task.kind == TaskState.Kind.FORMATION_MOVE_TEST or task.faction_id not in [0, command.issuer_id] or task.lifecycle not in [TaskState.Lifecycle.WAITING, TaskState.Lifecycle.PREPARING, TaskState.Lifecycle.EXECUTING, TaskState.Lifecycle.PAUSED, TaskState.Lifecycle.BLOCKED]:
+			continue
+		if requested_industrial and task_industrial:
+			return _rejected(CommandValidationResult.Reason.TASK_CONFLICT)
+		if requested_industrial or task_industrial or not _participant_sets_overlap(requested_participants, task.participant_entity_ids):
+			continue
+		var may_preempt := (
+			command.issuer_kind == GameCommand.IssuerKind.AGENT
+			and command.agent_id == task.agent_id
+			and task.requires_proactive_authorization
+			and (command.strategic_priority > task.priority or command.replaces_task_id == task.task_id)
+		)
+		if not may_preempt:
 			return _rejected(CommandValidationResult.Reason.TASK_CONFLICT)
 	match command.order_kind:
 		StrategicOrderCommand.OrderKind.DEVELOP_RESOURCE:
@@ -421,7 +434,9 @@ func _validate_strategic_order(
 			if not formations.has(command.formation_id):
 				return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 			var formation := formations[command.formation_id] as FormationState
-			var probe := FormationMoveCommand.new(command.command_id, command.issuer_id, command.issuer_kind, command.issued_tick, formation.leader_entity_id, formation.formation_id, command.target_position)
+			# A strategic order claims units before its subordinate Agent commands exist.
+			# This probe validates ownership, capability and path only.
+			var probe := FormationMoveCommand.new(command.command_id, command.issuer_id, GameCommand.IssuerKind.PLAYER, command.issued_tick, formation.leader_entity_id, formation.formation_id, command.target_position)
 			return _validate_formation_move(probe, units, formations, battlefield_bounds, pathfinder)
 		StrategicOrderCommand.OrderKind.ATTACK_TARGET:
 			if command.formation_id == 0:
@@ -429,7 +444,7 @@ func _validate_strategic_order(
 				if not participant_result.is_accepted():
 					return participant_result
 				for entity_id in command.participant_entity_ids:
-					var probe := AttackCommand.new(command.command_id, command.issuer_id, command.issuer_kind, command.issued_tick, entity_id, command.objective_entity_id)
+					var probe := AttackCommand.new(command.command_id, command.issuer_id, GameCommand.IssuerKind.PLAYER, command.issued_tick, entity_id, command.objective_entity_id)
 					var attack_result := _validate_attack(probe, units, formations, buildings, faction_knowledge, logic_grid)
 					if not attack_result.is_accepted():
 						return attack_result
@@ -437,13 +452,42 @@ func _validate_strategic_order(
 			if not formations.has(command.formation_id):
 				return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 			var formation := formations[command.formation_id] as FormationState
-			var probe := AttackCommand.new(command.command_id, command.issuer_id, command.issuer_kind, command.issued_tick, formation.leader_entity_id, command.objective_entity_id, formation.formation_id)
+			var probe := AttackCommand.new(command.command_id, command.issuer_id, GameCommand.IssuerKind.PLAYER, command.issued_tick, formation.leader_entity_id, command.objective_entity_id, formation.formation_id)
 			return _validate_attack(probe, units, formations, buildings, faction_knowledge, logic_grid)
 		StrategicOrderCommand.OrderKind.SCOUT_AREA:
 			if command.target_radius <= 0.0 or not _is_valid_position(command.target_position, battlefield_bounds):
 				return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
 			return _validate_strategic_participants(command, units, battlefield_bounds, pathfinder, true)
 	return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+
+
+func _strategic_participant_ids(command: StrategicOrderCommand, units: Dictionary, formations: Dictionary) -> Array[int]:
+	var result: Array[int] = []
+	if command.order_kind == StrategicOrderCommand.OrderKind.DEVELOP_RESOURCE:
+		return result
+	var candidates: Array[int] = []
+	if command.formation_id != 0 and formations.has(command.formation_id):
+		candidates.assign((formations[command.formation_id] as FormationState).member_entity_ids)
+	else:
+		candidates.assign(command.participant_entity_ids)
+	for entity_id in candidates:
+		var unit := units.get(entity_id) as UnitState
+		if unit == null or not unit.enabled:
+			continue
+		if command.order_kind == StrategicOrderCommand.OrderKind.SCOUT_AREA:
+			if unit.definition_id == &"scout_vehicle":
+				result.append(entity_id)
+		elif unit.can_attack and unit.can_accept_attack_orders and not unit.can_harvest and not unit.can_construct:
+			result.append(entity_id)
+	result.sort()
+	return result
+
+
+func _participant_sets_overlap(first: Array[int], second: Array[int]) -> bool:
+	for entity_id in first:
+		if second.has(entity_id):
+			return true
+	return false
 
 
 func _validate_strategic_participants(

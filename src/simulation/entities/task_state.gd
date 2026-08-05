@@ -70,6 +70,9 @@ var progress_target: int = 0
 var baseline_value: int = 0
 var expected_unit_count: int = 0
 var discovered_contact_count: int = 0
+var last_progress_position: Vector2
+var ticks_without_progress: int = 0
+var replan_attempts: int = 0
 var last_detail: String = ""
 var requires_proactive_authorization: bool = false
 

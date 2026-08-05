@@ -34,7 +34,13 @@ const INDUSTRIAL_POLICY: AgentPolicy = preload("res://data/ai/industrial_assiste
 const BATTLEFIELD_POLICY: AgentPolicy = preload("res://data/ai/battlefield_assisted.tres")
 const ENEMY_POLICY: AgentPolicy = preload("res://data/ai/enemy_autonomous.tres")
 const WRECK_LIFETIME_TICKS := 70
-const FRIENDLY_AUTONOMY_INTERVAL_TICKS := 20
+const FRIENDLY_AUTONOMY_INTERVAL_TICKS := 5
+const FRIENDLY_DEFENSE_RADIUS := 448.0
+const FRIENDLY_SCOUT_RADIUS := 96.0
+const AUTONOMY_PRIORITY_SCOUT := 20
+const AUTONOMY_PRIORITY_DEFEND := 40
+const AUTONOMY_PRIORITY_ATTACK := 80
+const AUTONOMY_PRIORITY_BASE_THREAT := 100
 
 var current_tick: int = 0
 var units: Dictionary = {}
@@ -359,8 +365,8 @@ func _advance_friendly_autonomy() -> void:
 	if industrial_policy != null and industrial_policy.allows_proactive_tasks() and not _has_open_task_for_agent(industrial_policy.agent_id):
 		_submit_autonomous_industrial_order(industrial_policy)
 	var battlefield_policy := agent_policies.get(StrategicTaskSystem.BATTLEFIELD_AGENT_ID) as AgentPolicy
-	if battlefield_policy != null and battlefield_policy.allows_proactive_tasks() and not _has_open_task_for_agent(battlefield_policy.agent_id):
-		_submit_autonomous_battlefield_order(battlefield_policy)
+	if battlefield_policy != null and battlefield_policy.allows_proactive_tasks():
+		_submit_autonomous_battlefield_orders(battlefield_policy)
 
 
 func _has_open_task_for_agent(agent_id: int) -> bool:
@@ -388,45 +394,178 @@ func _submit_autonomous_industrial_order(policy: AgentPolicy) -> void:
 	submit_command(command)
 
 
-func _submit_autonomous_battlefield_order(policy: AgentPolicy) -> void:
-	var formation := formations.get(DEFAULT_FORMATION_ID) as FormationState
-	if formation == null or formation.member_entity_ids.is_empty():
-		return
+func _submit_autonomous_battlefield_orders(policy: AgentPolicy) -> void:
 	var snapshot := create_faction_snapshot(policy.faction_id)
-	var best_target: UnitSnapshot
+	var base_position := _faction_base_position(policy.faction_id)
+	var contact := _best_visible_hostile(snapshot, base_position)
+	var open_combat_task := _find_open_battlefield_task(policy.agent_id, false)
+	var combat_ids := _autonomous_combat_units(policy.faction_id, open_combat_task)
+	if not contact.is_empty() and not combat_ids.is_empty():
+		var target_position := contact["position"] as Vector2
+		var target_id := int(contact["entity_id"])
+		var threatens_base := target_position.distance_to(base_position) <= FRIENDLY_DEFENSE_RADIUS
+		if threatens_base:
+			if open_combat_task == null or open_combat_task.kind != TaskState.Kind.DEFEND_AREA or open_combat_task.priority < AUTONOMY_PRIORITY_BASE_THREAT:
+				_submit_autonomous_defense(policy, combat_ids, base_position, AUTONOMY_PRIORITY_BASE_THREAT, open_combat_task.task_id if open_combat_task != null else 0)
+		elif open_combat_task == null or open_combat_task.kind != TaskState.Kind.ATTACK_TARGET or open_combat_task.target_entity_id != target_id:
+			_submit_autonomous_attack(policy, combat_ids, target_id, target_position, open_combat_task.task_id if open_combat_task != null else 0)
+	elif open_combat_task == null and not combat_ids.is_empty():
+		_submit_autonomous_defense(policy, combat_ids, base_position, AUTONOMY_PRIORITY_DEFEND)
+
+	if _find_open_battlefield_task(policy.agent_id, true) == null:
+		var scout := _first_available_autonomous_unit(policy.faction_id, &"scout_vehicle")
+		if scout != null:
+			var scout_target := find_reachable_scout_target(policy.faction_id, scout.position)
+			if not scout_target.is_equal_approx(scout.position):
+				var scout_command := StrategicOrderCommand.new(
+					allocate_command_id(), policy.faction_id, current_tick,
+					StrategicOrderCommand.OrderKind.SCOUT_AREA, 0, 0,
+					scout_target, FRIENDLY_SCOUT_RADIUS, GameCommand.IssuerKind.AGENT
+				)
+				scout_command.agent_id = policy.agent_id
+				scout_command.strategic_priority = AUTONOMY_PRIORITY_SCOUT
+				scout_command.participant_entity_ids.assign([scout.entity_id])
+				submit_command(scout_command)
+
+
+func _submit_autonomous_defense(policy: AgentPolicy, participant_ids: Array[int], position: Vector2, priority: int, replaces_task_id: int = 0) -> void:
+	var command := StrategicOrderCommand.new(
+		allocate_command_id(), policy.faction_id, current_tick,
+		StrategicOrderCommand.OrderKind.DEFEND_AREA, 0, 0,
+		position, FRIENDLY_DEFENSE_RADIUS, GameCommand.IssuerKind.AGENT
+	)
+	command.agent_id = policy.agent_id
+	command.strategic_priority = priority
+	command.replaces_task_id = replaces_task_id
+	command.participant_entity_ids.assign(participant_ids)
+	submit_command(command)
+
+
+func _submit_autonomous_attack(policy: AgentPolicy, participant_ids: Array[int], target_id: int, target_position: Vector2, replaces_task_id: int = 0) -> void:
+	var command := StrategicOrderCommand.new(
+		allocate_command_id(), policy.faction_id, current_tick,
+		StrategicOrderCommand.OrderKind.ATTACK_TARGET, 0, target_id,
+		target_position, 0.0, GameCommand.IssuerKind.AGENT
+	)
+	command.agent_id = policy.agent_id
+	command.strategic_priority = AUTONOMY_PRIORITY_ATTACK
+	command.replaces_task_id = replaces_task_id
+	command.participant_entity_ids.assign(participant_ids)
+	submit_command(command)
+
+
+func _find_open_battlefield_task(agent_id: int, scout_task: bool) -> TaskState:
+	var task_ids := tasks.keys()
+	task_ids.sort()
+	for task_id in task_ids:
+		var task := tasks[task_id] as TaskState
+		if task.agent_id != agent_id or not _is_open_task(task):
+			continue
+		if (task.kind == TaskState.Kind.SCOUT_AREA) == scout_task and task.kind != TaskState.Kind.DEVELOP_RESOURCE:
+			return task
+	return null
+
+
+func _is_open_task(task: TaskState) -> bool:
+	return task.lifecycle in [TaskState.Lifecycle.WAITING, TaskState.Lifecycle.PREPARING, TaskState.Lifecycle.EXECUTING, TaskState.Lifecycle.PAUSED, TaskState.Lifecycle.BLOCKED]
+
+
+func _autonomous_combat_units(faction_id: int, current_task: TaskState) -> Array[int]:
+	var result: Array[int] = []
+	var unit_ids := units.keys()
+	unit_ids.sort()
+	for entity_id in unit_ids:
+		var unit := units[entity_id] as UnitState
+		if not unit.enabled or unit.faction_id != faction_id or not unit.can_attack or not unit.can_accept_attack_orders:
+			continue
+		if unit.can_harvest or unit.can_construct or unit.definition_id == &"scout_vehicle" or unit.control_state == UnitState.ControlState.TEMPORARILY_OVERRIDDEN:
+			continue
+		if unit.assigned_task_id == 0 or current_task != null and unit.assigned_task_id == current_task.task_id:
+			result.append(unit.entity_id)
+	return result
+
+
+func _first_available_autonomous_unit(faction_id: int, definition_id: StringName) -> UnitState:
+	var unit_ids := units.keys()
+	unit_ids.sort()
+	for entity_id in unit_ids:
+		var unit := units[entity_id] as UnitState
+		if unit.enabled and unit.faction_id == faction_id and unit.definition_id == definition_id and unit.assigned_task_id == 0 and unit.control_state != UnitState.ControlState.TEMPORARILY_OVERRIDDEN:
+			return unit
+	return null
+
+
+func _faction_base_position(faction_id: int) -> Vector2:
+	var building_ids := buildings.keys()
+	building_ids.sort()
+	for building_id in building_ids:
+		var building := buildings[building_id] as BuildingState
+		if building.enabled and building.faction_id == faction_id and building.definition_id == &"command_center":
+			return building.rally_position
+	for unit_variant in units.values():
+		var unit := unit_variant as UnitState
+		if unit.enabled and unit.faction_id == faction_id:
+			return unit.position
+	return logic_grid.cell_to_world(Vector2i(1, 1))
+
+
+func _best_visible_hostile(snapshot: WorldSnapshot, origin: Vector2) -> Dictionary:
+	var best: Dictionary = {}
 	var best_distance := INF
 	for contact in snapshot.units:
-		if contact.faction_id == policy.faction_id or not contact.enabled or not contact.is_visible_to_local_player:
+		if contact.faction_id == snapshot.observer_faction_id or not contact.enabled or not contact.is_visible_to_local_player:
 			continue
-		var distance := formation.anchor_position.distance_squared_to(contact.position)
-		if distance < best_distance or is_equal_approx(distance, best_distance) and (best_target == null or contact.entity_id < best_target.entity_id):
-			best_target = contact
+		var distance := origin.distance_squared_to(contact.position)
+		if distance < best_distance or is_equal_approx(distance, best_distance) and (best.is_empty() or contact.entity_id < int(best["entity_id"])):
+			best = {"entity_id": contact.entity_id, "position": contact.position}
 			best_distance = distance
-	var command: StrategicOrderCommand
-	if best_target != null:
-		command = StrategicOrderCommand.new(
-			allocate_command_id(), policy.faction_id, current_tick,
-			StrategicOrderCommand.OrderKind.ATTACK_TARGET, formation.formation_id, best_target.entity_id, best_target.position, 0.0,
-			GameCommand.IssuerKind.AGENT
-		)
-	else:
-		var scout_ids: Array[int] = []
-		for unit_variant in units.values():
-			var unit := unit_variant as UnitState
-			if unit.enabled and unit.faction_id == policy.faction_id and unit.definition_id == &"scout_vehicle" and unit.assigned_task_id == 0:
-				scout_ids.append(unit.entity_id)
-				break
-		if scout_ids.is_empty():
-			return
-		command = StrategicOrderCommand.new(
-			allocate_command_id(), policy.faction_id, current_tick,
-			StrategicOrderCommand.OrderKind.SCOUT_AREA, 0, 0,
-			logic_grid.cell_to_world(Vector2i(70, 42)), 224.0,
-			GameCommand.IssuerKind.AGENT
-		)
-		command.participant_entity_ids.assign(scout_ids)
-	command.agent_id = policy.agent_id
-	submit_command(command)
+	for contact in snapshot.buildings:
+		if contact.faction_id == snapshot.observer_faction_id or not contact.enabled or not contact.is_visible:
+			continue
+		var distance := origin.distance_squared_to(contact.position)
+		if distance < best_distance or is_equal_approx(distance, best_distance) and (best.is_empty() or contact.entity_id < int(best["entity_id"])):
+			best = {"entity_id": contact.entity_id, "position": contact.position}
+			best_distance = distance
+	return best
+
+
+func find_reachable_scout_target(faction_id: int, origin: Vector2, excluded_position: Vector2 = Vector2(-1.0, -1.0)) -> Vector2:
+	_ensure_faction_knowledge(faction_id)
+	var knowledge := faction_knowledge[faction_id] as FactionKnowledge
+	var origin_cell := logic_grid.world_to_cell(origin)
+	var base_cell := logic_grid.world_to_cell(_faction_base_position(faction_id))
+	var map_center := Vector2(LogicGrid.GRID_SIZE) * 0.5
+	var exploration_heading := (map_center - Vector2(base_cell)).normalized()
+	var candidates: Array[Vector2i] = []
+	for y in range(LogicGrid.GRID_SIZE.y):
+		for x in range(LogicGrid.GRID_SIZE.x):
+			var cell := Vector2i(x, y)
+			if knowledge.get_cell_state(cell) != FactionKnowledge.CellState.UNEXPLORED or logic_grid.is_blocked(cell):
+				continue
+			if _is_exploration_frontier(knowledge, cell):
+				candidates.append(cell)
+	candidates.sort_custom(func(first: Vector2i, second: Vector2i) -> bool:
+		var first_offset := Vector2(first - origin_cell)
+		var second_offset := Vector2(second - origin_cell)
+		var first_score := first_offset.length() - first_offset.dot(exploration_heading) * 0.35
+		var second_score := second_offset.length() - second_offset.dot(exploration_heading) * 0.35
+		return first_score < second_score or (is_equal_approx(first_score, second_score) and (first.y < second.y or first.y == second.y and first.x < second.x))
+	)
+	for index in range(mini(candidates.size(), 32)):
+		var target := logic_grid.cell_to_world(candidates[index])
+		if target.distance_to(excluded_position) <= LogicGrid.CELL_SIZE:
+			continue
+		if not pathfinder.find_path(origin, target).is_empty():
+			return target
+	return origin
+
+
+func _is_exploration_frontier(knowledge: FactionKnowledge, cell: Vector2i) -> bool:
+	for offset in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+		var neighbor: Vector2i = cell + offset
+		if logic_grid.is_in_bounds(neighbor) and knowledge.get_cell_state(neighbor) != FactionKnowledge.CellState.UNEXPLORED:
+			return true
+	return false
 
 
 func _is_direct_player_order(command: GameCommand) -> bool:
@@ -749,30 +888,34 @@ func _update_combat_orders() -> void:
 				_resume_formation_route(formation)
 			continue
 		var target_position := get_entity_position(target_id)
-		var all_in_range := true
+		var members_out_of_range := 0
 		for entity_id in formation.member_entity_ids:
 			var member := units[entity_id] as UnitState
-			if member.enabled and member.following_formation and member.formation_id == formation.formation_id and member.position.distance_to(target_position) > member.attack_range:
-				all_in_range = false
-				break
-		if all_in_range:
+			if not member.enabled or not member.following_formation or member.formation_id != formation.formation_id or not member.can_attack:
+				continue
+			# Every member owns its target immediately; weapon range only decides
+			# whether the formation must keep closing the distance.
+			member.attack_target_entity_id = target_id
+			if member.position.distance_to(target_position) > member.attack_range:
+				members_out_of_range += 1
+		if members_out_of_range == 0:
 			formation.engagement_state = FormationState.EngagementState.ENGAGING
 			formation.is_moving = false
 			formation.path = PackedVector2Array()
-			for entity_id in formation.member_entity_ids:
-				var member := units[entity_id] as UnitState
-				if member.enabled and member.following_formation and member.formation_id == formation.formation_id:
-					member.attack_target_entity_id = target_id
 		else:
 			formation.engagement_state = FormationState.EngagementState.PURSUING
 			if formation.order_kind == FormationState.OrderKind.ATTACK_TARGET:
 				var destination := get_attack_destination(target_id, formation.anchor_position)
-				if formation.pursuit_target_cell != logic_grid.world_to_cell(destination) or not formation.is_moving:
+				var destination_cell := logic_grid.world_to_cell(destination)
+				var target_moved := formation.pursuit_target_cell != destination_cell
+				var repath_due := current_tick - formation.last_repath_tick >= 5
+				if target_moved or not formation.is_moving and repath_due:
 					formation.target_position = destination
 					formation.path = pathfinder.find_path(formation.anchor_position, destination)
 					formation.path_index = 1
 					formation.is_moving = formation.path.size() > 1
-					formation.pursuit_target_cell = logic_grid.world_to_cell(destination)
+					formation.pursuit_target_cell = destination_cell
+					formation.last_repath_tick = current_tick
 	_update_individual_combat_orders()
 
 
@@ -1194,6 +1337,7 @@ func _start_unit_path_to_building(unit: UnitState, building: BuildingState) -> v
 
 
 func _apply_strategic_order(command: StrategicOrderCommand) -> void:
+	_preempt_autonomous_tasks_for(command)
 	if command.order_kind in [StrategicOrderCommand.OrderKind.DEFEND_AREA, StrategicOrderCommand.OrderKind.ATTACK_TARGET]:
 		_detach_noncombat_members(command.formation_id)
 	var resolved_formation_id := command.formation_id
@@ -1230,6 +1374,7 @@ func _apply_strategic_order(command: StrategicOrderCommand) -> void:
 	task.target_entity_id = command.objective_entity_id
 	task.target_position = command.target_position
 	task.target_radius = command.target_radius
+	task.priority = command.strategic_priority if command.strategic_priority > 0 else _default_task_priority(kind)
 	task.accepted_tick = current_tick
 	task.requires_proactive_authorization = command.issuer_kind == GameCommand.IssuerKind.AGENT
 	task.progress_target = 2 if kind == TaskState.Kind.DEVELOP_RESOURCE else (StrategicTaskSystem.SCOUT_OBSERVE_TICKS if kind == TaskState.Kind.SCOUT_AREA else StrategicTaskSystem.DEFEND_HOLD_TICKS)
@@ -1239,6 +1384,8 @@ func _apply_strategic_order(command: StrategicOrderCommand) -> void:
 	elif resolved_formation_id != 0:
 		var formation := formations[resolved_formation_id] as FormationState
 		task.route = pathfinder.find_path(formation.anchor_position, command.target_position)
+		if kind == TaskState.Kind.SCOUT_AREA:
+			task.last_progress_position = formation.anchor_position
 	task.set_lifecycle(TaskState.Lifecycle.EXECUTING, current_tick)
 	task.set_phase(TaskState.Phase.PREPARING, current_tick, "Assigned to %s" % ("industrial supervisor" if agent_id == StrategicTaskSystem.INDUSTRIAL_AGENT_ID else "battlefield commander"))
 	tasks[task.task_id] = task
@@ -1249,6 +1396,55 @@ func _apply_strategic_order(command: StrategicOrderCommand) -> void:
 		unit.assigned_task_id = task.task_id
 		unit.original_formation_id = unit.formation_id
 	events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.TASK_STATE_CHANGED, task.task_id, "EXECUTING:%s" % TaskState.Kind.keys()[task.kind]))
+
+
+func _preempt_autonomous_tasks_for(command: StrategicOrderCommand) -> void:
+	if command.issuer_kind != GameCommand.IssuerKind.AGENT or command.strategic_priority <= 0:
+		return
+	var requested_participants := _strategic_command_participants(command)
+	var task_ids := tasks.keys()
+	task_ids.sort()
+	for task_id in task_ids:
+		var task := tasks[task_id] as TaskState
+		if task.agent_id != command.agent_id or task.faction_id != command.issuer_id or not task.requires_proactive_authorization or not _is_open_task(task):
+			continue
+		var explicitly_replaced := command.replaces_task_id == task.task_id
+		if (not explicitly_replaced and task.priority >= command.strategic_priority) or not _participant_ids_overlap(requested_participants, task.participant_entity_ids):
+			continue
+		task.set_lifecycle(TaskState.Lifecycle.CANCELLED, current_tick, TaskState.BlockedReason.NONE, "Replaced by a new autonomous battlefield decision")
+		task.set_phase(TaskState.Phase.DONE, current_tick, "Replaced by a new autonomous battlefield decision")
+		_stop_task_formation(task)
+		release_task_participants(task)
+		events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.TASK_STATE_CHANGED, task.task_id, "CANCELLED:preempted"))
+
+
+func _strategic_command_participants(command: StrategicOrderCommand) -> Array[int]:
+	var result: Array[int] = []
+	if command.formation_id != 0 and formations.has(command.formation_id):
+		if command.order_kind == StrategicOrderCommand.OrderKind.SCOUT_AREA:
+			return _scout_participants(command.formation_id)
+		return _combat_participants(command.formation_id)
+	result.assign(command.participant_entity_ids)
+	result.sort()
+	return result
+
+
+func _participant_ids_overlap(first: Array[int], second: Array[int]) -> bool:
+	for entity_id in first:
+		if second.has(entity_id):
+			return true
+	return false
+
+
+func _default_task_priority(kind: TaskState.Kind) -> int:
+	match kind:
+		TaskState.Kind.ATTACK_TARGET:
+			return AUTONOMY_PRIORITY_ATTACK
+		TaskState.Kind.DEFEND_AREA:
+			return AUTONOMY_PRIORITY_DEFEND
+		TaskState.Kind.SCOUT_AREA:
+			return AUTONOMY_PRIORITY_SCOUT
+	return 0
 
 
 func _create_task_formation(participant_entity_ids: Array[int]) -> int:
@@ -1299,7 +1495,7 @@ func _stop_task_formation(task: TaskState) -> void:
 	if task.formation_id == 0 or not formations.has(task.formation_id):
 		return
 	var formation := formations[task.formation_id] as FormationState
-	_apply_stop(StopCommand.new(allocate_command_id(), LOCAL_PLAYER_ID, GameCommand.IssuerKind.AGENT, current_tick, formation.leader_entity_id, formation.formation_id))
+	_apply_stop(StopCommand.new(allocate_command_id(), task.faction_id, GameCommand.IssuerKind.AGENT, current_tick, formation.leader_entity_id, formation.formation_id))
 
 
 func release_task_participants(task: TaskState) -> void:
@@ -1453,7 +1649,10 @@ func _apply_stop(command: StopCommand) -> void:
 func _remove_unit_from_formation(unit: UnitState) -> void:
 	var previous_formation_id := unit.formation_id
 	if previous_formation_id != 0 and formations.has(previous_formation_id):
-		(formations[previous_formation_id] as FormationState).remove_member(unit.entity_id)
+		var previous_formation := formations[previous_formation_id] as FormationState
+		previous_formation.remove_member(unit.entity_id)
+		if previous_formation.member_entity_ids.is_empty():
+			formations.erase(previous_formation_id)
 	unit.formation_id = 0
 	unit.formation_slot_id = -1
 	unit.following_formation = false

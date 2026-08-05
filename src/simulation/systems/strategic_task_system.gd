@@ -6,6 +6,9 @@ const BATTLEFIELD_AGENT_ID := 202
 const DEVELOP_DELIVERY_TARGET := EconomySystem.HARVEST_AMOUNT
 const DEFEND_HOLD_TICKS := 60
 const SCOUT_OBSERVE_TICKS := 30
+const SCOUT_STALLED_REPLAN_TICKS := 30
+const SCOUT_PROGRESS_DISTANCE := 8.0
+const SCOUT_MAX_REPLAN_ATTEMPTS := 3
 const RETREAT_SURVIVOR_RATIO := 0.5
 
 
@@ -149,11 +152,14 @@ func _advance_attack_target(task: TaskState, world: SimulationWorld) -> void:
 		if not formation.is_moving:
 			_fail(task, world, "Formation withdrew after reaching the loss threshold")
 		return
-	var known_target := world.create_faction_snapshot(task.faction_id).get_unit(task.target_entity_id)
-	if known_target == null:
+	var faction_snapshot := world.create_faction_snapshot(task.faction_id)
+	var known_unit := faction_snapshot.get_unit(task.target_entity_id)
+	var known_building := faction_snapshot.get_building(task.target_entity_id)
+	if known_unit == null and known_building == null:
 		_block(task, world, TaskState.BlockedReason.INVALID_TARGET, "Target is not present in faction knowledge")
 		return
-	if not known_target.enabled:
+	var target_enabled := known_unit.enabled if known_unit != null else known_building.enabled
+	if not target_enabled:
 		_complete(task, world, "Assigned hostile target destroyed")
 		return
 	if task.phase == TaskState.Phase.PREPARING:
@@ -187,11 +193,28 @@ func _advance_scout_area(task: TaskState, world: SimulationWorld) -> void:
 		_block(task, world, TaskState.BlockedReason.INVALID_TARGET, "Assigned scout formation is unavailable")
 		return
 	var formation := world.formations[task.formation_id] as FormationState
-	if _enabled_participant_count(task, world) == 0:
+	var scout := _first_enabled_participant(task, world, &"scout_vehicle")
+	if scout == null:
 		_block(task, world, TaskState.BlockedReason.INSUFFICIENT_PARTICIPANTS, "No scout units remain")
 		return
 	_update_scout_intelligence(task, world)
 	if formation.anchor_position.distance_to(task.target_position) > task.target_radius:
+		if formation.is_moving:
+			if scout.position.distance_to(task.last_progress_position) >= SCOUT_PROGRESS_DISTANCE:
+				task.last_progress_position = scout.position
+				task.ticks_without_progress = 0
+			else:
+				task.ticks_without_progress += 1
+		if task.ticks_without_progress >= SCOUT_STALLED_REPLAN_TICKS:
+			task.replan_attempts += 1
+			task.ticks_without_progress = 0
+			var replacement := world.find_reachable_scout_target(task.faction_id, scout.position, task.target_position)
+			if replacement.is_equal_approx(scout.position) or task.replan_attempts > SCOUT_MAX_REPLAN_ATTEMPTS:
+				_block(task, world, TaskState.BlockedReason.PATH_UNAVAILABLE, "Scout could not make progress toward a reachable observation area")
+				return
+			task.target_position = replacement
+			task.last_progress_position = scout.position
+			task.set_phase(TaskState.Phase.PREPARING, world.current_tick, "Scout route stalled; selecting a new observation area")
 		if task.phase != TaskState.Phase.MUSTERING or not formation.is_moving:
 			if not _submit_formation_move(task, formation, task.target_position, world):
 				return
@@ -292,6 +315,8 @@ func _enroll_compatible_units(task: TaskState, world: SimulationWorld) -> int:
 			compatible = unit.definition_id == &"scout_vehicle"
 		else:
 			compatible = unit.can_attack and unit.can_accept_attack_orders and not unit.can_harvest and not unit.can_construct
+			if task.requires_proactive_authorization and unit.definition_id == &"scout_vehicle":
+				compatible = false
 		if not compatible:
 			continue
 		if task.formation_id != 0:

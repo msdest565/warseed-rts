@@ -14,6 +14,8 @@ var objective_entity_id: int
 var target_position: Vector2
 var target_radius: float
 var participant_entity_ids: Array[int] = []
+var strategic_priority: int = 0
+var replaces_task_id: int = 0
 
 
 func _init(

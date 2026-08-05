@@ -39,10 +39,12 @@ Clone and open the root `project.godot`. For command-line verification:
 - Rule-driven delayed enemy raid that uses only current visibility or last-seen positions.
 - Data-driven Easy/Normal/Hard/Expert enemy profiles, fair-information target/route scoring, bounded pursuit, retreat hysteresis and observed-composition counters.
 - Friendly industrial/battlefield authorization levels with command gating, in-game recommendations, assisted/delegated reinforcement differences, runtime explanations and basic autonomous task creation.
+- Friendly autonomous battlefield decisions every five ticks, with reachable frontier scouting, concurrent scout/defense ownership, emergency base defense, observed-contact counterattacks and explicit same-Agent task replacement.
+- First-tick formation target assignment, independent mixed-range firing, bounded stationary repathing, stalled-scout replanning and cleanup of empty temporary formations.
 - Automated end-to-end slice covering develop, missile takeover/rejoin, defend, attack and mission completion.
 
 ## Important limits
 
-This is a technical vertical slice, not the complete MVP. Unit repair/support logistics, multi-squad task graphs, patrol/escort/hold commands, resource reservation priorities, production art and real 5-8 minute playtest tuning remain.
+This is a technical vertical slice, not the complete MVP. Unit repair/support logistics, multiple combat squads and general task graphs, patrol/escort/hold commands, resource reservation priorities, production art and real 5-8 minute playtest tuning remain.
 
 The next priority is shared tactical hold/patrol/escort behavior, support logistics, resource reservation priorities and multi-squad task planning. Preserve the authoritative boundary and do not commit `.godot/`, `build/`, logs, screenshots or credentials.

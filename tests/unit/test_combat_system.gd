@@ -8,6 +8,7 @@ func run() -> Array[String]:
 	_test_projectile_snapshot_is_immutable(failures)
 	_test_simultaneous_projectiles_are_deterministic(failures)
 	_test_distant_target_is_pursued_and_repathed(failures)
+	_test_formation_attack_responds_on_first_authoritative_tick(failures)
 	_test_harvester_self_defense_does_not_enable_attack_orders(failures)
 	return failures
 
@@ -88,6 +89,35 @@ func _test_distant_target_is_pursued_and_repathed(failures: Array[String]) -> vo
 			break
 	_expect(target.health < health_before, "pursuer should enter range and deal authoritative projectile damage", failures)
 	_expect(attacker.position.distance_to(target.position) <= attacker.attack_range + attacker.move_speed * SimulationWorld.TICK_SECONDS, "pursuer should stop at weapon range instead of requiring overlap", failures)
+
+
+func _test_formation_attack_responds_on_first_authoritative_tick(failures: Array[String]) -> void:
+	var world := SimulationWorld.new(false)
+	var long_range := UnitState.new(1, Vector2(320.0, 360.0), 160.0, 1)
+	long_range.attack_range = 720.0
+	long_range.attack_damage = 20.0
+	long_range.sight_range = 1200.0
+	var short_range := UnitState.new(2, Vector2(272.0, 316.0), 160.0, 1)
+	short_range.attack_range = 128.0
+	short_range.attack_damage = 20.0
+	short_range.sight_range = 1200.0
+	var target := UnitState.new(3, Vector2(880.0, 360.0), 0.0, 2)
+	target.can_attack = false
+	world.units[1] = long_range
+	world.units[2] = short_range
+	world.units[3] = target
+	var formation := FormationState.new(1, [1, 2], long_range.position)
+	world.formations[formation.formation_id] = formation
+	for unit in [long_range, short_range]:
+		unit.formation_id = formation.formation_id
+		unit.formation_slot_id = formation.get_slot_id(unit.entity_id)
+		unit.following_formation = true
+	var attack := AttackCommand.new(1, 1, GameCommand.IssuerKind.PLAYER, 0, formation.leader_entity_id, target.entity_id, formation.formation_id)
+	_expect(world.submit_command(attack).is_accepted(), "mixed-range formation attack should validate", failures)
+	world.advance_tick()
+	_expect(long_range.attack_target_entity_id == target.entity_id and short_range.attack_target_entity_id == target.entity_id, "every formation member should receive the target on the first authoritative tick", failures)
+	_expect(formation.is_moving and short_range.position.distance_to(target.position) < Vector2(272.0, 316.0).distance_to(target.position), "short-range members should begin pursuing immediately", failures)
+	_expect(not world.projectiles.is_empty(), "a long-range member already in range should fire without waiting for the frontline", failures)
 
 
 func _test_harvester_self_defense_does_not_enable_attack_orders(failures: Array[String]) -> void:
