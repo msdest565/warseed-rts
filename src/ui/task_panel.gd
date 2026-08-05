@@ -270,6 +270,22 @@ func _begin_harvest() -> void:
 		input_controller.harvest_with_selected()
 
 
+func get_hover_context(screen_position: Vector2) -> Dictionary:
+	for index in range(production_buttons.size()):
+		if production_buttons[index].get_global_rect().has_point(screen_position):
+			var definition_id := PRODUCTION_DEFINITIONS[index]
+			return {"key": "unit:%s" % definition_id, "text": GameText.unit_tooltip(definition_id)}
+	for entry in [
+		[build_factory_button, &"automated_factory"],
+		[build_support_button, &"forward_support_station"],
+	]:
+		var button := entry[0] as Button
+		var definition_id := entry[1] as StringName
+		if button.get_global_rect().has_point(screen_position):
+			return {"key": "building:%s" % definition_id, "text": GameText.building_tooltip(definition_id)}
+	return {}
+
+
 func _produce(definition_id: StringName) -> void:
 	if input_controller != null:
 		input_controller.produce_unit(definition_id)

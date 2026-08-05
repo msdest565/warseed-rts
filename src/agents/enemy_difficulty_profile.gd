@@ -26,6 +26,10 @@ enum Difficulty {
 @export_range(10, 1200) var chase_duration_ticks: int = 260
 @export_range(0.0, 1.0) var target_switch_margin: float = 0.12
 @export_range(0.0, 2.0) var composition_reaction_weight: float = 0.65
+@export_range(0, 600) var opening_delay_ticks: int = 120
+@export_range(1, 4) var target_harvester_count: int = 2
+@export_range(2, 12) var raid_force_size: int = 4
+@export_range(2, 16) var combat_reserve_size: int = 6
 
 
 func difficulty_name() -> String:
@@ -42,4 +46,6 @@ func validation_errors() -> PackedStringArray:
 		errors.append("chase duration must cover at least one tactical decision interval")
 	if memory_half_life_ticks <= reaction_delay_ticks:
 		errors.append("contact memory must outlive the configured reaction delay")
+	if combat_reserve_size < raid_force_size:
+		errors.append("combat reserve must be at least as large as the raid force")
 	return errors

@@ -33,8 +33,8 @@ func _initialize() -> void:
 		world.enemy_raid_agent.phase_history.has(EnemyRaidAgent.Phase.RAIDING)
 		and damage_events > 0
 		and enemy_ore.ore_remaining > 0
-		and enemy_ore.ore_remaining < 1800
-		and player_ore.ore_remaining == 1200
+		and enemy_ore.ore_remaining < SimulationWorld.PRIMARY_ORE_CAPACITY
+		and player_ore.ore_remaining == SimulationWorld.PRIMARY_ORE_CAPACITY
 		and enemy_harvester != null
 		and enemy_harvester.can_attack
 	)

@@ -22,4 +22,7 @@ chase_distance = 1088.0
 chase_duration_ticks = 320
 target_switch_margin = 0.08
 composition_reaction_weight = 1.0
-
+opening_delay_ticks = 70
+target_harvester_count = 2
+raid_force_size = 5
+combat_reserve_size = 8

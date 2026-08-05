@@ -12,6 +12,7 @@ extends Node
 @onready var workflow_panel: WorkflowPanel = $HUDLayer/WorkflowPanel
 @onready var debug_layer: DebugLayer = $DebugLayer
 @onready var pause_menu: PauseMenu = $PauseMenu
+@onready var hover_tooltip: HoverTooltip = $HoverTooltip
 
 
 func _ready() -> void:
@@ -52,7 +53,7 @@ func _on_language_changed(_locale: String) -> void:
 	world_presentation.refresh_locale()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	input_controller.prune_selection()
 	world_presentation.set_snapshots(
 		simulation_host.previous_snapshot,
@@ -83,3 +84,48 @@ func _process(_delta: float) -> void:
 			simulation_host.get_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID),
 			simulation_host.get_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID)
 		)
+	_update_hover_tooltip(delta)
+
+
+func _update_hover_tooltip(delta: float) -> void:
+	if pause_menu.backdrop.visible:
+		hover_tooltip.clear()
+		return
+	var mouse_position := get_viewport().get_mouse_position()
+	var context := task_panel.get_hover_context(mouse_position)
+	if context.is_empty() and task_panel.get_global_rect().has_point(mouse_position):
+		hover_tooltip.clear()
+		return
+	if context.is_empty():
+		context = _world_hover_context(input_controller._screen_to_world(mouse_position))
+	hover_tooltip.update_candidate(
+		String(context.get("key", "")), String(context.get("text", "")), mouse_position, delta
+	)
+
+
+func _world_hover_context(world_position: Vector2) -> Dictionary:
+	var snapshot := simulation_host.current_snapshot
+	if snapshot == null:
+		return {}
+	var hit_radius := InputController.HIT_RADIUS_SCREEN / camera_controller.zoom.x
+	var nearest_unit: UnitSnapshot
+	var nearest_distance := INF
+	for unit in snapshot.units:
+		if not unit.enabled or unit.faction_id != SimulationWorld.LOCAL_PLAYER_ID and not unit.is_visible_to_local_player:
+			continue
+		var distance := unit.position.distance_to(world_position)
+		if distance <= hit_radius and distance < nearest_distance:
+			nearest_unit = unit
+			nearest_distance = distance
+	if nearest_unit != null:
+		return {"key": "world-unit:%d" % nearest_unit.entity_id, "text": GameText.unit_tooltip(nearest_unit.definition_id)}
+	for building in snapshot.buildings:
+		if building.enabled and building.position.distance_to(world_position) <= 72.0:
+			return {"key": "world-building:%d" % building.entity_id, "text": GameText.building_tooltip(building.definition_id)}
+	for ore_field in snapshot.ore_fields:
+		if ore_field.position.distance_to(world_position) <= 52.0:
+			return {
+				"key": "ore:%d" % ore_field.entity_id,
+				"text": GameText.t(&"ORE_TOOLTIP") % ore_field.ore_remaining,
+			}
+	return {}

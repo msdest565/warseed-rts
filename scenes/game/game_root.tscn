@@ -1,4 +1,4 @@
-[gd_scene load_steps=24 format=3]
+[gd_scene load_steps=25 format=3]
 
 [ext_resource type="Script" path="res://src/app/game_root.gd" id="1_game_root"]
 [ext_resource type="Script" path="res://src/app/simulation_host.gd" id="2_simulation_host"]
@@ -13,6 +13,7 @@
 [ext_resource type="Script" path="res://src/ui/pause_menu.gd" id="11_pause_menu"]
 [ext_resource type="Script" path="res://src/ui/resource_bar.gd" id="12_resource_bar"]
 [ext_resource type="Script" path="res://src/ui/workflow_panel.gd" id="13_workflow_panel"]
+[ext_resource type="Script" path="res://src/ui/hover_tooltip.gd" id="14_hover_tooltip"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_panel"]
 bg_color = Color(0.025, 0.032, 0.033, 0.97)
@@ -489,6 +490,32 @@ script = ExtResource("9_minimap")
 [node name="DebugLayer" type="CanvasLayer" parent="."]
 visible = false
 script = ExtResource("6_debug")
+
+[node name="HoverTooltip" type="CanvasLayer" parent="."]
+layer = 90
+script = ExtResource("14_hover_tooltip")
+
+[node name="Panel" type="PanelContainer" parent="HoverTooltip"]
+custom_minimum_size = Vector2(310, 0)
+offset_right = 310.0
+offset_bottom = 120.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBox_panel")
+
+[node name="Margin" type="MarginContainer" parent="HoverTooltip/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
+
+[node name="Text" type="Label" parent="HoverTooltip/Panel/Margin"]
+custom_minimum_size = Vector2(286, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.93, 0.9, 1)
+theme_override_font_sizes/font_size = 12
+text = "Context information"
+autowrap_mode = 2
 
 [node name="Panel" type="PanelContainer" parent="DebugLayer"]
 anchors_preset = 1

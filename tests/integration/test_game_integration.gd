@@ -104,6 +104,7 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	var workflow_panel := game.get_node("HUDLayer/WorkflowPanel") as WorkflowPanel
 	var pause_menu := game.get_node("PauseMenu") as PauseMenu
 	var camera := game.get_node("CameraController") as CameraController
+	var hover_tooltip := game.get_node("HoverTooltip") as HoverTooltip
 	host._ready()
 	panel.mission_label = panel.get_node("Margin/Layout/Intel/Mission")
 	panel.task_label = panel.get_node("Margin/Layout/Intel/TaskStatus")
@@ -123,6 +124,9 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	pause_menu.continue_button = pause_menu.get_node("Backdrop/Menu/Content/Continue")
 	pause_menu.exit_button = pause_menu.get_node("Backdrop/Menu/Content/Exit")
 	pause_menu._ready()
+	hover_tooltip.panel = hover_tooltip.get_node("Panel")
+	hover_tooltip.label = hover_tooltip.get_node("Panel/Margin/Text")
+	hover_tooltip._ready()
 	game._ready()
 	camera.zoom = Vector2.ONE
 	var camera_limits := camera.get_center_limits(Vector2(1280.0, 720.0))
@@ -133,6 +137,7 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	_expect(panel.production_buttons.size() == 5, "production section should retain all five unit controls", failures)
 	_expect(panel.build_factory_button.text.contains("300") and panel.production_buttons[4].text.contains("350"), "construction and production controls should expose authoritative ore costs", failures)
 	_expect(workflow_panel != null and workflow_panel.has_node("Margin/Layout/UnitFlows") and workflow_panel.has_node("Margin/Layout/Tasks"), "left workflow panel should expose unit work and delegated tasks", failures)
+	_expect(hover_tooltip != null, "game scene should include the delayed contextual tooltip layer", failures)
 	var panel_rect_720p := Rect2(Vector2(panel.offset_left, 720.0 + panel.offset_top), Vector2(1280.0 + panel.offset_right - panel.offset_left, panel.offset_bottom - panel.offset_top))
 	var minimap_rect_720p := Rect2(Vector2(minimap.offset_left, 720.0 + minimap.offset_top), Vector2(minimap.offset_right - minimap.offset_left, minimap.offset_bottom - minimap.offset_top))
 	_expect(not panel_rect_720p.intersects(minimap_rect_720p), "bottom command panel and minimap should not overlap at 1280x720", failures)
@@ -164,12 +169,20 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	_expect(pause_menu.authorization_help.text.contains("建议") and pause_menu.authorization_help.text.contains("自主"), "Chinese pause menu should explain all four authorization levels", failures)
 	_expect(panel.selection_title_label.text == "当前选择" and panel.strategic_title_label.text == "战略指令" and panel.operations_title_label.text == "工程与控制" and panel.production_title_label.text == "单位生产", "Chinese HUD should localize every command section", failures)
 	_expect(workflow_panel.title_label.text == "当前工作流程", "Chinese HUD should localize the workflow monitor", failures)
+	_expect(GameText.unit_description(&"assault_vehicle").contains("前线作战"), "Chinese unit descriptions should explain battlefield roles", failures)
+	hover_tooltip.update_candidate("unit:assault_vehicle", GameText.unit_tooltip(&"assault_vehicle"), Vector2(400.0, 300.0), 0.5)
+	_expect(not hover_tooltip.panel.visible, "context tooltip should remain hidden before its one-second delay", failures)
+	hover_tooltip.update_candidate("unit:assault_vehicle", GameText.unit_tooltip(&"assault_vehicle"), Vector2(400.0, 300.0), 0.51)
+	_expect(hover_tooltip.panel.visible and hover_tooltip.label.text.contains("突击车"), "context tooltip should appear after the delay with localized details", failures)
+	hover_tooltip.update_candidate("unit:scout_vehicle", GameText.unit_tooltip(&"scout_vehicle"), Vector2(400.0, 300.0), 0.1)
+	_expect(not hover_tooltip.panel.visible, "changing the hovered target should restart the tooltip delay", failures)
 	pause_menu._select_language(1)
 	_expect(TranslationServer.get_locale() == "en", "language menu should switch the runtime locale to English", failures)
 	_expect(pause_menu.title_label.text == "PAUSED" and panel.title_label.text == "COMMAND NETWORK", "English selection should immediately refresh pause menu and HUD", failures)
 	_expect(pause_menu.authorization_help.text.contains("Advisory") and pause_menu.authorization_help.text.contains("Autonomous"), "English pause menu should explain all four authorization levels", failures)
 	_expect(panel.selection_title_label.text == "SELECTION" and panel.strategic_title_label.text == "STRATEGY" and panel.operations_title_label.text == "OPERATIONS" and panel.production_title_label.text == "PRODUCTION", "English HUD should localize every command section", failures)
 	_expect(workflow_panel.title_label.text == "ACTIVE WORKFLOWS", "English HUD should localize the workflow monitor", failures)
+	_expect(GameText.building_description(&"command_center").contains("Economic hub"), "English building descriptions should update with the selected language", failures)
 	(world_faction(host) as FactionState).ore = 120
 	host.current_snapshot = host.world.create_snapshot()
 	input_controller.selected_building_id = SimulationWorld.PLAYER_FACTORY_ID

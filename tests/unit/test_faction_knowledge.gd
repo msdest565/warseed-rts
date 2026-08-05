@@ -140,8 +140,8 @@ func _test_enemy_strategy_phase_machine(failures: Array[String]) -> void:
 	_expect(enemy_factory != null and enemy_factory.operational, "enemy expansion should construct an operational factory", failures)
 	_expect(enemy_support != null and enemy_support.operational, "enemy expansion should construct an operational support station through shared building rules", failures)
 	_expect((world.units[SimulationWorld.ENEMY_HARVESTER_ID] as UnitState).harvest_ore_field_entity_id == SimulationWorld.ENEMY_ORE_FIELD_ID, "enemy economy should use its own real harvester round trip", failures)
-	_expect((world.ore_fields[SimulationWorld.ENEMY_ORE_FIELD_ID] as OreFieldState).ore_remaining < 1800, "enemy economy should extract from the enemy-side ore field", failures)
-	_expect((world.ore_fields[SimulationWorld.DEFAULT_ORE_FIELD_ID] as OreFieldState).ore_remaining == 1200, "enemy harvester must not consume the player-side ore field", failures)
+	_expect((world.ore_fields[SimulationWorld.ENEMY_ORE_FIELD_ID] as OreFieldState).ore_remaining < SimulationWorld.PRIMARY_ORE_CAPACITY, "enemy economy should extract from the enemy-side ore field", failures)
+	_expect((world.ore_fields[SimulationWorld.DEFAULT_ORE_FIELD_ID] as OreFieldState).ore_remaining == SimulationWorld.PRIMARY_ORE_CAPACITY, "enemy harvester must not consume the player-side ore field", failures)
 	world.enemy_raid_agent.phase_started_tick = world.current_tick - EnemyRaidAgent.RAID_DURATION_TICKS
 	world.advance_tick()
 	_expect(world.enemy_raid_agent.phase == EnemyRaidAgent.Phase.RETREATING, "expired raid should transition to retreat", failures)

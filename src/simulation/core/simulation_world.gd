@@ -17,6 +17,10 @@ const ENEMY_COMMAND_CENTER_ID := 2101
 const FIRST_CONSTRUCTED_BUILDING_ID := 2200
 const DEFAULT_ORE_FIELD_ID := 3001
 const ENEMY_ORE_FIELD_ID := 3002
+const PLAYER_EXPANSION_ORE_FIELD_ID := 3003
+const ENEMY_EXPANSION_ORE_FIELD_ID := 3004
+const PRIMARY_ORE_CAPACITY := 10000
+const EXPANSION_ORE_CAPACITY := 8000
 const TEST_AGENT_ID := 101
 const TEST_TASK_ID := 1
 const UNIT_CATALOG: UnitDefinitionCatalog = preload("res://data/units/unit_catalog.tres")
@@ -171,12 +175,14 @@ func _create_default_agent_task() -> void:
 
 func _setup_default_scenario() -> void:
 	factions[LOCAL_PLAYER_ID] = FactionState.new(LOCAL_PLAYER_ID, LOCAL_PLAYER_ID, 500)
-	factions[ENEMY_PLAYER_ID] = FactionState.new(ENEMY_PLAYER_ID, ENEMY_PLAYER_ID, 900)
+	factions[ENEMY_PLAYER_ID] = FactionState.new(ENEMY_PLAYER_ID, ENEMY_PLAYER_ID, 1400)
 	_create_default_formation()
 	_create_default_enemy()
 	_create_default_buildings()
-	ore_fields[DEFAULT_ORE_FIELD_ID] = OreFieldState.new(DEFAULT_ORE_FIELD_ID, logic_grid.cell_to_world(Vector2i(20, 10)), 1200)
-	ore_fields[ENEMY_ORE_FIELD_ID] = OreFieldState.new(ENEMY_ORE_FIELD_ID, logic_grid.cell_to_world(LogicGrid.MAP_DEFINITION.enemy_spawn_cell + Vector2i(-6, 3)), 1800)
+	ore_fields[DEFAULT_ORE_FIELD_ID] = OreFieldState.new(DEFAULT_ORE_FIELD_ID, logic_grid.cell_to_world(Vector2i(20, 10)), PRIMARY_ORE_CAPACITY)
+	ore_fields[ENEMY_ORE_FIELD_ID] = OreFieldState.new(ENEMY_ORE_FIELD_ID, logic_grid.cell_to_world(LogicGrid.MAP_DEFINITION.enemy_spawn_cell + Vector2i(-6, 3)), PRIMARY_ORE_CAPACITY)
+	ore_fields[PLAYER_EXPANSION_ORE_FIELD_ID] = OreFieldState.new(PLAYER_EXPANSION_ORE_FIELD_ID, logic_grid.cell_to_world(Vector2i(34, 22)), EXPANSION_ORE_CAPACITY)
+	ore_fields[ENEMY_EXPANSION_ORE_FIELD_ID] = OreFieldState.new(ENEMY_EXPANSION_ORE_FIELD_ID, logic_grid.cell_to_world(Vector2i(67, 43)), EXPANSION_ORE_CAPACITY)
 
 
 func _create_default_buildings() -> void:

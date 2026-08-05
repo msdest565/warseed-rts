@@ -62,12 +62,13 @@ func set_difficulty_profile(profile: EnemyDifficultyProfile) -> void:
 
 
 func advance(world: SimulationWorld) -> void:
-	if world.current_tick < STRATEGY_START_TICK:
+	if world.current_tick < difficulty_profile.opening_delay_ticks:
 		return
 	_claim_enemy_units(world)
 	_ensure_harvest(world)
 	_maintain_economy_units(world)
 	_maintain_engineering(world)
+	_maintain_combat_reserve(world)
 	var base_threat := _base_threat_score(world)
 	if base_threat > 0.0 and phase not in [Phase.DEFENDING, Phase.RETREATING]:
 		if base_threat_detected_tick < 0:
@@ -94,7 +95,7 @@ func advance(world: SimulationWorld) -> void:
 	last_strategy_tick = world.current_tick
 	match phase:
 		Phase.ECONOMY:
-			if world.current_tick >= STRATEGY_START_TICK:
+			if world.current_tick >= difficulty_profile.opening_delay_ticks:
 				_change_phase(Phase.EXPANSION, world, "Opening economy established")
 		Phase.EXPANSION:
 			_advance_expansion(world)
@@ -176,11 +177,11 @@ func _advance_mustering(world: SimulationWorld) -> void:
 	var knowledge := world.create_faction_snapshot(SimulationWorld.ENEMY_PLAYER_ID)
 	var own_power := _combat_power(combat_units)
 	var known_enemy_power := _visible_enemy_power(knowledge)
-	if combat_units.size() >= RAID_FORCE_SIZE and (known_enemy_power <= 0.0 or own_power >= known_enemy_power * difficulty_profile.required_attack_power_ratio) and world.current_tick >= next_attack_allowed_tick:
+	if combat_units.size() >= difficulty_profile.raid_force_size and (known_enemy_power <= 0.0 or own_power >= known_enemy_power * difficulty_profile.required_attack_power_ratio) and world.current_tick >= next_attack_allowed_tick:
 		_change_phase(Phase.RAIDING, world, "Raid ready: own %.1f vs known %.1f" % [own_power, known_enemy_power])
 		spawned = true
 		return
-	last_decision_reason = "Mustering: %d/%d units, power %.1f/%.1f" % [combat_units.size(), RAID_FORCE_SIZE, own_power, known_enemy_power * difficulty_profile.required_attack_power_ratio]
+	last_decision_reason = "Mustering: %d/%d units, power %.1f/%.1f" % [combat_units.size(), difficulty_profile.raid_force_size, own_power, known_enemy_power * difficulty_profile.required_attack_power_ratio]
 	_submit_production(_next_combat_definition(world), world)
 
 
@@ -239,7 +240,7 @@ func _advance_defending(world: SimulationWorld) -> void:
 
 
 func _ensure_harvest(world: SimulationWorld) -> void:
-	var ore_field := world.ore_fields.get(SimulationWorld.ENEMY_ORE_FIELD_ID) as OreFieldState
+	var ore_field := _active_enemy_ore_field(world)
 	var refinery := world.buildings.get(SimulationWorld.ENEMY_COMMAND_CENTER_ID) as BuildingState
 	if ore_field == null or ore_field.ore_remaining <= 0 or refinery == null or not refinery.enabled:
 		return
@@ -265,10 +266,24 @@ func _maintain_economy_units(world: SimulationWorld) -> void:
 			harvester_count += 1
 		if unit.can_construct:
 			engineer_count += 1
-	if harvester_count == 0:
+	if harvester_count < difficulty_profile.target_harvester_count:
 		_submit_production(&"harvester", world)
 	elif engineer_count == 0:
 		_submit_production(&"engineer_vehicle", world)
+
+
+func _maintain_combat_reserve(world: SimulationWorld) -> void:
+	if phase in [Phase.ECONOMY, Phase.EXPANSION] or _enemy_factory(world) == null:
+		return
+	if _combat_units(world).size() < difficulty_profile.combat_reserve_size:
+		_submit_production(_next_combat_definition(world), world)
+
+
+func _active_enemy_ore_field(world: SimulationWorld) -> OreFieldState:
+	var primary := world.ore_fields.get(SimulationWorld.ENEMY_ORE_FIELD_ID) as OreFieldState
+	if primary != null and primary.ore_remaining > 0:
+		return primary
+	return world.ore_fields.get(SimulationWorld.ENEMY_EXPANSION_ORE_FIELD_ID) as OreFieldState
 
 
 func _maintain_engineering(world: SimulationWorld) -> void:

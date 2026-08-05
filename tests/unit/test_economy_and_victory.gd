@@ -19,7 +19,11 @@ func _test_scenario_and_differentiated_data(failures: Array[String]) -> void:
 			definitions[unit.definition_id] = true
 	_expect(definitions.size() == 5, "default formation should contain five differentiated unit definitions", failures)
 	_expect(world.create_true_state_snapshot().buildings.size() == 4, "true-state scenario should contain three friendly buildings and enemy command center", failures)
+	_expect(world.create_true_state_snapshot().ore_fields.size() == 4, "scenario should provide primary and expansion ore fields for both factions", failures)
 	_expect(world.create_snapshot().ore_fields.size() == 1, "scenario should expose one authoritative ore field", failures)
+	_expect((world.ore_fields[SimulationWorld.DEFAULT_ORE_FIELD_ID] as OreFieldState).ore_remaining == SimulationWorld.PRIMARY_ORE_CAPACITY, "player primary ore should support a full-length match", failures)
+	_expect((world.ore_fields[SimulationWorld.PLAYER_EXPANSION_ORE_FIELD_ID] as OreFieldState).ore_remaining == SimulationWorld.EXPANSION_ORE_CAPACITY, "player expansion should provide a second economic objective", failures)
+	_expect(SimulationWorld.PRIMARY_ORE_CAPACITY + SimulationWorld.EXPANSION_ORE_CAPACITY >= 18000, "each faction should have enough finite ore for sustained development", failures)
 	_expect(SimulationWorld.UNIT_CATALOG.validate().is_valid(), "five-unit catalog should validate", failures)
 	_expect(SimulationWorld.BUILDING_CATALOG.validate().is_valid(), "three-building catalog should validate", failures)
 	var player_spawn := LogicGrid.MAP_DEFINITION.player_spawn_cell
@@ -29,6 +33,12 @@ func _test_scenario_and_differentiated_data(failures: Array[String]) -> void:
 	var enemy_ore := world.ore_fields[SimulationWorld.ENEMY_ORE_FIELD_ID] as OreFieldState
 	_expect(enemy_ore.position.distance_to((world.buildings[SimulationWorld.ENEMY_COMMAND_CENTER_ID] as BuildingState).position) < 320.0, "enemy ore field should be located near the enemy base", failures)
 	_expect(enemy_ore.position.distance_to((world.ore_fields[SimulationWorld.DEFAULT_ORE_FIELD_ID] as OreFieldState).position) > 1600.0, "player and enemy ore fields should be spatially separated", failures)
+	var enemy_harvester := world.units[SimulationWorld.ENEMY_HARVESTER_ID] as UnitState
+	enemy_ore.ore_remaining = 0
+	world.current_tick = world.enemy_raid_agent.difficulty_profile.opening_delay_ticks
+	world.advance_tick()
+	world.advance_tick()
+	_expect(enemy_harvester.harvest_ore_field_entity_id == SimulationWorld.ENEMY_EXPANSION_ORE_FIELD_ID, "enemy harvesters should switch to their own expansion after primary depletion", failures)
 
 
 func _test_real_harvest_trip_and_production_pipeline(failures: Array[String]) -> void:
