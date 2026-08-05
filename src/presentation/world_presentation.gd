@@ -22,6 +22,8 @@ var _proxies: Dictionary = {}
 var _building_proxies: Dictionary = {}
 var _ore_field_proxies: Dictionary = {}
 var _projectile_positions: Dictionary = {}
+var _synced_snapshot_tick: int = -1
+var _full_sync_count: int = 0
 
 @onready var units_root: Node2D = $Units
 @onready var buildings_root: Node2D = $Buildings
@@ -42,6 +44,10 @@ func set_snapshots(previous: WorldSnapshot, current: WorldSnapshot, alpha: float
 	previous_snapshot = previous
 	current_snapshot = current
 	interpolation_alpha = clampf(alpha, 0.0, 1.0)
+	if current_snapshot == null or current_snapshot.tick == _synced_snapshot_tick:
+		return
+	_synced_snapshot_tick = current_snapshot.tick
+	_full_sync_count += 1
 	_sync_proxies()
 	_sync_building_proxies()
 	_sync_ore_field_proxies()
@@ -49,6 +55,10 @@ func set_snapshots(previous: WorldSnapshot, current: WorldSnapshot, alpha: float
 	for projectile in current_snapshot.projectiles:
 		_projectile_positions[projectile.projectile_id] = projectile.position
 	queue_redraw()
+
+
+func get_full_sync_count() -> int:
+	return _full_sync_count
 
 
 func set_selected_entity(entity_id: int) -> void:
@@ -124,8 +134,21 @@ func clear_attack_preview() -> void:
 func _process(_delta: float) -> void:
 	if current_snapshot == null:
 		return
-	_update_proxy_positions()
-	queue_redraw()
+	_update_proxy_positions(false)
+	if not current_snapshot.projectiles.is_empty() or _selected_overlay_needs_interpolation():
+		queue_redraw()
+
+
+func _selected_overlay_needs_interpolation() -> bool:
+	if selected_entity_id == 0:
+		return false
+	var unit := current_snapshot.get_unit(selected_entity_id)
+	if unit == null:
+		return false
+	if unit.is_moving or unit.attack_target_entity_id != 0:
+		return true
+	var formation := current_snapshot.get_formation(unit.formation_id) if unit.formation_id != 0 else null
+	return formation != null and formation.is_moving
 
 
 func _sync_proxies() -> void:
@@ -144,7 +167,7 @@ func _sync_proxies() -> void:
 			(_proxies[entity_id] as UnitProxy).queue_free()
 			_proxies.erase(entity_id)
 	set_selected_entities(selected_entity_ids, selected_entity_id, selected_building_id)
-	_update_proxy_positions()
+	_update_proxy_positions(true)
 
 
 func _sync_building_proxies() -> void:
@@ -180,16 +203,17 @@ func _sync_ore_field_proxies() -> void:
 			_ore_field_proxies.erase(entity_id)
 
 
-func _update_proxy_positions() -> void:
+func _update_proxy_positions(apply_snapshot_data: bool) -> void:
 	for unit in current_snapshot.units:
 		var from_position := unit.position
 		var proxy := _proxies[unit.entity_id] as UnitProxy
-		proxy.apply_snapshot(unit)
+		if apply_snapshot_data:
+			proxy.apply_snapshot(unit)
 		if previous_snapshot != null:
 			var previous_unit := previous_snapshot.get_unit(unit.entity_id)
-			if previous_unit != null:
+			if previous_unit != null and unit.is_visible_to_local_player and previous_unit.is_visible_to_local_player:
 				from_position = previous_unit.position
-		(_proxies[unit.entity_id] as UnitProxy).position = from_position.lerp(
+		proxy.position = from_position.lerp(
 			unit.position,
 			interpolation_alpha
 		)

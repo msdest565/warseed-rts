@@ -64,6 +64,7 @@ var combat_system := CombatSystem.new()
 var economy_system := EconomySystem.new()
 var engineering_system := EngineeringSystem.new()
 var strategic_task_system := StrategicTaskSystem.new()
+var strategic_headquarters := StrategicHeadquarters.new()
 var events: Array[SimulationEvent] = []
 var projectiles: Dictionary = {}
 var _next_projectile_id: int = 1
@@ -361,12 +362,17 @@ func _advance_friendly_autonomy() -> void:
 	if current_tick - _last_friendly_autonomy_tick < FRIENDLY_AUTONOMY_INTERVAL_TICKS:
 		return
 	_last_friendly_autonomy_tick = current_tick
+	strategic_headquarters.advance(self)
 	var industrial_policy := agent_policies.get(StrategicTaskSystem.INDUSTRIAL_AGENT_ID) as AgentPolicy
-	if industrial_policy != null and industrial_policy.allows_proactive_tasks() and not _has_open_task_for_agent(industrial_policy.agent_id):
+	if industrial_policy != null and industrial_policy.allows_proactive_tasks() and strategic_headquarters.should_start_industrial_development(self) and not _has_open_task_for_agent(industrial_policy.agent_id):
 		_submit_autonomous_industrial_order(industrial_policy)
 	var battlefield_policy := agent_policies.get(StrategicTaskSystem.BATTLEFIELD_AGENT_ID) as AgentPolicy
 	if battlefield_policy != null and battlefield_policy.allows_proactive_tasks():
 		_submit_autonomous_battlefield_orders(battlefield_policy)
+
+
+func get_headquarters_decision_key() -> StringName:
+	return strategic_headquarters.last_decision_key
 
 
 func _has_open_task_for_agent(agent_id: int) -> bool:

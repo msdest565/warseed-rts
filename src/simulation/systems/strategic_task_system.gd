@@ -9,6 +9,10 @@ const SCOUT_OBSERVE_TICKS := 30
 const SCOUT_STALLED_REPLAN_TICKS := 30
 const SCOUT_PROGRESS_DISTANCE := 8.0
 const SCOUT_MAX_REPLAN_ATTEMPTS := 3
+const SCOUT_DANGER_RADIUS := 384.0
+const SCOUT_EVADE_DISTANCE := 448.0
+const SCOUT_EVADE_REPLAN_TICKS := 15
+const SCOUT_THREAT_BUFFER := 96.0
 const RETREAT_SURVIVOR_RATIO := 0.5
 
 
@@ -198,6 +202,28 @@ func _advance_scout_area(task: TaskState, world: SimulationWorld) -> void:
 		_block(task, world, TaskState.BlockedReason.INSUFFICIENT_PARTICIPANTS, "No scout units remain")
 		return
 	_update_scout_intelligence(task, world)
+	var threat := _nearest_visible_hostile_contact(scout.position, world, task.faction_id)
+	if task.requires_proactive_authorization and threat != null and scout.position.distance_to(threat.position) <= maxf(SCOUT_DANGER_RADIUS, threat.attack_range + SCOUT_THREAT_BUFFER):
+		if task.phase != TaskState.Phase.EVADING or not formation.is_moving or world.current_tick - task.last_evasion_tick >= SCOUT_EVADE_REPLAN_TICKS:
+			var safe_target := _find_scout_evasion_target(scout.position, threat.position, task.faction_id, world)
+			if not safe_target.is_equal_approx(scout.position):
+				_submit_scout_evasion(task, formation, safe_target, world)
+				task.last_evasion_tick = world.current_tick
+				task.set_phase(TaskState.Phase.EVADING, world.current_tick, "Enemy contact detected; evading toward a reachable safe area")
+				task.route = world.pathfinder.find_path(scout.position, safe_target)
+		return
+	if task.phase == TaskState.Phase.EVADING:
+		if formation.is_moving:
+			return
+		var resumed_target := world.find_reachable_scout_target(task.faction_id, scout.position, task.target_position)
+		if resumed_target.is_equal_approx(scout.position):
+			_complete(task, world, "Reconnaissance ended after safely withdrawing from enemy contact")
+			return
+		task.target_position = resumed_target
+		task.last_progress_position = scout.position
+		task.ticks_without_progress = 0
+		task.replan_attempts = 0
+		task.set_phase(TaskState.Phase.PREPARING, world.current_tick, "Threat cleared; resuming reconnaissance on a new frontier")
 	if formation.anchor_position.distance_to(task.target_position) > task.target_radius:
 		if formation.is_moving:
 			if scout.position.distance_to(task.last_progress_position) >= SCOUT_PROGRESS_DISTANCE:
@@ -240,6 +266,54 @@ func _update_scout_intelligence(task: TaskState, world: SimulationWorld) -> void
 		if building.enabled and building.faction_id != task.faction_id and building.is_visible:
 			contacts += 1
 	task.discovered_contact_count = maxi(task.discovered_contact_count, contacts)
+
+
+func _nearest_visible_hostile_contact(origin: Vector2, world: SimulationWorld, faction_id: int) -> UnitSnapshot:
+	var best: UnitSnapshot
+	var best_distance := INF
+	for contact in world.create_faction_snapshot(faction_id).units:
+		if contact.faction_id == faction_id or not contact.enabled or not contact.is_visible_to_local_player:
+			continue
+		var distance := origin.distance_squared_to(contact.position)
+		if distance < best_distance or is_equal_approx(distance, best_distance) and (best == null or contact.entity_id < best.entity_id):
+			best = contact
+			best_distance = distance
+	return best
+
+
+func _find_scout_evasion_target(scout_position: Vector2, threat_position: Vector2, faction_id: int, world: SimulationWorld) -> Vector2:
+	var away := (scout_position - threat_position).normalized()
+	var toward_base := (world._faction_base_position(faction_id) - scout_position).normalized()
+	if away.is_zero_approx():
+		away = toward_base if not toward_base.is_zero_approx() else Vector2.LEFT
+	var headings: Array[Vector2] = [away, (away + toward_base).normalized(), away.rotated(PI * 0.25), away.rotated(-PI * 0.25), toward_base]
+	var bounds := SimulationWorld.BATTLEFIELD_BOUNDS.grow(-LogicGrid.CELL_SIZE)
+	var best_target := scout_position
+	var best_score := -INF
+	for heading in headings:
+		if heading.is_zero_approx():
+			continue
+		var raw_target := scout_position + heading * SCOUT_EVADE_DISTANCE
+		var target := raw_target.clamp(bounds.position, bounds.end)
+		var path := world.pathfinder.find_path(scout_position, target)
+		if path.is_empty():
+			continue
+		var endpoint := path[-1]
+		var score := endpoint.distance_to(threat_position) - endpoint.distance_to(world._faction_base_position(faction_id)) * 0.15 - path.size()
+		if score > best_score:
+			best_target = endpoint
+			best_score = score
+	return best_target
+
+
+func _submit_scout_evasion(task: TaskState, formation: FormationState, destination: Vector2, world: SimulationWorld) -> void:
+	var stop := StopCommand.new(
+		world.allocate_command_id(), task.faction_id, GameCommand.IssuerKind.AGENT,
+		world.current_tick, formation.leader_entity_id, formation.formation_id
+	)
+	_set_agent_context(stop, task)
+	world.submit_command(stop)
+	_submit_formation_move(task, formation, destination, world)
 
 
 func _submit_formation_move(task: TaskState, formation: FormationState, destination: Vector2, world: SimulationWorld) -> bool:

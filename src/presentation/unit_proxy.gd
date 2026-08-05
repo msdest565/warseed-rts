@@ -8,6 +8,7 @@ const SELECT_COLOR := Color("f2c94c")
 const FORMATION_COLOR := Color("69b7c4")
 const ENEMY_COLOR := Color("d95c5c")
 const WRECK_COLOR := Color("4a5558")
+const LAST_SEEN_COLOR := Color(0.85, 0.36, 0.36, 0.34)
 
 var entity_id: int
 var faction_id: int = SimulationWorld.LOCAL_PLAYER_ID
@@ -17,6 +18,7 @@ var attack_target_entity_id: int = 0
 var definition_id: StringName = &"scout_vehicle"
 var cargo_ore: int = 0
 var work_kind: UnitState.WorkKind = UnitState.WorkKind.NONE
+var currently_visible: bool = true
 var selected: bool = false:
 	set(value):
 		selected = value
@@ -40,10 +42,14 @@ func apply_snapshot(unit: UnitSnapshot) -> void:
 	definition_id = unit.definition_id
 	cargo_ore = unit.cargo_ore
 	work_kind = unit.work_kind
+	currently_visible = unit.faction_id == SimulationWorld.LOCAL_PLAYER_ID or unit.is_visible_to_local_player
 	queue_redraw()
 
 
 func _draw() -> void:
+	if faction_id != SimulationWorld.LOCAL_PLAYER_ID and not currently_visible:
+		_draw_last_seen_marker()
+		return
 	if formation_member and not selected:
 		draw_arc(Vector2.ZERO, 28.0, 0.0, TAU, 40, FORMATION_COLOR, 1.5)
 	if selected:
@@ -93,3 +99,10 @@ func _draw() -> void:
 		Color("dce8e8")
 	)
 	draw_string(ThemeDB.fallback_font, Vector2(-38.0, 55.0), GameText.unit_name(definition_id), HORIZONTAL_ALIGNMENT_CENTER, 76.0, 10, Color("9fb4b5"))
+
+
+func _draw_last_seen_marker() -> void:
+	draw_circle(Vector2.ZERO, 18.0, Color(LAST_SEEN_COLOR, 0.12))
+	draw_arc(Vector2.ZERO, 18.0, 0.0, TAU, 24, LAST_SEEN_COLOR, 2.0)
+	draw_line(Vector2(-8.0, -8.0), Vector2(8.0, 8.0), LAST_SEEN_COLOR, 2.0)
+	draw_line(Vector2(-8.0, 8.0), Vector2(8.0, -8.0), LAST_SEEN_COLOR, 2.0)

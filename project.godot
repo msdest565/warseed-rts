@@ -13,6 +13,7 @@ config_version=5
 config/name="WARSEED"
 run/main_scene="res://scenes/game/game_root.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")
+run/max_fps=120
 
 [display]
 
@@ -23,6 +24,11 @@ window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+window/vsync/vsync_mode=1
+
+[physics]
+
+common/physics_ticks_per_second=60
 
 [dotnet]
 

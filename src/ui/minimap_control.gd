@@ -8,10 +8,39 @@ var camera_controller: CameraController
 var selected_entity_ids: Array[int] = []
 var logic_grid := LogicGrid.create_test_map()
 var dragging_camera: bool = false
+var _contact_pings: Array[Dictionary] = []
+var _last_camera_rect := Rect2()
+
+const CONTACT_PING_DURATION := 3.0
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	set_process(true)
+
+
+func _process(delta: float) -> void:
+	var needs_redraw := false
+	for ping in _contact_pings:
+		ping["remaining"] = float(ping["remaining"]) - delta
+		needs_redraw = true
+	_contact_pings = _contact_pings.filter(func(ping: Dictionary) -> bool: return float(ping["remaining"]) > 0.0)
+	if camera_controller != null:
+		var camera_rect := camera_controller.get_visible_world_rect()
+		if camera_rect != _last_camera_rect:
+			_last_camera_rect = camera_rect
+			needs_redraw = true
+	if needs_redraw:
+		queue_redraw()
+
+
+func add_contact_ping(world_position: Vector2) -> void:
+	_contact_pings.append({"position": world_position, "remaining": CONTACT_PING_DURATION})
+	queue_redraw()
+
+
+func get_contact_ping_count() -> int:
+	return _contact_pings.size()
 
 
 func set_state(
@@ -82,11 +111,17 @@ func _draw() -> void:
 			if not unit.enabled:
 				continue
 			var is_local := unit.faction_id == SimulationWorld.LOCAL_PLAYER_ID
-			if not is_local and not unit.is_visible_to_local_player:
-				continue
 			var point := world_to_minimap(unit.position)
+			if not is_local and not unit.is_visible_to_local_player:
+				draw_rect(Rect2(point - Vector2.ONE * 2.0, Vector2.ONE * 4.0), Color(0.85, 0.36, 0.36, 0.34), false, 1.0)
+				continue
 			var color := Color.WHITE if selected_entity_ids.has(unit.entity_id) else (Color("42b7ad") if is_local else Color("d95c5c"))
 			draw_circle(point, 3.5 if selected_entity_ids.has(unit.entity_id) else 2.5, color)
+	for ping in _contact_pings:
+		var progress := 1.0 - float(ping["remaining"]) / CONTACT_PING_DURATION
+		var radius := lerpf(4.0, 16.0, progress)
+		var alpha := 1.0 - progress
+		draw_arc(world_to_minimap(ping["position"]), radius, 0.0, TAU, 32, Color(1.0, 0.76, 0.2, alpha), 2.0)
 	if camera_controller != null:
 		var camera_rect := camera_controller.get_visible_world_rect().intersection(WORLD_RECT)
 		var camera_start := world_to_minimap(camera_rect.position)

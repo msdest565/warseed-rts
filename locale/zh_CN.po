@@ -62,6 +62,24 @@ msgid "WORKFLOW_NONE"
 msgstr "暂无委托任务"
 msgid "WORKFLOW_AI_STATUS"
 msgstr "AI  工业：%s | 战场：%s"
+
+msgid "WORKFLOW_HEADQUARTERS"
+msgstr "参谋部：%s"
+
+msgid "HQ_DECISION_STABLE"
+msgstr "经济与兵力目标稳定"
+
+msgid "HQ_DECISION_ECONOMY_RECOVERY"
+msgstr "补充关键矿车损失"
+
+msgid "HQ_DECISION_ECONOMY_DEVELOPMENT"
+msgstr "优先补齐基础采矿编制"
+
+msgid "HQ_DECISION_COMBAT_PRODUCTION"
+msgstr "扩充合成作战预备队"
+
+msgid "HQ_DECISION_RESERVE"
+msgstr "保留紧急资源储备"
 msgid "ORDER_DEVELOP"
 msgstr "发展矿区"
 msgid "ORDER_DEFEND"
@@ -443,10 +461,16 @@ msgid "STATUS_SCOUT"
 msgstr "区域侦察：%s"
 msgid "SCOUT_INTEL_REPORT"
 msgstr "情报：已识别 %d 个敌对目标"
+
+msgid "CONTACT_ALERT"
+msgstr "发现敌情：%s"
 msgid "TASK_KIND_SCOUT_AREA"
 msgstr "区域侦察"
 msgid "TASK_PHASE_SCOUTING"
 msgstr "观察情报"
+
+msgid "TASK_PHASE_EVADING"
+msgstr "规避敌情"
 
 msgid "WORKFLOW_AI_RECOMMENDATIONS"
 msgstr "建议  工：%s | 战：%s"

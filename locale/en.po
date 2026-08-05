@@ -62,6 +62,24 @@ msgid "WORKFLOW_NONE"
 msgstr "No delegated task"
 msgid "WORKFLOW_AI_STATUS"
 msgstr "AI  Industry: %s | Battlefield: %s"
+
+msgid "WORKFLOW_HEADQUARTERS"
+msgstr "General Staff: %s"
+
+msgid "HQ_DECISION_STABLE"
+msgstr "force and economy targets stable"
+
+msgid "HQ_DECISION_ECONOMY_RECOVERY"
+msgstr "replacing critical harvester loss"
+
+msgid "HQ_DECISION_ECONOMY_DEVELOPMENT"
+msgstr "completing the core mining fleet"
+
+msgid "HQ_DECISION_COMBAT_PRODUCTION"
+msgstr "building the combined-arms reserve"
+
+msgid "HQ_DECISION_RESERVE"
+msgstr "holding emergency ore reserve"
 msgid "ORDER_DEVELOP"
 msgstr "Develop"
 msgid "ORDER_DEFEND"
@@ -443,10 +461,16 @@ msgid "STATUS_SCOUT"
 msgstr "Reconnaissance: %s"
 msgid "SCOUT_INTEL_REPORT"
 msgstr "Intel: %d hostile contacts identified"
+
+msgid "CONTACT_ALERT"
+msgstr "ENEMY CONTACT: %s"
 msgid "TASK_KIND_SCOUT_AREA"
 msgstr "Scout area"
 msgid "TASK_PHASE_SCOUTING"
 msgstr "Observing"
+
+msgid "TASK_PHASE_EVADING"
+msgstr "Evading contact"
 
 msgid "WORKFLOW_AI_RECOMMENDATIONS"
 msgstr "Advice  I: %s | B: %s"

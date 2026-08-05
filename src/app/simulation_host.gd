@@ -304,6 +304,10 @@ func get_enemy_decision_summary() -> String:
 	return world.enemy_raid_agent.decision_summary()
 
 
+func get_headquarters_decision_key() -> StringName:
+	return world.get_headquarters_decision_key()
+
+
 func set_enemy_difficulty(difficulty: EnemyDifficultyProfile.Difficulty) -> void:
 	world.set_enemy_difficulty(difficulty)
 

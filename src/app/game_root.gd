@@ -13,6 +13,13 @@ extends Node
 @onready var debug_layer: DebugLayer = $DebugLayer
 @onready var pause_menu: PauseMenu = $PauseMenu
 @onready var hover_tooltip: HoverTooltip = $HoverTooltip
+@onready var contact_alert: ContactAlert = $HUDLayer/ContactAlert
+
+var _last_ui_snapshot_tick: int = -1
+var _visible_hostile_ids: Dictionary = {}
+var _last_contact_alert_tick: Dictionary = {}
+
+const CONTACT_ALERT_COOLDOWN_TICKS := 50
 
 
 func _ready() -> void:
@@ -49,6 +56,7 @@ func _on_language_changed(_locale: String) -> void:
 	task_panel.refresh_locale()
 	resource_bar.refresh_locale()
 	workflow_panel.refresh_locale()
+	contact_alert.refresh_locale()
 	input_controller.refresh_locale_status()
 	world_presentation.refresh_locale()
 
@@ -62,16 +70,16 @@ func _process(delta: float) -> void:
 	)
 	if input_controller.pending_move_active and simulation_host.get_queue_size() == 0:
 		world_presentation.clear_pending_move_target()
-	minimap.set_state(
-		simulation_host.current_snapshot,
-		camera_controller,
-		input_controller.selected_entity_ids
-	)
-	task_panel.update_snapshot(simulation_host.current_snapshot)
-	resource_bar.update_snapshot(simulation_host.current_snapshot)
-	workflow_panel.update_snapshot(simulation_host.current_snapshot)
-	if debug_layer.visible:
-		debug_layer.update_status(
+	var snapshot := simulation_host.current_snapshot
+	if snapshot != null and snapshot.tick != _last_ui_snapshot_tick:
+		_last_ui_snapshot_tick = snapshot.tick
+		_process_new_contacts(snapshot)
+		minimap.set_state(snapshot, camera_controller, input_controller.selected_entity_ids)
+		task_panel.update_snapshot(snapshot)
+		resource_bar.update_snapshot(snapshot)
+		workflow_panel.update_snapshot(snapshot)
+		if debug_layer.visible:
+			debug_layer.update_status(
 			simulation_host.current_snapshot,
 			input_controller.selected_entity_id,
 			simulation_host.get_queue_size(),
@@ -83,8 +91,29 @@ func _process(delta: float) -> void:
 			simulation_host.get_enemy_decision_summary(),
 			simulation_host.get_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID),
 			simulation_host.get_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID)
-		)
+			)
 	_update_hover_tooltip(delta)
+
+
+func _process_new_contacts(snapshot: WorldSnapshot) -> void:
+	var currently_visible: Dictionary = {}
+	for unit in snapshot.units:
+		if unit.faction_id == SimulationWorld.LOCAL_PLAYER_ID or not unit.enabled or not unit.is_visible_to_local_player:
+			continue
+		currently_visible[unit.entity_id] = true
+		if not _visible_hostile_ids.has(unit.entity_id) and snapshot.tick - int(_last_contact_alert_tick.get(unit.entity_id, -CONTACT_ALERT_COOLDOWN_TICKS)) >= CONTACT_ALERT_COOLDOWN_TICKS:
+			minimap.add_contact_ping(unit.position)
+			contact_alert.show_contact(unit.definition_id)
+			_last_contact_alert_tick[unit.entity_id] = snapshot.tick
+	for building in snapshot.buildings:
+		if building.faction_id == SimulationWorld.LOCAL_PLAYER_ID or not building.enabled or not building.is_visible:
+			continue
+		currently_visible[building.entity_id] = true
+		if not _visible_hostile_ids.has(building.entity_id) and snapshot.tick - int(_last_contact_alert_tick.get(building.entity_id, -CONTACT_ALERT_COOLDOWN_TICKS)) >= CONTACT_ALERT_COOLDOWN_TICKS:
+			minimap.add_contact_ping(building.position)
+			contact_alert.show_contact(building.definition_id, true)
+			_last_contact_alert_tick[building.entity_id] = snapshot.tick
+	_visible_hostile_ids = currently_visible
 
 
 func _update_hover_tooltip(delta: float) -> void:

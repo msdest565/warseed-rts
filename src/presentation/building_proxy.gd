@@ -17,6 +17,11 @@ func apply_snapshot(building: BuildingSnapshot) -> void:
 func _draw() -> void:
 	if snapshot == null:
 		return
+	if snapshot.faction_id != SimulationWorld.LOCAL_PLAYER_ID and not snapshot.is_visible:
+		var marker_size := Vector2(72.0, 52.0)
+		draw_rect(Rect2(-marker_size * 0.5, marker_size), Color(0.65, 0.25, 0.25, 0.12), true)
+		draw_rect(Rect2(-marker_size * 0.5, marker_size), Color(0.85, 0.36, 0.36, 0.34), false, 2.0)
+		return
 	var color := Color("3b8f87") if snapshot.faction_id == SimulationWorld.LOCAL_PLAYER_ID else Color("a74747")
 	if not snapshot.enabled:
 		color = Color("4a5558")

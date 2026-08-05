@@ -29,10 +29,18 @@ func _test_host_and_presentation_consume_faction_snapshot(failures: Array[String
 	presentation.buildings_root = buildings_root
 	presentation.ore_fields_root = ore_root
 	presentation.set_snapshots(host.current_snapshot, host.current_snapshot, 0.0)
+	var first_sync_count := presentation.get_full_sync_count()
+	presentation.set_snapshots(host.current_snapshot, host.current_snapshot, 0.75)
 	_expect(host.current_snapshot.observer_faction_id == SimulationWorld.LOCAL_PLAYER_ID, "host should publish the local faction snapshot", failures)
+	_expect(presentation.get_full_sync_count() == first_sync_count, "presentation should not rebuild proxies more than once for the same authoritative tick", failures)
 	_expect(units_root.get_child_count() == host.current_snapshot.units.size(), "presentation should create one proxy per known unit", failures)
 	_expect(buildings_root.get_child_count() == host.current_snapshot.buildings.size(), "presentation should create one proxy per known building", failures)
 	_expect(ore_root.get_child_count() == host.current_snapshot.ore_fields.size(), "presentation should create one proxy per explored ore field", failures)
+	var stale_contact := KnowledgeContact.from_unit(host.world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState, host.world.current_tick)
+	var stale_proxy := UnitProxy.new()
+	stale_proxy.apply_snapshot(UnitSnapshot.new(null, stale_contact))
+	_expect(not stale_proxy.currently_visible, "a hostile last-seen contact should render as a stale marker rather than a live unit", failures)
+	stale_proxy.free()
 	presentation.free()
 	host.free()
 
@@ -99,6 +107,7 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	var host := game.get_node("SimulationHost") as SimulationHost
 	var panel := game.get_node("HUDLayer/TaskPanel") as TaskPanel
 	var minimap := game.get_node("HUDLayer/Minimap") as MinimapControl
+	var contact_alert := game.get_node("HUDLayer/ContactAlert") as ContactAlert
 	var debug_layer := game.get_node("DebugLayer") as DebugLayer
 	var input_controller := game.get_node("InputController") as InputController
 	var workflow_panel := game.get_node("HUDLayer/WorkflowPanel") as WorkflowPanel
@@ -131,10 +140,13 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	hover_tooltip.label = hover_tooltip.get_node("Panel/Margin/Text")
 	hover_tooltip._ready()
 	game._ready()
+	_expect(Engine.max_fps >= 60, "project presentation should target at least 60 rendered frames per second", failures)
 	camera.zoom = Vector2.ONE
 	var camera_limits := camera.get_center_limits(Vector2(1280.0, 720.0))
 	_expect(camera_limits.end.y + 360.0 >= CameraController.WORLD_RECT.end.y + 250.0, "camera should overscroll below the map enough to reveal terrain behind the bottom command bar", failures)
 	_expect(panel.simulation_host == host, "task panel should accept the authoritative simulation host", failures)
+	minimap.add_contact_ping(Vector2(640.0, 480.0))
+	_expect(minimap.get_contact_ping_count() == 1 and contact_alert != null, "enemy contacts should have a visible minimap ping and alert surface", failures)
 	_expect(panel.has_node("Margin/Layout/Intel") and panel.has_node("Margin/Layout/Strategic") and panel.has_node("Margin/Layout/Operations") and panel.has_node("Margin/Layout/ProductionSection"), "task panel should separate intelligence, strategy, operations, and production", failures)
 	_expect(panel.has_node("Margin/Layout/Strategic/Scout"), "strategy controls should expose selected-unit reconnaissance", failures)
 	_expect(panel.production_buttons.size() == 5, "production section should retain all five unit controls", failures)

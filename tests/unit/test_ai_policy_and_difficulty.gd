@@ -9,6 +9,9 @@ func run() -> Array[String]:
 	_test_autonomous_counterattack_preempts_routine_defense(failures)
 	_test_autonomous_base_threat_triggers_emergency_defense(failures)
 	_test_long_autonomous_run_reclaims_temporary_formations(failures)
+	_test_autonomous_scout_evades_contact(failures)
+	_test_headquarters_balances_economy_and_combat(failures)
+	_test_headquarters_preserves_emergency_reserve(failures)
 	_test_difficulty_profiles_and_reaction_windows(failures)
 	_test_target_scoring_prefers_combat_threat(failures)
 	_test_observed_composition_changes_production(failures)
@@ -153,6 +156,66 @@ func _test_long_autonomous_run_reclaims_temporary_formations(failures: Array[Str
 		for entity_id in task.participant_entity_ids:
 			_expect(not active_participants.has(entity_id), "long autonomous run must preserve exclusive ownership per unit", failures)
 			active_participants[entity_id] = task.task_id
+
+
+func _test_autonomous_scout_evades_contact(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	world.set_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, AgentPolicy.Authorization.AUTONOMOUS)
+	for _tick in range(3):
+		world.advance_tick()
+	var scout_task: TaskState
+	for task_variant in world.tasks.values():
+		var candidate := task_variant as TaskState
+		if candidate.kind == TaskState.Kind.SCOUT_AREA and candidate.lifecycle == TaskState.Lifecycle.EXECUTING:
+			scout_task = candidate
+			break
+	_expect(scout_task != null, "autonomous battlefield AI should establish a reconnaissance task", failures)
+	if scout_task == null:
+		return
+	var scout := world.units[scout_task.participant_entity_ids[0]] as UnitState
+	var formation := world.formations[scout_task.formation_id] as FormationState
+	scout.position = world.logic_grid.cell_to_world(Vector2i(32, 26))
+	formation.anchor_position = scout.position
+	formation.is_moving = false
+	var enemy := world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	enemy.position = scout.position + Vector2(128.0, 0.0)
+	enemy.attack_target_entity_id = 0
+	world._update_faction_knowledge()
+	var initial_distance := scout.position.distance_to(enemy.position)
+	for _tick in range(4):
+		world.advance_tick()
+	_expect(scout_task.phase == TaskState.Phase.EVADING, "an autonomous scout should enter evasion after detecting a nearby hostile", failures)
+	_expect(scout.attack_target_entity_id == 0, "reconnaissance evasion must not turn into an attack order", failures)
+	_expect(scout.position.distance_to(enemy.position) > initial_distance, "evasion should move the scout farther away from the contact", failures)
+
+
+func _test_headquarters_balances_economy_and_combat(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	(world.factions[SimulationWorld.LOCAL_PLAYER_ID] as FactionState).ore = 5000
+	for unit_variant in world.units.values():
+		var unit := unit_variant as UnitState
+		if unit.faction_id == SimulationWorld.ENEMY_PLAYER_ID:
+			unit.enabled = false
+	world.set_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID, AgentPolicy.Authorization.AUTONOMOUS)
+	world.set_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, AgentPolicy.Authorization.AUTONOMOUS)
+	for _tick in range(360):
+		world.advance_tick()
+	var harvesters := world.strategic_headquarters._committed_unit_count(world, &"harvester")
+	var assault := world.strategic_headquarters._committed_unit_count(world, &"assault_vehicle")
+	var missiles := world.strategic_headquarters._committed_unit_count(world, &"missile_vehicle")
+	_expect(harvesters <= StrategicHeadquarters.TARGET_HARVESTER_COUNT, "general staff should cap autonomous harvester commitments instead of spending indefinitely", failures)
+	_expect(assault >= StrategicHeadquarters.TARGET_ASSAULT_COUNT and missiles >= StrategicHeadquarters.TARGET_MISSILE_COUNT, "battlefield autonomy should produce a combined-arms tank reserve", failures)
+
+
+func _test_headquarters_preserves_emergency_reserve(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	(world.factions[SimulationWorld.LOCAL_PLAYER_ID] as FactionState).ore = StrategicHeadquarters.EMERGENCY_ORE_RESERVE + 200
+	world.set_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, AgentPolicy.Authorization.AUTONOMOUS)
+	world.advance_tick()
+	world.advance_tick()
+	var factory := world.buildings[SimulationWorld.PLAYER_FACTORY_ID] as BuildingState
+	_expect(factory.production_count() == 0, "general staff should not spend below its emergency reserve on optional combat production", failures)
+	_expect(world.get_headquarters_decision_key() == &"HQ_DECISION_RESERVE", "reserve hold should be visible in the general-staff decision summary", failures)
 
 
 func _ids_overlap(first: Array[int], second: Array[int]) -> bool:
