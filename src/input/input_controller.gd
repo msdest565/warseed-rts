@@ -9,6 +9,7 @@ enum CommandMode {
 	REPAIR_TARGETING,
 	HARVEST_TARGETING,
 	DEFEND_TARGETING,
+	SCOUT_TARGETING,
 }
 
 signal move_intent_changed(target_position: Vector2, intent_sequence: int)
@@ -70,7 +71,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if targeting_mouse.pressed and targeting_mouse.button_index == MOUSE_BUTTON_LEFT:
 			attack_or_move_selected_at(_screen_to_world(targeting_mouse.position))
 			return
-	if command_mode in [CommandMode.HARVEST_TARGETING, CommandMode.DEFEND_TARGETING] and event is InputEventMouseButton:
+	if command_mode in [CommandMode.HARVEST_TARGETING, CommandMode.DEFEND_TARGETING, CommandMode.SCOUT_TARGETING] and event is InputEventMouseButton:
 		var target_mouse := event as InputEventMouseButton
 		if target_mouse.pressed and target_mouse.button_index == MOUSE_BUTTON_RIGHT:
 			cancel_command_mode()
@@ -79,6 +80,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			var target_position := _screen_to_world(target_mouse.position)
 			if command_mode == CommandMode.HARVEST_TARGETING:
 				harvest_selected_at(target_position)
+			elif command_mode == CommandMode.SCOUT_TARGETING:
+				scout_selected_at(target_position)
 			else:
 				defend_selected_at(target_position)
 			return
@@ -284,26 +287,109 @@ func begin_repair_targeting() -> void:
 
 
 func begin_defend_targeting() -> void:
-	var formation := simulation_host.current_snapshot.get_formation(SimulationWorld.DEFAULT_FORMATION_ID)
-	if formation == null:
-		last_command_status = GameText.t(&"DEFENSE_NO_FORMATION")
+	if _selected_strategic_unit_ids(false).is_empty():
+		last_command_status = GameText.t(&"STATUS_SELECT_COMBAT_UNITS")
 		return
 	command_mode = CommandMode.DEFEND_TARGETING
 	last_command_status = GameText.t(&"STATUS_DEFEND_TARGET")
 
 
 func defend_selected_at(world_position: Vector2) -> CommandValidationResult:
-	var formation := simulation_host.current_snapshot.get_formation(SimulationWorld.DEFAULT_FORMATION_ID)
-	if formation == null:
-		last_command_status = GameText.t(&"DEFENSE_NO_FORMATION")
+	var participant_ids := _selected_strategic_unit_ids(false)
+	if participant_ids.is_empty():
+		last_command_status = GameText.t(&"STATUS_SELECT_COMBAT_UNITS")
 		return null
+	var formation_id := _complete_selected_formation_id(participant_ids, false)
 	var result := simulation_host.submit_command(simulation_host.create_strategic_order_command(
-		StrategicOrderCommand.OrderKind.DEFEND_AREA, formation.formation_id, 0, world_position, 160.0
+		StrategicOrderCommand.OrderKind.DEFEND_AREA, formation_id, 0, world_position, 160.0, participant_ids
 	))
 	last_command_status = GameText.t(&"STATUS_DEFEND") % GameText.command_result(result)
 	if result.is_accepted():
 		command_mode = CommandMode.NORMAL
 	return result
+
+
+func begin_scout_targeting() -> void:
+	if _selected_strategic_unit_ids(true).is_empty():
+		last_command_status = GameText.t(&"STATUS_SELECT_SCOUTS")
+		return
+	command_mode = CommandMode.SCOUT_TARGETING
+	last_command_status = GameText.t(&"STATUS_SCOUT_TARGET")
+
+
+func scout_selected_at(world_position: Vector2) -> CommandValidationResult:
+	var participant_ids := _selected_strategic_unit_ids(true)
+	if participant_ids.is_empty():
+		last_command_status = GameText.t(&"STATUS_SELECT_SCOUTS")
+		return null
+	var formation_id := _complete_selected_formation_id(participant_ids, true)
+	var result := simulation_host.submit_command(simulation_host.create_strategic_order_command(
+		StrategicOrderCommand.OrderKind.SCOUT_AREA, formation_id, 0, world_position, 224.0, participant_ids
+	))
+	last_command_status = GameText.t(&"STATUS_SCOUT") % GameText.command_result(result)
+	if result.is_accepted():
+		command_mode = CommandMode.NORMAL
+	return result
+
+
+func attack_selected_strategic_target(target_entity_id: int) -> CommandValidationResult:
+	var participant_ids := _selected_strategic_unit_ids(false)
+	if participant_ids.is_empty():
+		last_command_status = GameText.t(&"STATUS_SELECT_COMBAT_UNITS")
+		return null
+	var target := simulation_host.current_snapshot.get_unit(target_entity_id)
+	if target == null:
+		last_command_status = GameText.t(&"ATTACK_NO_TARGET")
+		return null
+	var formation_id := _complete_selected_formation_id(participant_ids, false)
+	var result := simulation_host.submit_command(simulation_host.create_strategic_order_command(
+		StrategicOrderCommand.OrderKind.ATTACK_TARGET, formation_id, target_entity_id, target.position, 0.0, participant_ids
+	))
+	last_command_status = GameText.t(&"STATUS_ATTACK") % GameText.command_result(result)
+	return result
+
+
+func _selected_strategic_unit_ids(require_scout: bool) -> Array[int]:
+	var result: Array[int] = []
+	var snapshot := simulation_host.current_snapshot
+	if snapshot == null:
+		return result
+	for entity_id in selected_entity_ids:
+		var unit := snapshot.get_unit(entity_id)
+		if unit == null or not _is_selectable(unit):
+			continue
+		if require_scout:
+			if unit.definition_id == &"scout_vehicle":
+				result.append(entity_id)
+		elif unit.can_attack and unit.can_accept_attack_orders and not unit.can_harvest and not unit.can_construct:
+			result.append(entity_id)
+	result.sort()
+	return result
+
+
+func _complete_selected_formation_id(participant_ids: Array[int], require_scout: bool) -> int:
+	if participant_ids.is_empty():
+		return 0
+	var snapshot := simulation_host.current_snapshot
+	var first_unit := snapshot.get_unit(participant_ids[0])
+	if first_unit == null or first_unit.formation_id == 0:
+		return 0
+	var formation := snapshot.get_formation(first_unit.formation_id)
+	if formation == null:
+		return 0
+	var eligible_members: Array[int] = []
+	for member_id in formation.member_entity_ids:
+		var member := snapshot.get_unit(member_id)
+		if member == null or not _is_selectable(member):
+			continue
+		if require_scout:
+			if member.definition_id != &"scout_vehicle":
+				return 0
+			eligible_members.append(member_id)
+		elif not require_scout and member.can_attack and member.can_accept_attack_orders and not member.can_harvest and not member.can_construct:
+			eligible_members.append(member_id)
+	eligible_members.sort()
+	return formation.formation_id if eligible_members == participant_ids else 0
 
 
 func repair_selected_at(world_position: Vector2) -> CommandValidationResult:

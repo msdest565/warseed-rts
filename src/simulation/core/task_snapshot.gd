@@ -24,6 +24,7 @@ var progress_current: int
 var progress_target: int
 var last_detail: String
 var requires_proactive_authorization: bool
+var discovered_contact_count: int
 
 func _init(task: TaskState) -> void:
 	task_id = task.task_id
@@ -49,6 +50,7 @@ func _init(task: TaskState) -> void:
 	progress_target = task.progress_target
 	last_detail = task.last_detail
 	requires_proactive_authorization = task.requires_proactive_authorization
+	discovered_contact_count = task.discovered_contact_count
 
 func get_participant_count() -> int:
 	return participant_entity_ids.size()

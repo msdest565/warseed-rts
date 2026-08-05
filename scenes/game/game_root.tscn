@@ -269,15 +269,23 @@ theme_override_styles/pressed = SubResource("StyleBox_strategic_hover")
 text = "Develop"
 
 [node name="Defend" type="Button" parent="HUDLayer/TaskPanel/Margin/Layout/Strategic"]
-custom_minimum_size = Vector2(0, 38)
+custom_minimum_size = Vector2(0, 30)
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBox_strategic")
 theme_override_styles/hover = SubResource("StyleBox_strategic_hover")
 theme_override_styles/pressed = SubResource("StyleBox_strategic_hover")
 text = "Defend"
 
+[node name="Scout" type="Button" parent="HUDLayer/TaskPanel/Margin/Layout/Strategic"]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBox_strategic")
+theme_override_styles/hover = SubResource("StyleBox_strategic_hover")
+theme_override_styles/pressed = SubResource("StyleBox_strategic_hover")
+text = "Scout"
+
 [node name="Attack" type="Button" parent="HUDLayer/TaskPanel/Margin/Layout/Strategic"]
-custom_minimum_size = Vector2(0, 38)
+custom_minimum_size = Vector2(0, 30)
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBox_attack")
 theme_override_styles/hover = SubResource("StyleBox_attack_hover")
@@ -421,7 +429,7 @@ vertical_alignment = 1
 offset_left = 16.0
 offset_top = 76.0
 offset_right = 288.0
-offset_bottom = 266.0
+offset_bottom = 314.0
 mouse_filter = 2
 theme = SubResource("Theme_command")
 theme_override_styles/panel = SubResource("StyleBox_panel")
@@ -525,9 +533,9 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -170.0
-offset_top = -260.0
+offset_top = -310.0
 offset_right = 170.0
-offset_bottom = 260.0
+offset_bottom = 310.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBox_panel")
@@ -584,6 +592,15 @@ horizontal_alignment = 1
 [node name="BattlefieldAISelector" type="OptionButton" parent="PauseMenu/Backdrop/Menu/Content"]
 custom_minimum_size = Vector2(280, 40)
 layout_mode = 2
+
+[node name="AuthorizationHelp" type="Label" parent="PauseMenu/Backdrop/Menu/Content"]
+custom_minimum_size = Vector2(300, 72)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.68, 0.74, 0.72, 1)
+theme_override_font_sizes/font_size = 11
+text = "Advisory: suggestions only\nAssisted: explicit assignments\nDelegated: automatic reinforcements\nAutonomous: initiates assignments"
+horizontal_alignment = 1
+autowrap_mode = 2
 
 [node name="Exit" type="Button" parent="PauseMenu/Backdrop/Menu/Content"]
 custom_minimum_size = Vector2(280, 44)

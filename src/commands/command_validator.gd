@@ -379,18 +379,60 @@ func _validate_strategic_order(
 		StrategicOrderCommand.OrderKind.DEFEND_AREA:
 			if command.target_radius <= 0.0 or not _is_valid_position(command.target_position, battlefield_bounds):
 				return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
+			if command.formation_id == 0:
+				return _validate_strategic_participants(command, units, battlefield_bounds, pathfinder, false)
 			if not formations.has(command.formation_id):
 				return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 			var formation := formations[command.formation_id] as FormationState
 			var probe := FormationMoveCommand.new(command.command_id, command.issuer_id, command.issuer_kind, command.issued_tick, formation.leader_entity_id, formation.formation_id, command.target_position)
 			return _validate_formation_move(probe, units, formations, battlefield_bounds, pathfinder)
 		StrategicOrderCommand.OrderKind.ATTACK_TARGET:
+			if command.formation_id == 0:
+				var participant_result := _validate_strategic_participants(command, units, battlefield_bounds, pathfinder, false)
+				if not participant_result.is_accepted():
+					return participant_result
+				for entity_id in command.participant_entity_ids:
+					var probe := AttackCommand.new(command.command_id, command.issuer_id, command.issuer_kind, command.issued_tick, entity_id, command.objective_entity_id)
+					var attack_result := _validate_attack(probe, units, formations, buildings, faction_knowledge, logic_grid)
+					if not attack_result.is_accepted():
+						return attack_result
+				return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
 			if not formations.has(command.formation_id):
 				return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 			var formation := formations[command.formation_id] as FormationState
 			var probe := AttackCommand.new(command.command_id, command.issuer_id, command.issuer_kind, command.issued_tick, formation.leader_entity_id, command.objective_entity_id, formation.formation_id)
 			return _validate_attack(probe, units, formations, buildings, faction_knowledge, logic_grid)
+		StrategicOrderCommand.OrderKind.SCOUT_AREA:
+			if command.target_radius <= 0.0 or not _is_valid_position(command.target_position, battlefield_bounds):
+				return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
+			return _validate_strategic_participants(command, units, battlefield_bounds, pathfinder, true)
 	return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+
+
+func _validate_strategic_participants(
+	command: StrategicOrderCommand,
+	units: Dictionary,
+	battlefield_bounds: Rect2,
+	pathfinder: GridPathfinder,
+	require_scout: bool
+) -> CommandValidationResult:
+	if command.participant_entity_ids.is_empty():
+		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+	for entity_id in command.participant_entity_ids:
+		if not units.has(entity_id):
+			return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+		var unit := units[entity_id] as UnitState
+		var unit_result := _validate_unit(unit, command.issuer_id)
+		if not unit_result.is_accepted():
+			return unit_result
+		if require_scout:
+			if unit.definition_id != &"scout_vehicle":
+				return _rejected(CommandValidationResult.Reason.INVALID_DEFINITION)
+		elif not unit.can_attack or not unit.can_accept_attack_orders or unit.can_harvest or unit.can_construct:
+			return _rejected(CommandValidationResult.Reason.INVALID_DEFINITION)
+		if pathfinder != null and pathfinder.find_path(unit.position, command.target_position).is_empty():
+			return _rejected(CommandValidationResult.Reason.PATH_UNAVAILABLE)
+	return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
 
 
 func _validate_task_control(command: TaskControlCommand, tasks: Dictionary) -> CommandValidationResult:

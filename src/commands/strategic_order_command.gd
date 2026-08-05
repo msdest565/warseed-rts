@@ -5,6 +5,7 @@ enum OrderKind {
 	DEVELOP_RESOURCE,
 	DEFEND_AREA,
 	ATTACK_TARGET,
+	SCOUT_AREA,
 }
 
 var order_kind: OrderKind
@@ -12,6 +13,7 @@ var formation_id: int
 var objective_entity_id: int
 var target_position: Vector2
 var target_radius: float
+var participant_entity_ids: Array[int] = []
 
 
 func _init(

@@ -32,11 +32,11 @@ Clone and open the root `project.godot`. For command-line verification:
 - Factions, buildings, ore fields, harvesting, production and faction victory state.
 - Faction-scoped visibility, stale contacts and `last_seen_tick`; normal UI consumes faction snapshots.
 - Task lifecycle, blocked reasons, player takeover, Agent override rejection and path-based explicit rejoin.
-- Strategic develop-resource, defend-area and attack-target orders; pause/resume/cancel controls.
+- Strategic develop-resource, selected-unit defend-area, attack-target and scout-area orders; pause/resume/cancel controls.
 - Mission progress UI, task routes/targets/radius, ESC Continue/Exit menu.
 - Rule-driven delayed enemy raid that uses only current visibility or last-seen positions.
 - Data-driven Easy/Normal/Hard/Expert enemy profiles, fair-information target/route scoring, bounded pursuit, retreat hysteresis and observed-composition counters.
-- Friendly industrial/battlefield authorization levels with command gating, runtime menu controls and basic autonomous task creation.
+- Friendly industrial/battlefield authorization levels with command gating, in-game recommendations, assisted/delegated reinforcement differences, runtime explanations and basic autonomous task creation.
 - Automated end-to-end slice covering develop, missile takeover/rejoin, defend, attack and mission completion.
 
 ## Important limits

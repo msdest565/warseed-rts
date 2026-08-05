@@ -5,6 +5,7 @@ const INDUSTRIAL_AGENT_ID := 201
 const BATTLEFIELD_AGENT_ID := 202
 const DEVELOP_DELIVERY_TARGET := EconomySystem.HARVEST_AMOUNT
 const DEFEND_HOLD_TICKS := 60
+const SCOUT_OBSERVE_TICKS := 30
 const RETREAT_SURVIVOR_RATIO := 0.5
 
 
@@ -13,7 +14,7 @@ func advance(world: SimulationWorld) -> void:
 	task_ids.sort()
 	for task_id in task_ids:
 		var task := world.tasks[task_id] as TaskState
-		if task.kind != TaskState.Kind.FORMATION_MOVE_TEST and task.lifecycle in [TaskState.Lifecycle.WAITING, TaskState.Lifecycle.PREPARING, TaskState.Lifecycle.EXECUTING, TaskState.Lifecycle.PAUSED, TaskState.Lifecycle.BLOCKED]:
+		if task.kind != TaskState.Kind.FORMATION_MOVE_TEST and task.lifecycle in [TaskState.Lifecycle.WAITING, TaskState.Lifecycle.PREPARING, TaskState.Lifecycle.EXECUTING, TaskState.Lifecycle.PAUSED, TaskState.Lifecycle.BLOCKED] and _allows_reinforcement_enrollment(task, world):
 			var enrolled := _enroll_compatible_units(task, world)
 			if enrolled > 0 and task.lifecycle == TaskState.Lifecycle.BLOCKED and task.blocked_reason in [TaskState.BlockedReason.NO_AVAILABLE_UNITS, TaskState.BlockedReason.INSUFFICIENT_PARTICIPANTS, TaskState.BlockedReason.PARTICIPANT_OVERRIDDEN]:
 				task.set_lifecycle(TaskState.Lifecycle.EXECUTING, world.current_tick)
@@ -28,6 +29,8 @@ func advance(world: SimulationWorld) -> void:
 				_advance_defend_area(task, world)
 			TaskState.Kind.ATTACK_TARGET:
 				_advance_attack_target(task, world)
+			TaskState.Kind.SCOUT_AREA:
+				_advance_scout_area(task, world)
 
 
 func _advance_develop_resource(task: TaskState, world: SimulationWorld) -> void:
@@ -179,6 +182,43 @@ func _advance_attack_target(task: TaskState, world: SimulationWorld) -> void:
 	)
 
 
+func _advance_scout_area(task: TaskState, world: SimulationWorld) -> void:
+	if not world.formations.has(task.formation_id):
+		_block(task, world, TaskState.BlockedReason.INVALID_TARGET, "Assigned scout formation is unavailable")
+		return
+	var formation := world.formations[task.formation_id] as FormationState
+	if _enabled_participant_count(task, world) == 0:
+		_block(task, world, TaskState.BlockedReason.INSUFFICIENT_PARTICIPANTS, "No scout units remain")
+		return
+	_update_scout_intelligence(task, world)
+	if formation.anchor_position.distance_to(task.target_position) > task.target_radius:
+		if task.phase != TaskState.Phase.MUSTERING or not formation.is_moving:
+			if not _submit_formation_move(task, formation, task.target_position, world):
+				return
+		task.set_phase(TaskState.Phase.MUSTERING, world.current_tick, "Scout formation moving to observation area")
+		task.route = formation.path.duplicate()
+		return
+	if formation.is_moving:
+		world._apply_stop(StopCommand.new(world.allocate_command_id(), task.faction_id, GameCommand.IssuerKind.AGENT, world.current_tick, formation.leader_entity_id, formation.formation_id))
+	task.set_phase(TaskState.Phase.SCOUTING, world.current_tick, "Observing area; %d hostile contacts identified" % task.discovered_contact_count)
+	task.progress_current += 1
+	task.progress_target = SCOUT_OBSERVE_TICKS
+	if task.progress_current >= SCOUT_OBSERVE_TICKS:
+		_complete(task, world, "Reconnaissance complete; %d hostile contacts identified" % task.discovered_contact_count)
+
+
+func _update_scout_intelligence(task: TaskState, world: SimulationWorld) -> void:
+	var snapshot := world.create_faction_snapshot(task.faction_id)
+	var contacts := 0
+	for unit in snapshot.units:
+		if unit.enabled and unit.faction_id != task.faction_id and unit.is_visible_to_local_player:
+			contacts += 1
+	for building in snapshot.buildings:
+		if building.enabled and building.faction_id != task.faction_id and building.is_visible:
+			contacts += 1
+	task.discovered_contact_count = maxi(task.discovered_contact_count, contacts)
+
+
 func _submit_formation_move(task: TaskState, formation: FormationState, destination: Vector2, world: SimulationWorld) -> bool:
 	var move := FormationMoveCommand.new(
 		world.allocate_command_id(),
@@ -245,7 +285,13 @@ func _enroll_compatible_units(task: TaskState, world: SimulationWorld) -> int:
 		var unit := world.units[entity_id] as UnitState
 		if not unit.enabled or unit.faction_id != task.faction_id or unit.assigned_task_id != 0 or unit.last_command_id != 0:
 			continue
-		var compatible := unit.can_harvest if task.kind == TaskState.Kind.DEVELOP_RESOURCE else unit.can_attack and not unit.can_harvest and not unit.can_construct
+		var compatible := false
+		if task.kind == TaskState.Kind.DEVELOP_RESOURCE:
+			compatible = unit.can_harvest
+		elif task.kind == TaskState.Kind.SCOUT_AREA:
+			compatible = unit.definition_id == &"scout_vehicle"
+		else:
+			compatible = unit.can_attack and unit.can_accept_attack_orders and not unit.can_harvest and not unit.can_construct
 		if not compatible:
 			continue
 		if task.formation_id != 0:
@@ -270,6 +316,11 @@ func _enroll_compatible_units(task: TaskState, world: SimulationWorld) -> int:
 		enrolled += 1
 		world.events.append(SimulationEvent.new(world.current_tick, SimulationEvent.Kind.UNIT_CONTROL_CHANGED, unit.entity_id, "AGENT_ASSIGNED;task=%d;reinforcement=true" % task.task_id))
 	return enrolled
+
+
+func _allows_reinforcement_enrollment(task: TaskState, world: SimulationWorld) -> bool:
+	var policy := world.agent_policies.get(task.agent_id) as AgentPolicy
+	return policy != null and policy.allows_domain_management()
 
 
 func _ensure_harvest_orders(task: TaskState, refinery: BuildingState, world: SimulationWorld) -> void:

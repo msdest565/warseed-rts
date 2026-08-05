@@ -11,6 +11,7 @@ extends PanelContainer
 @onready var production_title_label: Label = $Margin/Layout/ProductionSection/Title
 @onready var develop_button: Button = $Margin/Layout/Strategic/Develop
 @onready var defend_button: Button = $Margin/Layout/Strategic/Defend
+@onready var scout_button: Button = $Margin/Layout/Strategic/Scout
 @onready var attack_button: Button = $Margin/Layout/Strategic/Attack
 @onready var build_factory_button: Button = $Margin/Layout/Operations/Grid/BuildFactory
 @onready var build_support_button: Button = $Margin/Layout/Operations/Grid/BuildSupport
@@ -45,6 +46,7 @@ func _ready() -> void:
 	_signals_connected = true
 	develop_button.pressed.connect(_submit_develop)
 	defend_button.pressed.connect(_submit_defend)
+	scout_button.pressed.connect(_submit_scout)
 	attack_button.pressed.connect(_submit_attack)
 	build_factory_button.pressed.connect(_begin_build.bind(&"automated_factory"))
 	build_support_button.pressed.connect(_begin_build.bind(&"forward_support_station"))
@@ -59,7 +61,7 @@ func _ready() -> void:
 
 
 func refresh_locale() -> void:
-	for control in [title_label, mission_label, selection_title_label, selection_label, task_label, strategic_title_label, operations_title_label, production_title_label, develop_button, defend_button, attack_button, build_factory_button, build_support_button, repair_button, pause_button, resume_button, cancel_button, harvest_button]:
+	for control in [title_label, mission_label, selection_title_label, selection_label, task_label, strategic_title_label, operations_title_label, production_title_label, develop_button, defend_button, scout_button, attack_button, build_factory_button, build_support_button, repair_button, pause_button, resume_button, cancel_button, harvest_button]:
 		(control as Control).auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	for button in production_buttons:
 		button.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
@@ -70,6 +72,7 @@ func refresh_locale() -> void:
 	production_title_label.text = GameText.t(&"HUD_PRODUCTION")
 	develop_button.text = GameText.t(&"ORDER_DEVELOP")
 	defend_button.text = GameText.t(&"ORDER_DEFEND")
+	scout_button.text = GameText.t(&"ORDER_SCOUT")
 	attack_button.text = GameText.t(&"ORDER_ATTACK")
 	build_factory_button.text = _building_button_text(&"automated_factory", &"BUILD_FACTORY")
 	build_support_button.text = _building_button_text(&"forward_support_station", &"BUILD_SUPPORT")
@@ -115,8 +118,12 @@ func update_snapshot(snapshot: WorldSnapshot) -> void:
 	current_task_id = active_task.task_id if active_task != null else 0
 	var has_open_task := active_task != null and active_task.lifecycle not in [TaskState.Lifecycle.COMPLETED, TaskState.Lifecycle.FAILED, TaskState.Lifecycle.CANCELLED]
 	develop_button.disabled = industrial_open or industrial_authorization < AgentPolicy.Authorization.ASSISTED
-	defend_button.disabled = battlefield_open or battlefield_authorization < AgentPolicy.Authorization.ASSISTED
-	attack_button.disabled = battlefield_open or battlefield_authorization < AgentPolicy.Authorization.ASSISTED or snapshot.get_unit(SimulationWorld.DEFAULT_ENEMY_UNIT_ID) == null or not snapshot.get_unit(SimulationWorld.DEFAULT_ENEMY_UNIT_ID).enabled
+	var selected_combat := input_controller != null and not input_controller._selected_strategic_unit_ids(false).is_empty()
+	var selected_scout := input_controller != null and not input_controller._selected_strategic_unit_ids(true).is_empty()
+	defend_button.disabled = battlefield_open or battlefield_authorization < AgentPolicy.Authorization.ASSISTED or not selected_combat
+	scout_button.disabled = battlefield_open or battlefield_authorization < AgentPolicy.Authorization.ASSISTED or not selected_scout
+	var default_enemy := snapshot.get_unit(SimulationWorld.DEFAULT_ENEMY_UNIT_ID)
+	attack_button.disabled = battlefield_open or battlefield_authorization < AgentPolicy.Authorization.ASSISTED or not selected_combat or default_enemy == null or not default_enemy.enabled or not default_enemy.is_visible_to_local_player
 	pause_button.disabled = active_task == null or active_task.lifecycle != TaskState.Lifecycle.EXECUTING
 	resume_button.disabled = active_task == null or active_task.lifecycle not in [TaskState.Lifecycle.PAUSED, TaskState.Lifecycle.BLOCKED]
 	cancel_button.disabled = not has_open_task
@@ -167,6 +174,8 @@ func _update_task(task: TaskSnapshot) -> void:
 			GameText.enum_name("TASK_BLOCKED", TaskState.BlockedReason.keys()[task.blocked_reason]),
 			task.blocked_detail,
 		]
+	if task.kind == TaskState.Kind.SCOUT_AREA:
+		task_label.text += "\n" + GameText.t(&"SCOUT_INTEL_REPORT") % task.discovered_contact_count
 
 
 func _update_selection(snapshot: WorldSnapshot) -> void:
@@ -230,19 +239,20 @@ func _submit_defend() -> void:
 		input_controller.begin_defend_targeting()
 
 
+func _submit_scout() -> void:
+	if input_controller != null:
+		input_controller.begin_scout_targeting()
+
+
 func _submit_attack() -> void:
 	var snapshot := simulation_host.current_snapshot
-	var formation := snapshot.get_formation(SimulationWorld.DEFAULT_FORMATION_ID)
 	var enemy := snapshot.get_unit(SimulationWorld.DEFAULT_ENEMY_UNIT_ID)
-	if formation == null or enemy == null or not enemy.is_visible_to_local_player:
+	if input_controller == null or enemy == null or not enemy.is_visible_to_local_player:
 		last_status = GameText.t(&"ATTACK_NO_TARGET")
 		return
-	_submit(simulation_host.create_strategic_order_command(
-		StrategicOrderCommand.OrderKind.ATTACK_TARGET,
-		formation.formation_id,
-		enemy.entity_id,
-		enemy.position
-	))
+	var result := input_controller.attack_selected_strategic_target(enemy.entity_id)
+	if result != null:
+		last_status = GameText.t(&"STATUS_ATTACK") % GameText.command_result(result)
 
 
 func _begin_build(definition_id: StringName) -> void:

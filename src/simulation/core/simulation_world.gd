@@ -58,6 +58,7 @@ var events: Array[SimulationEvent] = []
 var projectiles: Dictionary = {}
 var _next_projectile_id: int = 1
 var _next_unit_id: int = 1100
+var _next_formation_id: int = 2
 var _next_building_id: int = FIRST_CONSTRUCTED_BUILDING_ID
 var _next_command_id: int = 1
 var _next_task_id: int = 1
@@ -111,6 +112,28 @@ func set_agent_authorization(agent_id: int, authorization: AgentPolicy.Authoriza
 func get_agent_authorization(agent_id: int) -> AgentPolicy.Authorization:
 	var policy := agent_policies.get(agent_id) as AgentPolicy
 	return policy.authorization if policy != null else AgentPolicy.Authorization.ADVISORY
+
+
+func get_agent_recommendation_key(agent_id: int) -> StringName:
+	if _has_open_task_for_agent(agent_id):
+		return &"AI_RECOMMENDATION_ACTIVE"
+	if agent_id == StrategicTaskSystem.INDUSTRIAL_AGENT_ID:
+		for unit_variant in units.values():
+			var unit := unit_variant as UnitState
+			if unit.enabled and unit.faction_id == LOCAL_PLAYER_ID and unit.can_harvest:
+				return &"AI_RECOMMENDATION_DEVELOP"
+		return &"AI_RECOMMENDATION_NEED_HARVESTER"
+	if agent_id == StrategicTaskSystem.BATTLEFIELD_AGENT_ID:
+		for unit_variant in units.values():
+			var contact := unit_variant as UnitState
+			if contact.enabled and contact.faction_id != LOCAL_PLAYER_ID and is_entity_visible_to_faction(contact.entity_id, LOCAL_PLAYER_ID):
+				return &"AI_RECOMMENDATION_ATTACK"
+		for unit_variant in units.values():
+			var unit := unit_variant as UnitState
+			if unit.enabled and unit.faction_id == LOCAL_PLAYER_ID and unit.definition_id == &"scout_vehicle" and unit.assigned_task_id == 0:
+				return &"AI_RECOMMENDATION_SCOUT"
+		return &"AI_RECOMMENDATION_DEFEND"
+	return &"AI_RECOMMENDATION_NONE"
 
 
 func set_enemy_difficulty(difficulty: EnemyDifficultyProfile.Difficulty) -> void:
@@ -345,13 +368,29 @@ func _submit_autonomous_battlefield_order(policy: AgentPolicy) -> void:
 		if distance < best_distance or is_equal_approx(distance, best_distance) and (best_target == null or contact.entity_id < best_target.entity_id):
 			best_target = contact
 			best_distance = distance
-	if best_target == null:
-		return
-	var command := StrategicOrderCommand.new(
-		allocate_command_id(), policy.faction_id, current_tick,
-		StrategicOrderCommand.OrderKind.ATTACK_TARGET, formation.formation_id, best_target.entity_id, best_target.position, 0.0,
-		GameCommand.IssuerKind.AGENT
-	)
+	var command: StrategicOrderCommand
+	if best_target != null:
+		command = StrategicOrderCommand.new(
+			allocate_command_id(), policy.faction_id, current_tick,
+			StrategicOrderCommand.OrderKind.ATTACK_TARGET, formation.formation_id, best_target.entity_id, best_target.position, 0.0,
+			GameCommand.IssuerKind.AGENT
+		)
+	else:
+		var scout_ids: Array[int] = []
+		for unit_variant in units.values():
+			var unit := unit_variant as UnitState
+			if unit.enabled and unit.faction_id == policy.faction_id and unit.definition_id == &"scout_vehicle" and unit.assigned_task_id == 0:
+				scout_ids.append(unit.entity_id)
+				break
+		if scout_ids.is_empty():
+			return
+		command = StrategicOrderCommand.new(
+			allocate_command_id(), policy.faction_id, current_tick,
+			StrategicOrderCommand.OrderKind.SCOUT_AREA, 0, 0,
+			logic_grid.cell_to_world(Vector2i(70, 42)), 224.0,
+			GameCommand.IssuerKind.AGENT
+		)
+		command.participant_entity_ids.assign(scout_ids)
 	command.agent_id = policy.agent_id
 	submit_command(command)
 
@@ -1079,6 +1118,9 @@ func _start_unit_path_to_building(unit: UnitState, building: BuildingState) -> v
 func _apply_strategic_order(command: StrategicOrderCommand) -> void:
 	if command.order_kind in [StrategicOrderCommand.OrderKind.DEFEND_AREA, StrategicOrderCommand.OrderKind.ATTACK_TARGET]:
 		_detach_noncombat_members(command.formation_id)
+	var resolved_formation_id := command.formation_id
+	if command.order_kind in [StrategicOrderCommand.OrderKind.DEFEND_AREA, StrategicOrderCommand.OrderKind.ATTACK_TARGET, StrategicOrderCommand.OrderKind.SCOUT_AREA] and resolved_formation_id == 0:
+		resolved_formation_id = _create_task_formation(command.participant_entity_ids)
 	var participants: Array[int] = []
 	var agent_id := StrategicTaskSystem.BATTLEFIELD_AGENT_ID
 	var kind := TaskState.Kind.DEFEND_AREA
@@ -1095,26 +1137,29 @@ func _apply_strategic_order(command: StrategicOrderCommand) -> void:
 					break
 		StrategicOrderCommand.OrderKind.DEFEND_AREA:
 			kind = TaskState.Kind.DEFEND_AREA
-			participants = _combat_participants(command.formation_id)
+			participants = _combat_participants(resolved_formation_id)
 		StrategicOrderCommand.OrderKind.ATTACK_TARGET:
 			kind = TaskState.Kind.ATTACK_TARGET
-			participants = _combat_participants(command.formation_id)
+			participants = _combat_participants(resolved_formation_id)
+		StrategicOrderCommand.OrderKind.SCOUT_AREA:
+			kind = TaskState.Kind.SCOUT_AREA
+			participants = _scout_participants(resolved_formation_id)
 	var task := TaskState.new(_next_task_id, agent_id, participants)
 	_next_task_id += 1
 	task.faction_id = command.issuer_id
 	task.kind = kind
-	task.formation_id = command.formation_id
+	task.formation_id = resolved_formation_id
 	task.target_entity_id = command.objective_entity_id
 	task.target_position = command.target_position
 	task.target_radius = command.target_radius
 	task.accepted_tick = current_tick
 	task.requires_proactive_authorization = command.issuer_kind == GameCommand.IssuerKind.AGENT
-	task.progress_target = 2 if kind == TaskState.Kind.DEVELOP_RESOURCE else StrategicTaskSystem.DEFEND_HOLD_TICKS
+	task.progress_target = 2 if kind == TaskState.Kind.DEVELOP_RESOURCE else (StrategicTaskSystem.SCOUT_OBSERVE_TICKS if kind == TaskState.Kind.SCOUT_AREA else StrategicTaskSystem.DEFEND_HOLD_TICKS)
 	if kind == TaskState.Kind.DEVELOP_RESOURCE:
 		task.baseline_value = (ore_fields[command.objective_entity_id] as OreFieldState).ore_remaining
 		task.expected_unit_count = _count_friendly_definition(&"harvester")
-	elif command.formation_id != 0:
-		var formation := formations[command.formation_id] as FormationState
+	elif resolved_formation_id != 0:
+		var formation := formations[resolved_formation_id] as FormationState
 		task.route = pathfinder.find_path(formation.anchor_position, command.target_position)
 	task.set_lifecycle(TaskState.Lifecycle.EXECUTING, current_tick)
 	task.set_phase(TaskState.Phase.PREPARING, current_tick, "Assigned to %s" % ("industrial supervisor" if agent_id == StrategicTaskSystem.INDUSTRIAL_AGENT_ID else "battlefield commander"))
@@ -1126,6 +1171,32 @@ func _apply_strategic_order(command: StrategicOrderCommand) -> void:
 		unit.assigned_task_id = task.task_id
 		unit.original_formation_id = unit.formation_id
 	events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.TASK_STATE_CHANGED, task.task_id, "EXECUTING:%s" % TaskState.Kind.keys()[task.kind]))
+
+
+func _create_task_formation(participant_entity_ids: Array[int]) -> int:
+	var valid_ids: Array[int] = []
+	var anchor := Vector2.ZERO
+	for entity_id in participant_entity_ids:
+		var unit := units.get(entity_id) as UnitState
+		if unit == null or not unit.enabled:
+			continue
+		valid_ids.append(entity_id)
+		anchor += unit.position
+	if valid_ids.is_empty():
+		return 0
+	anchor /= valid_ids.size()
+	for entity_id in valid_ids:
+		_remove_unit_from_formation(units[entity_id] as UnitState)
+	var formation := FormationState.new(_next_formation_id, valid_ids, anchor)
+	_next_formation_id += 1
+	formations[formation.formation_id] = formation
+	for entity_id in valid_ids:
+		var unit := units[entity_id] as UnitState
+		unit.formation_id = formation.formation_id
+		unit.formation_slot_id = formation.get_slot_id(entity_id)
+		unit.following_formation = true
+		unit.desired_position = anchor + formation.get_wide_offset(unit.formation_slot_id)
+	return formation.formation_id
 
 
 func _apply_task_control(command: TaskControlCommand) -> void:
@@ -1229,6 +1300,17 @@ func _combat_participants(formation_id: int) -> Array[int]:
 	for entity_id in (formations[formation_id] as FormationState).member_entity_ids:
 		var unit := units.get(entity_id) as UnitState
 		if unit != null and unit.enabled and unit.can_attack and unit.can_accept_attack_orders:
+			result.append(entity_id)
+	return result
+
+
+func _scout_participants(formation_id: int) -> Array[int]:
+	var result: Array[int] = []
+	if not formations.has(formation_id):
+		return result
+	for entity_id in (formations[formation_id] as FormationState).member_entity_ids:
+		var unit := units.get(entity_id) as UnitState
+		if unit != null and unit.enabled and unit.definition_id == &"scout_vehicle":
 			result.append(entity_id)
 	return result
 

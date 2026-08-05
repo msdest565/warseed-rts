@@ -11,6 +11,7 @@ func run() -> Array[String]:
 	_test_stop_and_attack_move_input(failures)
 	_test_q_context_attack_and_range_preview(failures)
 	_test_role_filtered_attack_and_targeted_orders(failures)
+	_test_produced_assault_defense_and_scout_orders(failures)
 	_test_context_attack_input(failures)
 	_test_engineering_and_building_attack_input(failures)
 	return failures
@@ -166,6 +167,7 @@ func _test_role_filtered_attack_and_targeted_orders(failures: Array[String]) -> 
 	var defense_fixture := _create_fixture()
 	var defense_input := defense_fixture["input"] as InputController
 	var defense_host := defense_fixture["host"] as SimulationHost
+	defense_input._set_selection([4])
 	defense_input.begin_defend_targeting()
 	_expect(defense_input.command_mode == InputController.CommandMode.DEFEND_TARGETING, "defense should enter location targeting mode", failures)
 	var formation := defense_host.world.formations[SimulationWorld.DEFAULT_FORMATION_ID] as FormationState
@@ -173,6 +175,50 @@ func _test_role_filtered_attack_and_targeted_orders(failures: Array[String]) -> 
 	var defense_result := defense_input.defend_selected_at(defense_position)
 	_expect(defense_result != null and defense_result.is_accepted(), "defense location should submit through the command pipeline", failures)
 	_free_fixture(defense_fixture)
+
+
+func _test_produced_assault_defense_and_scout_orders(failures: Array[String]) -> void:
+	var fixture := _create_fixture()
+	var input := fixture["input"] as InputController
+	var host := fixture["host"] as SimulationHost
+	var production := host.create_produce_unit_command(SimulationWorld.PLAYER_FACTORY_ID, &"assault_vehicle")
+	_expect(host.submit_command(production).is_accepted(), "assault production should enter the authoritative queue", failures)
+	for _tick in range(40):
+		host.advance_tick()
+	var produced := host.current_snapshot.get_unit(1100)
+	_expect(produced != null and produced.definition_id == &"assault_vehicle", "factory should produce a selectable assault unit", failures)
+	if produced != null:
+		input.select_at(produced.position)
+		_expect(input.selected_entity_ids == [1100], "new assault should be individually selectable", failures)
+		input.begin_defend_targeting()
+		var defense_result := input.defend_selected_at(produced.position + Vector2(96.0, 0.0))
+		_expect(defense_result != null and defense_result.is_accepted(), "new assault should accept a selected defense assignment", failures)
+		host.advance_tick()
+		var defense_task := host.world.tasks.get(1) as TaskState
+		_expect(defense_task != null and defense_task.participant_entity_ids == [1100], "selected defense should assign only the new assault", failures)
+		_expect((host.world.units[1100] as UnitState).assigned_task_id == 1, "new assault should receive authoritative defense ownership", failures)
+	_free_fixture(fixture)
+
+	var scout_fixture := _create_fixture()
+	var scout_input := scout_fixture["input"] as InputController
+	var scout_host := scout_fixture["host"] as SimulationHost
+	scout_input._set_selection([3])
+	scout_input.begin_scout_targeting()
+	_expect(scout_input.command_mode == InputController.CommandMode.SCOUT_TARGETING, "selected scout should enter reconnaissance targeting", failures)
+	var scout_origin := scout_host.current_snapshot.get_unit(3).position
+	var observation_position := scout_origin + Vector2(256.0, 0.0)
+	var observed_enemy := scout_host.world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	observed_enemy.position = observation_position + Vector2(24.0, 0.0)
+	observed_enemy.can_attack = false
+	var scout_result := scout_input.scout_selected_at(observation_position)
+	_expect(scout_result != null and scout_result.is_accepted(), "scout-area order should use the strategic command pipeline", failures)
+	for _tick in range(45):
+		observed_enemy.position = observation_position + Vector2(24.0, 0.0)
+		scout_host.advance_tick()
+	var scout_task := scout_host.world.tasks.get(1) as TaskState
+	_expect(scout_task != null and scout_task.kind == TaskState.Kind.SCOUT_AREA and scout_task.participant_entity_ids == [3], "reconnaissance should assign only selected scouts", failures)
+	_expect(scout_task != null and scout_task.lifecycle == TaskState.Lifecycle.COMPLETED and scout_task.discovered_contact_count >= 1, "reconnaissance should observe for a fixed interval and report visible hostile contacts", failures)
+	_free_fixture(scout_fixture)
 
 
 func _create_fixture() -> Dictionary:

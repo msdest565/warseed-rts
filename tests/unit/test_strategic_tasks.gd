@@ -8,6 +8,7 @@ func run() -> Array[String]:
 	_test_defend_area_respects_leash(failures)
 	_test_attack_target_advances_and_completes(failures)
 	_test_parallel_domains_and_dynamic_reinforcements(failures)
+	_test_produced_assault_reinforces_delegated_defense(failures)
 	_test_task_controls_use_command_pipeline(failures)
 	_test_complete_vertical_slice(failures)
 	return failures
@@ -90,6 +91,8 @@ func _test_attack_target_advances_and_completes(failures: Array[String]) -> void
 
 func _test_parallel_domains_and_dynamic_reinforcements(failures: Array[String]) -> void:
 	var world := SimulationWorld.new()
+	world.set_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID, AgentPolicy.Authorization.DELEGATED)
+	world.set_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, AgentPolicy.Authorization.DELEGATED)
 	var ore_field := world.ore_fields[SimulationWorld.DEFAULT_ORE_FIELD_ID] as OreFieldState
 	var formation := world.formations[SimulationWorld.DEFAULT_FORMATION_ID] as FormationState
 	var develop := StrategicOrderCommand.new(
@@ -126,6 +129,28 @@ func _test_parallel_domains_and_dynamic_reinforcements(failures: Array[String]) 
 	world.advance_tick()
 	_expect(new_harvester.harvest_ore_field_entity_id == ore_field.entity_id, "new harvesters should receive the active mining assignment", failures)
 	_expect(world.create_snapshot().get_task(1).faction_id == SimulationWorld.LOCAL_PLAYER_ID, "task snapshots should expose their owning faction", failures)
+
+
+func _test_produced_assault_reinforces_delegated_defense(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	world.set_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, AgentPolicy.Authorization.DELEGATED)
+	var formation := world.formations[SimulationWorld.DEFAULT_FORMATION_ID] as FormationState
+	var defense := StrategicOrderCommand.new(
+		world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, world.current_tick,
+		StrategicOrderCommand.OrderKind.DEFEND_AREA, formation.formation_id, 0, formation.anchor_position, 160.0
+	)
+	_expect(world.submit_command(defense).is_accepted(), "delegated defense should accept the initial formation", failures)
+	_expect(world.submit_command(ProduceUnitCommand.new(
+		world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, GameCommand.IssuerKind.PLAYER,
+		world.current_tick, SimulationWorld.PLAYER_FACTORY_ID, &"assault_vehicle"
+	)).is_accepted(), "assault reinforcement production should be accepted in parallel", failures)
+	for _tick in range(42):
+		world.advance_tick()
+	var reinforcement := world.units.get(1100) as UnitState
+	var task := world.tasks.get(1) as TaskState
+	_expect(reinforcement != null and reinforcement.definition_id == &"assault_vehicle", "real factory completion should create the assault reinforcement", failures)
+	_expect(task != null and task.has_participant(1100), "delegated defense should enroll the produced assault reinforcement", failures)
+	_expect(reinforcement != null and reinforcement.assigned_task_id == 1 and reinforcement.following_formation, "produced assault should immediately respond through task ownership and formation following", failures)
 
 
 func _test_task_controls_use_command_pipeline(failures: Array[String]) -> void:

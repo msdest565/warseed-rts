@@ -61,6 +61,25 @@ func _test_friendly_agent_authorization(failures: Array[String]) -> void:
 	autonomous_world.set_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID, AgentPolicy.Authorization.DELEGATED)
 	_expect(autonomous_task != null and autonomous_task.lifecycle == TaskState.Lifecycle.PAUSED, "dropping below autonomous should pause a proactively created task", failures)
 
+	var management_world := SimulationWorld.new()
+	var formation := management_world.formations[SimulationWorld.DEFAULT_FORMATION_ID] as FormationState
+	var defend := StrategicOrderCommand.new(
+		management_world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, management_world.current_tick,
+		StrategicOrderCommand.OrderKind.DEFEND_AREA, formation.formation_id, 0, formation.anchor_position, 160.0
+	)
+	_expect(management_world.submit_command(defend).is_accepted(), "assisted mode should accept an explicit defense assignment", failures)
+	management_world.advance_tick()
+	var assault_definition := SimulationWorld.UNIT_CATALOG.get_unit(&"assault_vehicle")
+	var reinforcement := UnitState.new(1190, formation.anchor_position + Vector2(-160.0, 0.0), assault_definition.move_speed, SimulationWorld.LOCAL_PLAYER_ID)
+	management_world._apply_unit_definition(reinforcement, assault_definition)
+	management_world.units[reinforcement.entity_id] = reinforcement
+	management_world.advance_tick()
+	_expect(not (management_world.tasks[1] as TaskState).has_participant(reinforcement.entity_id), "assisted mode should not expand an assignment beyond the player's explicit participants", failures)
+	management_world.set_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, AgentPolicy.Authorization.DELEGATED)
+	management_world.advance_tick()
+	_expect((management_world.tasks[1] as TaskState).has_participant(reinforcement.entity_id), "delegated mode should automatically enroll a compatible reinforcement", failures)
+	_expect(management_world.get_agent_recommendation_key(StrategicTaskSystem.BATTLEFIELD_AGENT_ID) == &"AI_RECOMMENDATION_ACTIVE", "friendly AI should publish a testable recommendation/status key", failures)
+
 
 func _test_difficulty_profiles_and_reaction_windows(failures: Array[String]) -> void:
 	for profile in [

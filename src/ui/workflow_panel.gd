@@ -48,6 +48,8 @@ func update_snapshot(snapshot: WorldSnapshot) -> void:
 			defending += task.get_participant_count()
 		elif task.kind == TaskState.Kind.ATTACK_TARGET:
 			attacking += task.get_participant_count()
+		elif task.kind == TaskState.Kind.SCOUT_AREA:
+			scouting += task.get_participant_count()
 		task_lines.append(GameText.t(&"WORKFLOW_TASK_LINE") % [
 			task.task_id,
 			GameText.enum_name("TASK_KIND", TaskState.Kind.keys()[task.kind]),
@@ -63,10 +65,15 @@ func update_snapshot(snapshot: WorldSnapshot) -> void:
 		GameText.t(&"WORKFLOW_COUNT") % [GameText.t(&"WORKFLOW_ATTACK"), attacking],
 	])
 	var authorization_line := ""
+	var recommendation_line := ""
 	if simulation_host != null:
 		authorization_line = GameText.t(&"WORKFLOW_AI_STATUS") % [
 			GameText.enum_name("AI_AUTH", AgentPolicy.Authorization.keys()[simulation_host.get_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID)]),
 			GameText.enum_name("AI_AUTH", AgentPolicy.Authorization.keys()[simulation_host.get_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID)]),
 		]
+		recommendation_line = GameText.t(&"WORKFLOW_AI_RECOMMENDATIONS") % [
+			GameText.t(simulation_host.get_agent_recommendation_key(StrategicTaskSystem.INDUSTRIAL_AGENT_ID)),
+			GameText.t(simulation_host.get_agent_recommendation_key(StrategicTaskSystem.BATTLEFIELD_AGENT_ID)),
+		]
 	var task_text := GameText.t(&"WORKFLOW_NONE") if task_lines.is_empty() else "\n".join(task_lines)
-	tasks_label.text = "%s\n%s" % [authorization_line, task_text] if not authorization_line.is_empty() else task_text
+	tasks_label.text = "%s\n%s\n%s" % [authorization_line, recommendation_line, task_text] if not authorization_line.is_empty() else task_text

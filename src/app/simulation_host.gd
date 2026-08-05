@@ -206,9 +206,10 @@ func create_strategic_order_command(
 	formation_id: int,
 	objective_entity_id: int,
 	target_position: Vector2,
-	target_radius: float = 0.0
+	target_radius: float = 0.0,
+	participant_entity_ids: Array[int] = []
 ) -> StrategicOrderCommand:
-	return StrategicOrderCommand.new(
+	var command := StrategicOrderCommand.new(
 		world.allocate_command_id(),
 		SimulationWorld.LOCAL_PLAYER_ID,
 		world.current_tick,
@@ -218,6 +219,9 @@ func create_strategic_order_command(
 		target_position,
 		target_radius
 	)
+	command.participant_entity_ids.assign(participant_entity_ids)
+	command.participant_entity_ids.sort()
+	return command
 
 
 func create_task_control_command(task_id: int, action: TaskControlCommand.Action) -> TaskControlCommand:
@@ -292,3 +296,7 @@ func set_agent_authorization(agent_id: int, authorization: AgentPolicy.Authoriza
 
 func get_agent_authorization(agent_id: int) -> AgentPolicy.Authorization:
 	return world.get_agent_authorization(agent_id)
+
+
+func get_agent_recommendation_key(agent_id: int) -> StringName:
+	return world.get_agent_recommendation_key(agent_id)

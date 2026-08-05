@@ -108,6 +108,7 @@ func _apply_combat(unit: UnitState, definition: UnitDefinition) -> void:
 	unit.attacks_per_second = definition.combat.attacks_per_second
 	unit.attack_cooldown_ticks = maxi(1, ceili(10.0 / unit.attacks_per_second))
 	unit.projectile_speed = definition.combat.projectile_speed
+	unit.sight_range = definition.sight_range
 	unit.can_attack = definition.can_attack
 	unit.can_accept_attack_orders = definition.can_accept_attack_orders
 	unit.auto_retaliate = definition.auto_retaliate

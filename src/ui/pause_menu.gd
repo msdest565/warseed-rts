@@ -16,6 +16,7 @@ signal agent_authorization_changed(agent_id: int, authorization: AgentPolicy.Aut
 @onready var industrial_ai_selector: OptionButton = $Backdrop/Menu/Content/IndustrialAISelector
 @onready var battlefield_ai_label: Label = $Backdrop/Menu/Content/BattlefieldAILabel
 @onready var battlefield_ai_selector: OptionButton = $Backdrop/Menu/Content/BattlefieldAISelector
+@onready var authorization_help: Label = $Backdrop/Menu/Content/AuthorizationHelp
 @onready var exit_button: Button = $Backdrop/Menu/Content/Exit
 
 var _enemy_difficulty: EnemyDifficultyProfile.Difficulty = EnemyDifficultyProfile.Difficulty.NORMAL
@@ -38,7 +39,7 @@ func _ready() -> void:
 
 
 func _refresh_locale() -> void:
-	for control in [title_label, continue_button, language_label, language_selector, difficulty_label, difficulty_selector, industrial_ai_label, industrial_ai_selector, battlefield_ai_label, battlefield_ai_selector, exit_button]:
+	for control in [title_label, continue_button, language_label, language_selector, difficulty_label, difficulty_selector, industrial_ai_label, industrial_ai_selector, battlefield_ai_label, battlefield_ai_selector, authorization_help, exit_button]:
 		(control as Control).auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	title_label.text = GameText.t(&"PAUSED_TITLE")
 	continue_button.text = GameText.t(&"CONTINUE_GAME")
@@ -46,6 +47,7 @@ func _refresh_locale() -> void:
 	difficulty_label.text = GameText.t(&"ENEMY_DIFFICULTY_LABEL")
 	industrial_ai_label.text = GameText.t(&"INDUSTRIAL_AI_LABEL")
 	battlefield_ai_label.text = GameText.t(&"BATTLEFIELD_AI_LABEL")
+	authorization_help.text = GameText.t(&"AI_AUTH_HELP")
 	exit_button.text = GameText.t(&"EXIT_GAME")
 	language_selector.clear()
 	language_selector.add_item(GameText.t(&"LANGUAGE_CHINESE"))
@@ -56,6 +58,8 @@ func _refresh_locale() -> void:
 	_populate_enum_selector(difficulty_selector, "AI_DIFFICULTY", EnemyDifficultyProfile.Difficulty.keys(), _enemy_difficulty)
 	_populate_enum_selector(industrial_ai_selector, "AI_AUTH", AgentPolicy.Authorization.keys(), _industrial_authorization)
 	_populate_enum_selector(battlefield_ai_selector, "AI_AUTH", AgentPolicy.Authorization.keys(), _battlefield_authorization)
+	industrial_ai_selector.tooltip_text = GameText.t(StringName("AI_AUTH_DESCRIPTION_%s" % AgentPolicy.Authorization.keys()[_industrial_authorization]))
+	battlefield_ai_selector.tooltip_text = GameText.t(StringName("AI_AUTH_DESCRIPTION_%s" % AgentPolicy.Authorization.keys()[_battlefield_authorization]))
 
 
 func _select_language(index: int) -> void:
@@ -77,6 +81,7 @@ func _select_agent_authorization(index: int, agent_id: int) -> void:
 		_industrial_authorization = authorization
 	else:
 		_battlefield_authorization = authorization
+	selector.tooltip_text = GameText.t(StringName("AI_AUTH_DESCRIPTION_%s" % AgentPolicy.Authorization.keys()[authorization]))
 	agent_authorization_changed.emit(agent_id, authorization)
 
 
