@@ -9,7 +9,7 @@ The authoritative handoff is `docs/STATUS_AND_NEXT_STEPS.md`. Read it before cha
 - Rendering: GL Compatibility, 2D
 - Simulation: deterministic authoritative 10 Hz
 - Runtime: offline, no LLM, no cloud service, no third-party plugin
-- Tests: `WARSEED tests passed: 12 suites`
+- Tests: `WARSEED tests passed: 13 suites`
 - Windows debug export: `build/windows/warseed-debug.exe` (generated and ignored)
 
 Clone and open the root `project.godot`. For command-line verification:
@@ -35,10 +35,12 @@ Clone and open the root `project.godot`. For command-line verification:
 - Strategic develop-resource, defend-area and attack-target orders; pause/resume/cancel controls.
 - Mission progress UI, task routes/targets/radius, ESC Continue/Exit menu.
 - Rule-driven delayed enemy raid that uses only current visibility or last-seen positions.
+- Data-driven Easy/Normal/Hard/Expert enemy profiles, fair-information target/route scoring, bounded pursuit, retreat hysteresis and observed-composition counters.
+- Friendly industrial/battlefield authorization levels with command gating, runtime menu controls and basic autonomous task creation.
 - Automated end-to-end slice covering develop, missile takeover/rejoin, defend, attack and mission completion.
 
 ## Important limits
 
-This is a technical vertical slice, not the complete MVP. Construction, repair, physical harvester trips, building combat, the complete manual command-center victory path, a full enemy economy/state machine, production art and real 5-8 minute playtest tuning remain.
+This is a technical vertical slice, not the complete MVP. Production queues and building-specific catalogs, unit repair/support logistics, multi-squad task graphs, patrol/escort/hold commands, production art and real 5-8 minute playtest tuning remain.
 
-The next priority is building damage/combat and the manual victory loop, followed by construction/repair and enemy/timing tuning. Preserve the authoritative boundary and do not commit `.godot/`, `build/`, logs, screenshots or credentials.
+The next priority is production responsibility/queues, shared tactical hold/patrol/escort behavior, support logistics and multi-squad task planning. Preserve the authoritative boundary and do not commit `.godot/`, `build/`, logs, screenshots or credentials.

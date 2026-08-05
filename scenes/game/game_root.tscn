@@ -489,7 +489,7 @@ anchor_right = 1.0
 offset_left = -372.0
 offset_top = 16.0
 offset_right = -16.0
-offset_bottom = 300.0
+offset_bottom = 360.0
 grow_horizontal = 0
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBox_panel")
@@ -525,9 +525,9 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -170.0
-offset_top = -148.0
+offset_top = -260.0
 offset_right = 170.0
-offset_bottom = 148.0
+offset_bottom = 260.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBox_panel")
@@ -555,6 +555,33 @@ text = "Language"
 horizontal_alignment = 1
 
 [node name="LanguageSelector" type="OptionButton" parent="PauseMenu/Backdrop/Menu/Content"]
+custom_minimum_size = Vector2(280, 40)
+layout_mode = 2
+
+[node name="DifficultyLabel" type="Label" parent="PauseMenu/Backdrop/Menu/Content"]
+layout_mode = 2
+text = "Enemy Difficulty"
+horizontal_alignment = 1
+
+[node name="DifficultySelector" type="OptionButton" parent="PauseMenu/Backdrop/Menu/Content"]
+custom_minimum_size = Vector2(280, 40)
+layout_mode = 2
+
+[node name="IndustrialAILabel" type="Label" parent="PauseMenu/Backdrop/Menu/Content"]
+layout_mode = 2
+text = "Industrial AI Authority"
+horizontal_alignment = 1
+
+[node name="IndustrialAISelector" type="OptionButton" parent="PauseMenu/Backdrop/Menu/Content"]
+custom_minimum_size = Vector2(280, 40)
+layout_mode = 2
+
+[node name="BattlefieldAILabel" type="Label" parent="PauseMenu/Backdrop/Menu/Content"]
+layout_mode = 2
+text = "Battlefield AI Authority"
+horizontal_alignment = 1
+
+[node name="BattlefieldAISelector" type="OptionButton" parent="PauseMenu/Backdrop/Menu/Content"]
 custom_minimum_size = Vector2(280, 40)
 layout_mode = 2
 

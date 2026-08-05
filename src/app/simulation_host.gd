@@ -268,3 +268,27 @@ func get_queue_size() -> int:
 
 func get_enemy_phase_name() -> String:
 	return world.enemy_raid_agent.phase_name()
+
+
+func get_enemy_difficulty_name() -> String:
+	return world.enemy_raid_agent.difficulty_name()
+
+
+func get_enemy_decision_summary() -> String:
+	return world.enemy_raid_agent.decision_summary()
+
+
+func set_enemy_difficulty(difficulty: EnemyDifficultyProfile.Difficulty) -> void:
+	world.set_enemy_difficulty(difficulty)
+
+
+func get_enemy_difficulty() -> EnemyDifficultyProfile.Difficulty:
+	return world.get_enemy_difficulty()
+
+
+func set_agent_authorization(agent_id: int, authorization: AgentPolicy.Authorization) -> bool:
+	return world.set_agent_authorization(agent_id, authorization)
+
+
+func get_agent_authorization(agent_id: int) -> AgentPolicy.Authorization:
+	return world.get_agent_authorization(agent_id)

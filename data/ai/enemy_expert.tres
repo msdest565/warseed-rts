@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="EnemyDifficultyProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/agents/enemy_difficulty_profile.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+difficulty = 3
+strategic_decision_interval_ticks = 20
+tactical_decision_interval_ticks = 2
+reaction_delay_ticks = 2
+memory_half_life_ticks = 480
+target_score_noise = 0.0
+max_combat_tasks = 3
+production_planning_depth = 4
+route_threat_weight = 1.2
+focus_fire_quality = 1.0
+retreat_enter_ratio = 0.52
+retreat_exit_ratio = 0.76
+required_attack_power_ratio = 0.9
+base_defense_radius = 768.0
+chase_distance = 1216.0
+chase_duration_ticks = 380
+target_switch_margin = 0.05
+composition_reaction_weight = 1.25
+

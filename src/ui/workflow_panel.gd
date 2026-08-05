@@ -6,6 +6,8 @@ extends PanelContainer
 @onready var tasks_title_label: Label = $Margin/Layout/TasksTitle
 @onready var tasks_label: Label = $Margin/Layout/Tasks
 
+var simulation_host: SimulationHost
+
 
 func _ready() -> void:
 	refresh_locale()
@@ -60,4 +62,11 @@ func update_snapshot(snapshot: WorldSnapshot) -> void:
 		GameText.t(&"WORKFLOW_COUNT") % [GameText.t(&"WORKFLOW_DEFENSE"), defending],
 		GameText.t(&"WORKFLOW_COUNT") % [GameText.t(&"WORKFLOW_ATTACK"), attacking],
 	])
-	tasks_label.text = GameText.t(&"WORKFLOW_NONE") if task_lines.is_empty() else "\n".join(task_lines)
+	var authorization_line := ""
+	if simulation_host != null:
+		authorization_line = GameText.t(&"WORKFLOW_AI_STATUS") % [
+			GameText.enum_name("AI_AUTH", AgentPolicy.Authorization.keys()[simulation_host.get_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID)]),
+			GameText.enum_name("AI_AUTH", AgentPolicy.Authorization.keys()[simulation_host.get_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID)]),
+		]
+	var task_text := GameText.t(&"WORKFLOW_NONE") if task_lines.is_empty() else "\n".join(task_lines)
+	tasks_label.text = "%s\n%s" % [authorization_line, task_text] if not authorization_line.is_empty() else task_text

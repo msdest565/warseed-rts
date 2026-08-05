@@ -68,6 +68,7 @@ var progress_target: int = 0
 var baseline_value: int = 0
 var expected_unit_count: int = 0
 var last_detail: String = ""
+var requires_proactive_authorization: bool = false
 
 func _init(new_task_id: int, new_agent_id: int, new_participants: Array[int] = []) -> void:
 	task_id = new_task_id

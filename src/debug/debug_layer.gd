@@ -19,7 +19,11 @@ func update_status(
 	command_status: String,
 	timing: HostTickTimingSnapshot,
 	true_snapshot: WorldSnapshot = null,
-	enemy_phase: String = ""
+	enemy_phase: String = "",
+	enemy_difficulty: String = "",
+	enemy_decision: String = "",
+	industrial_authorization: AgentPolicy.Authorization = AgentPolicy.Authorization.ASSISTED,
+	battlefield_authorization: AgentPolicy.Authorization = AgentPolicy.Authorization.ASSISTED
 ) -> void:
 	if snapshot == null:
 		status_label.text = GameText.t(&"DEBUG_INITIALIZING")
@@ -65,6 +69,12 @@ func update_status(
 		])
 	if not enemy_phase.is_empty():
 		lines.append(GameText.t(&"DEBUG_ENEMY_PHASE") % GameText.enum_name("ENEMY_PHASE", enemy_phase))
+	if not enemy_difficulty.is_empty():
+		lines.append(GameText.t(&"DEBUG_ENEMY_AI") % [GameText.enum_name("AI_DIFFICULTY", enemy_difficulty), enemy_decision])
+	lines.append(GameText.t(&"DEBUG_FRIENDLY_AI") % [
+		GameText.enum_name("AI_AUTH", AgentPolicy.Authorization.keys()[industrial_authorization]),
+		GameText.enum_name("AI_AUTH", AgentPolicy.Authorization.keys()[battlefield_authorization]),
+	])
 	var metrics := snapshot.metrics
 	if metrics != null:
 		lines.append(GameText.t(&"DEBUG_COMMANDS") % [

@@ -22,7 +22,15 @@ const TEST_TASK_ID := 1
 const UNIT_CATALOG: UnitDefinitionCatalog = preload("res://data/units/unit_catalog.tres")
 const BUILDING_CATALOG: BuildingDefinitionCatalog = preload("res://data/buildings/building_catalog.tres")
 const DEFAULT_UNIT_DEFINITION: UnitDefinition = preload("res://data/units/scout_vehicle.tres")
+const ENEMY_DIFFICULTY_EASY: EnemyDifficultyProfile = preload("res://data/ai/enemy_easy.tres")
+const ENEMY_DIFFICULTY_NORMAL: EnemyDifficultyProfile = preload("res://data/ai/enemy_normal.tres")
+const ENEMY_DIFFICULTY_HARD: EnemyDifficultyProfile = preload("res://data/ai/enemy_hard.tres")
+const ENEMY_DIFFICULTY_EXPERT: EnemyDifficultyProfile = preload("res://data/ai/enemy_expert.tres")
+const INDUSTRIAL_POLICY: AgentPolicy = preload("res://data/ai/industrial_assisted.tres")
+const BATTLEFIELD_POLICY: AgentPolicy = preload("res://data/ai/battlefield_assisted.tres")
+const ENEMY_POLICY: AgentPolicy = preload("res://data/ai/enemy_autonomous.tres")
 const WRECK_LIFETIME_TICKS := 70
+const FRIENDLY_AUTONOMY_INTERVAL_TICKS := 20
 
 var current_tick: int = 0
 var units: Dictionary = {}
@@ -32,8 +40,9 @@ var buildings: Dictionary = {}
 var ore_fields: Dictionary = {}
 var faction_knowledge: Dictionary = {}
 var tasks: Dictionary = {}
+var agent_policies: Dictionary = {}
 var agents: Array[DeterministicFormationAgent] = []
-var enemy_raid_agent := EnemyRaidAgent.new()
+var enemy_raid_agent: EnemyRaidAgent
 var mission_state := MissionState.new()
 var command_queue := CommandQueue.new()
 var command_validator := CommandValidator.new()
@@ -52,14 +61,72 @@ var _next_unit_id: int = 1100
 var _next_building_id: int = FIRST_CONSTRUCTED_BUILDING_ID
 var _next_command_id: int = 1
 var _next_task_id: int = 1
+var _last_friendly_autonomy_tick: int = -FRIENDLY_AUTONOMY_INTERVAL_TICKS
 
 
 func _init(create_default_units: bool = true, create_test_agent: bool = false) -> void:
+	_configure_ai()
 	if create_default_units:
 		_setup_default_scenario()
 	_update_faction_knowledge()
 	if create_default_units and create_test_agent:
 		_create_default_agent_task()
+
+
+func _configure_ai() -> void:
+	agent_policies.clear()
+	_register_agent_policy(INDUSTRIAL_POLICY)
+	_register_agent_policy(BATTLEFIELD_POLICY)
+	_register_agent_policy(ENEMY_POLICY)
+	var test_policy := AgentPolicy.new()
+	test_policy.agent_id = TEST_AGENT_ID
+	test_policy.faction_id = LOCAL_PLAYER_ID
+	test_policy.domain = AgentPolicy.Domain.TEST
+	test_policy.authorization = AgentPolicy.Authorization.ASSISTED
+	agent_policies[test_policy.agent_id] = test_policy
+	enemy_raid_agent = EnemyRaidAgent.new(ENEMY_DIFFICULTY_NORMAL.duplicate(true) as EnemyDifficultyProfile)
+
+
+func _register_agent_policy(template: AgentPolicy) -> void:
+	var policy := template.duplicate(true) as AgentPolicy
+	agent_policies[policy.agent_id] = policy
+
+
+func set_agent_authorization(agent_id: int, authorization: AgentPolicy.Authorization) -> bool:
+	var policy := agent_policies.get(agent_id) as AgentPolicy
+	if policy == null or policy.domain == AgentPolicy.Domain.ENEMY:
+		return false
+	policy.authorization = authorization
+	command_queue.remove_if(func(command: GameCommand) -> bool: return _required_agent_id(command) == agent_id and not _agent_authorization_allows(command))
+	if not policy.allows_explicit_tasks() or not policy.allows_proactive_tasks():
+		for task_variant in tasks.values():
+			var task := task_variant as TaskState
+			var authorization_lost := not policy.allows_explicit_tasks() or task.requires_proactive_authorization and not policy.allows_proactive_tasks()
+			if task.agent_id == agent_id and authorization_lost and task.lifecycle == TaskState.Lifecycle.EXECUTING:
+				task.set_lifecycle(TaskState.Lifecycle.PAUSED, current_tick, TaskState.BlockedReason.NONE, "Paused because Agent authorization no longer permits this task")
+				_stop_task_formation(task)
+	return true
+
+
+func get_agent_authorization(agent_id: int) -> AgentPolicy.Authorization:
+	var policy := agent_policies.get(agent_id) as AgentPolicy
+	return policy.authorization if policy != null else AgentPolicy.Authorization.ADVISORY
+
+
+func set_enemy_difficulty(difficulty: EnemyDifficultyProfile.Difficulty) -> void:
+	var template := ENEMY_DIFFICULTY_NORMAL
+	match difficulty:
+		EnemyDifficultyProfile.Difficulty.EASY:
+			template = ENEMY_DIFFICULTY_EASY
+		EnemyDifficultyProfile.Difficulty.HARD:
+			template = ENEMY_DIFFICULTY_HARD
+		EnemyDifficultyProfile.Difficulty.EXPERT:
+			template = ENEMY_DIFFICULTY_EXPERT
+	enemy_raid_agent.set_difficulty_profile(template.duplicate(true) as EnemyDifficultyProfile)
+
+
+func get_enemy_difficulty() -> EnemyDifficultyProfile.Difficulty:
+	return enemy_raid_agent.difficulty_profile.difficulty
 
 
 func _create_default_agent_task() -> void:
@@ -201,7 +268,92 @@ func submit_command(command: GameCommand) -> CommandValidationResult:
 
 func validate_command(command: GameCommand) -> CommandValidationResult:
 	_update_faction_knowledge()
-	return command_validator.validate(command, units, BATTLEFIELD_BOUNDS, pathfinder, formations, buildings, ore_fields, factions, UNIT_CATALOG, BUILDING_CATALOG, faction_knowledge, logic_grid, tasks)
+	var result := command_validator.validate(command, units, BATTLEFIELD_BOUNDS, pathfinder, formations, buildings, ore_fields, factions, UNIT_CATALOG, BUILDING_CATALOG, faction_knowledge, logic_grid, tasks)
+	if result.is_accepted() and not _agent_authorization_allows(command):
+		return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.AGENT_NOT_AUTHORIZED)
+	return result
+
+
+func _agent_authorization_allows(command: GameCommand) -> bool:
+	var required_agent_id := _required_agent_id(command)
+	if required_agent_id == 0:
+		return true
+	var policy := agent_policies.get(required_agent_id) as AgentPolicy
+	if policy == null or policy.faction_id != command.issuer_id:
+		return false
+	if command is StrategicOrderCommand and command.issuer_kind == GameCommand.IssuerKind.AGENT:
+		return policy.allows_proactive_tasks()
+	return policy.allows_explicit_tasks()
+
+
+func _required_agent_id(command: GameCommand) -> int:
+	if command is StrategicOrderCommand:
+		return StrategicTaskSystem.INDUSTRIAL_AGENT_ID if (command as StrategicOrderCommand).order_kind == StrategicOrderCommand.OrderKind.DEVELOP_RESOURCE else StrategicTaskSystem.BATTLEFIELD_AGENT_ID
+	if command.issuer_kind == GameCommand.IssuerKind.AGENT:
+		return command.agent_id
+	return 0
+
+
+func _advance_friendly_autonomy() -> void:
+	if current_tick - _last_friendly_autonomy_tick < FRIENDLY_AUTONOMY_INTERVAL_TICKS:
+		return
+	_last_friendly_autonomy_tick = current_tick
+	var industrial_policy := agent_policies.get(StrategicTaskSystem.INDUSTRIAL_AGENT_ID) as AgentPolicy
+	if industrial_policy != null and industrial_policy.allows_proactive_tasks() and not _has_open_task_for_agent(industrial_policy.agent_id):
+		_submit_autonomous_industrial_order(industrial_policy)
+	var battlefield_policy := agent_policies.get(StrategicTaskSystem.BATTLEFIELD_AGENT_ID) as AgentPolicy
+	if battlefield_policy != null and battlefield_policy.allows_proactive_tasks() and not _has_open_task_for_agent(battlefield_policy.agent_id):
+		_submit_autonomous_battlefield_order(battlefield_policy)
+
+
+func _has_open_task_for_agent(agent_id: int) -> bool:
+	for task_variant in tasks.values():
+		var task := task_variant as TaskState
+		if task.agent_id == agent_id and task.lifecycle in [TaskState.Lifecycle.WAITING, TaskState.Lifecycle.PREPARING, TaskState.Lifecycle.EXECUTING, TaskState.Lifecycle.PAUSED, TaskState.Lifecycle.BLOCKED]:
+			return true
+	return false
+
+
+func _submit_autonomous_industrial_order(policy: AgentPolicy) -> void:
+	var snapshot := create_faction_snapshot(policy.faction_id)
+	var best_ore: OreFieldSnapshot
+	for ore_field in snapshot.ore_fields:
+		if ore_field.ore_remaining > 0 and (best_ore == null or ore_field.ore_remaining > best_ore.ore_remaining or ore_field.ore_remaining == best_ore.ore_remaining and ore_field.entity_id < best_ore.entity_id):
+			best_ore = ore_field
+	if best_ore == null:
+		return
+	var command := StrategicOrderCommand.new(
+		allocate_command_id(), policy.faction_id, current_tick,
+		StrategicOrderCommand.OrderKind.DEVELOP_RESOURCE, 0, best_ore.entity_id, best_ore.position, 0.0,
+		GameCommand.IssuerKind.AGENT
+	)
+	command.agent_id = policy.agent_id
+	submit_command(command)
+
+
+func _submit_autonomous_battlefield_order(policy: AgentPolicy) -> void:
+	var formation := formations.get(DEFAULT_FORMATION_ID) as FormationState
+	if formation == null or formation.member_entity_ids.is_empty():
+		return
+	var snapshot := create_faction_snapshot(policy.faction_id)
+	var best_target: UnitSnapshot
+	var best_distance := INF
+	for contact in snapshot.units:
+		if contact.faction_id == policy.faction_id or not contact.enabled or not contact.is_visible_to_local_player:
+			continue
+		var distance := formation.anchor_position.distance_squared_to(contact.position)
+		if distance < best_distance or is_equal_approx(distance, best_distance) and (best_target == null or contact.entity_id < best_target.entity_id):
+			best_target = contact
+			best_distance = distance
+	if best_target == null:
+		return
+	var command := StrategicOrderCommand.new(
+		allocate_command_id(), policy.faction_id, current_tick,
+		StrategicOrderCommand.OrderKind.ATTACK_TARGET, formation.formation_id, best_target.entity_id, best_target.position, 0.0,
+		GameCommand.IssuerKind.AGENT
+	)
+	command.agent_id = policy.agent_id
+	submit_command(command)
 
 
 func _is_direct_player_order(command: GameCommand) -> bool:
@@ -219,6 +371,7 @@ func advance_tick() -> WorldSnapshot:
 	for agent in agents:
 		agent.advance(self)
 	strategic_task_system.advance(self)
+	_advance_friendly_autonomy()
 	enemy_raid_agent.advance(self)
 	_update_faction_knowledge()
 	_drop_hidden_attack_targets()
@@ -955,6 +1108,7 @@ func _apply_strategic_order(command: StrategicOrderCommand) -> void:
 	task.target_position = command.target_position
 	task.target_radius = command.target_radius
 	task.accepted_tick = current_tick
+	task.requires_proactive_authorization = command.issuer_kind == GameCommand.IssuerKind.AGENT
 	task.progress_target = 2 if kind == TaskState.Kind.DEVELOP_RESOURCE else StrategicTaskSystem.DEFEND_HOLD_TICKS
 	if kind == TaskState.Kind.DEVELOP_RESOURCE:
 		task.baseline_value = (ore_fields[command.objective_entity_id] as OreFieldState).ore_remaining
@@ -1220,10 +1374,10 @@ func _default_work_position(footprint_cells: Array[Vector2i], fallback: Vector2)
 	return logic_grid.cell_to_world(candidates[0])
 
 
-func spawn_enemy_raid_unit(entity_id: int, agent_id: int, task_id: int) -> UnitState:
+func spawn_enemy_raid_unit(entity_id: int, agent_id: int, task_id: int, definition_id: StringName = &"assault_vehicle") -> UnitState:
 	if units.has(entity_id):
 		return units[entity_id] as UnitState
-	var definition := UNIT_CATALOG.get_unit(&"assault_vehicle")
+	var definition := UNIT_CATALOG.get_unit(definition_id)
 	var spawn_position := logic_grid.cell_to_world(LogicGrid.MAP_DEFINITION.enemy_spawn_cell + Vector2i(-4, -4))
 	var unit := UnitState.new(entity_id, spawn_position, definition.move_speed, ENEMY_PLAYER_ID)
 	_apply_unit_definition(unit, definition)

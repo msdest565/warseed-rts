@@ -13,6 +13,7 @@ func _initialize() -> void:
 		TestCombatSystem.new(),
 		TestEconomyAndVictory.new(),
 		TestFactionKnowledge.new(),
+		TestAiPolicyAndDifficulty.new(),
 		TestStrategicTasks.new(),
 		TestGameIntegration.new(),
 	]

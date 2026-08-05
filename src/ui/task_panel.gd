@@ -87,6 +87,12 @@ func refresh_locale() -> void:
 func update_snapshot(snapshot: WorldSnapshot) -> void:
 	if snapshot == null:
 		return
+	var industrial_authorization := simulation_host.get_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID)
+	var battlefield_authorization := simulation_host.get_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID)
+	strategic_title_label.text = GameText.t(&"HUD_STRATEGIC_AUTH") % [
+		GameText.t(StringName("AI_AUTH_SHORT_%s" % AgentPolicy.Authorization.keys()[industrial_authorization])),
+		GameText.t(StringName("AI_AUTH_SHORT_%s" % AgentPolicy.Authorization.keys()[battlefield_authorization])),
+	]
 	var active_task: TaskSnapshot
 	var latest_task: TaskSnapshot
 	var industrial_open := false
@@ -108,9 +114,9 @@ func update_snapshot(snapshot: WorldSnapshot) -> void:
 		active_task = latest_task
 	current_task_id = active_task.task_id if active_task != null else 0
 	var has_open_task := active_task != null and active_task.lifecycle not in [TaskState.Lifecycle.COMPLETED, TaskState.Lifecycle.FAILED, TaskState.Lifecycle.CANCELLED]
-	develop_button.disabled = industrial_open
-	defend_button.disabled = battlefield_open
-	attack_button.disabled = battlefield_open or snapshot.get_unit(SimulationWorld.DEFAULT_ENEMY_UNIT_ID) == null or not snapshot.get_unit(SimulationWorld.DEFAULT_ENEMY_UNIT_ID).enabled
+	develop_button.disabled = industrial_open or industrial_authorization < AgentPolicy.Authorization.ASSISTED
+	defend_button.disabled = battlefield_open or battlefield_authorization < AgentPolicy.Authorization.ASSISTED
+	attack_button.disabled = battlefield_open or battlefield_authorization < AgentPolicy.Authorization.ASSISTED or snapshot.get_unit(SimulationWorld.DEFAULT_ENEMY_UNIT_ID) == null or not snapshot.get_unit(SimulationWorld.DEFAULT_ENEMY_UNIT_ID).enabled
 	pause_button.disabled = active_task == null or active_task.lifecycle != TaskState.Lifecycle.EXECUTING
 	resume_button.disabled = active_task == null or active_task.lifecycle not in [TaskState.Lifecycle.PAUSED, TaskState.Lifecycle.BLOCKED]
 	cancel_button.disabled = not has_open_task
@@ -156,6 +162,11 @@ func _update_task(task: TaskSnapshot) -> void:
 		task.progress_current,
 		task.progress_target,
 	]
+	if task.lifecycle == TaskState.Lifecycle.BLOCKED:
+		task_label.text += "\n" + GameText.t(&"TASK_BLOCKED") % [
+			GameText.enum_name("TASK_BLOCKED", TaskState.BlockedReason.keys()[task.blocked_reason]),
+			task.blocked_detail,
+		]
 
 
 func _update_selection(snapshot: WorldSnapshot) -> void:

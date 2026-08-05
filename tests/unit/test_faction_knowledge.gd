@@ -77,7 +77,7 @@ func _test_enemy_raid_uses_last_seen_position(failures: Array[String]) -> void:
 	world.enemy_raid_agent.phase_started_tick = world.current_tick
 	raider.position = (world.units[1] as UnitState).position + Vector2(48.0, 0.0)
 	world._update_faction_knowledge()
-	world.enemy_raid_agent.last_order_tick = -EnemyRaidAgent.ORDER_INTERVAL_TICKS
+	world.enemy_raid_agent.last_order_tick = -world.enemy_raid_agent.difficulty_profile.tactical_decision_interval_ticks
 	world.enemy_raid_agent.advance(world)
 	world.advance_tick()
 	_expect(raider.attack_target_entity_id != 0, "enemy raid should attack a currently visible target", failures)
@@ -98,8 +98,8 @@ func _test_enemy_raid_uses_last_seen_position(failures: Array[String]) -> void:
 	raider.attack_target_entity_id = 0
 	raider.has_move_target = false
 	raider.path = PackedVector2Array()
-	world.enemy_raid_agent.last_order_tick = world.current_tick - EnemyRaidAgent.ORDER_INTERVAL_TICKS
-	world.enemy_raid_agent.last_unit_order_tick[raider.entity_id] = world.current_tick - EnemyRaidAgent.ORDER_INTERVAL_TICKS
+	world.enemy_raid_agent.last_order_tick = world.current_tick - world.enemy_raid_agent.difficulty_profile.tactical_decision_interval_ticks
+	world.enemy_raid_agent.last_unit_order_tick[raider.entity_id] = world.current_tick - world.enemy_raid_agent.difficulty_profile.tactical_decision_interval_ticks
 	world.enemy_raid_agent.advance(world)
 	world.advance_tick()
 	_expect(old_positions.values().has(raider.move_target), "enemy raid should investigate a recorded last-seen contact", failures)
@@ -209,8 +209,9 @@ func _test_enemy_combat_parity_and_tactical_reactions(failures: Array[String]) -
 	world.enemy_raid_agent.phase = EnemyRaidAgent.Phase.RAIDING
 	world.enemy_raid_agent.phase_started_tick = world.current_tick
 	world._update_faction_knowledge()
-	world.enemy_raid_agent.advance(world)
-	_expect(world.enemy_raid_agent.phase == EnemyRaidAgent.Phase.DEFENDING, "visible threats near the enemy base should interrupt a raid and trigger emergency defense", failures)
+	for _tick in range(world.enemy_raid_agent.difficulty_profile.reaction_delay_ticks + 2):
+		world.advance_tick()
+	_expect(world.enemy_raid_agent.phase == EnemyRaidAgent.Phase.DEFENDING, "visible threats near the enemy base should trigger defense within the configured reaction window", failures)
 	world.advance_tick()
 	_expect(enemy_scout.attack_target_entity_id == intruder.entity_id, "enemy defenders should attack through the same authoritative attack command", failures)
 

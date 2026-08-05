@@ -22,12 +22,13 @@ func _init(
 	new_formation_id: int,
 	new_objective_entity_id: int,
 	new_target_position: Vector2,
-	new_target_radius: float = 0.0
+	new_target_radius: float = 0.0,
+	new_issuer_kind: IssuerKind = IssuerKind.PLAYER
 ) -> void:
 	var command_target := new_objective_entity_id
 	if new_formation_id != 0:
 		command_target = new_formation_id
-	super(new_command_id, new_issuer_id, IssuerKind.PLAYER, new_issued_tick, command_target)
+	super(new_command_id, new_issuer_id, new_issuer_kind, new_issued_tick, command_target)
 	order_kind = new_order_kind
 	formation_id = new_formation_id
 	objective_entity_id = new_objective_entity_id

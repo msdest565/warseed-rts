@@ -29,6 +29,15 @@ func size() -> int:
 	return _commands.size()
 
 
+func remove_if(predicate: Callable) -> int:
+	var removed := 0
+	for index in range(_commands.size() - 1, -1, -1):
+		if predicate.call(_commands[index]):
+			_commands.remove_at(index)
+			removed += 1
+	return removed
+
+
 func _is_unit_order(command: GameCommand) -> bool:
 	return command is MoveCommand or command is FormationMoveCommand or command is StopCommand or command is AttackCommand or command is HarvestCommand or command is ProduceUnitCommand or command is UnitDispositionCommand or command is StrategicOrderCommand or command is TaskControlCommand
 

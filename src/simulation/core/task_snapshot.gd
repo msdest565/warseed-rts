@@ -23,6 +23,7 @@ var last_transition_tick: int
 var progress_current: int
 var progress_target: int
 var last_detail: String
+var requires_proactive_authorization: bool
 
 func _init(task: TaskState) -> void:
 	task_id = task.task_id
@@ -47,6 +48,7 @@ func _init(task: TaskState) -> void:
 	progress_current = task.progress_current
 	progress_target = task.progress_target
 	last_detail = task.last_detail
+	requires_proactive_authorization = task.requires_proactive_authorization
 
 func get_participant_count() -> int:
 	return participant_entity_ids.size()

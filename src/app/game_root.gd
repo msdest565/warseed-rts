@@ -28,7 +28,15 @@ func _ready() -> void:
 	input_controller.attack_preview_cleared.connect(world_presentation.clear_attack_preview)
 	task_panel.simulation_host = simulation_host
 	task_panel.input_controller = input_controller
+	workflow_panel.simulation_host = simulation_host
 	pause_menu.language_changed.connect(_on_language_changed)
+	pause_menu.enemy_difficulty_changed.connect(simulation_host.set_enemy_difficulty)
+	pause_menu.agent_authorization_changed.connect(simulation_host.set_agent_authorization)
+	pause_menu.set_ai_settings(
+		simulation_host.get_enemy_difficulty(),
+		simulation_host.get_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID),
+		simulation_host.get_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID)
+	)
 	_on_language_changed(TranslationServer.get_locale())
 
 
@@ -69,5 +77,9 @@ func _process(_delta: float) -> void:
 			input_controller.last_command_status,
 			simulation_host.get_tick_timing_snapshot(),
 			simulation_host.get_true_state_snapshot_for_debug(),
-			simulation_host.get_enemy_phase_name()
+			simulation_host.get_enemy_phase_name(),
+			simulation_host.get_enemy_difficulty_name(),
+			simulation_host.get_enemy_decision_summary(),
+			simulation_host.get_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID),
+			simulation_host.get_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID)
 		)
