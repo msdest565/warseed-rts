@@ -224,7 +224,12 @@ func attack_selected_target(attack_target_entity_id: int) -> CommandValidationRe
 	if last_result != null and last_result.is_accepted():
 		pending_move_active = false
 		pending_intent_cleared.emit()
-	last_command_status = GameText.t(&"STATUS_ATTACK") % GameText.command_result(last_result) if last_result != null else GameText.t(&"STATUS_NO_VALID_SELECTION")
+	if last_result == null:
+		last_result = CommandValidationResult.new(
+			CommandValidationResult.Status.REJECTED,
+			CommandValidationResult.Reason.INVALID_DEFINITION
+		)
+	last_command_status = GameText.t(&"STATUS_ATTACK") % GameText.command_result(last_result)
 	return last_result
 
 

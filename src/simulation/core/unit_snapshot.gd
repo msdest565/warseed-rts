@@ -23,6 +23,7 @@ var attack_damage: float
 var attack_cooldown_ticks: int
 var attack_cooldown_remaining_ticks: int
 var attack_target_entity_id: int
+var attack_is_retaliation: bool
 var is_attacking: bool
 var armor: float
 var attacks_per_second: float
@@ -90,6 +91,7 @@ func _init(unit: UnitState = null, contact: KnowledgeContact = null) -> void:
 	attack_cooldown_ticks = unit.attack_cooldown_ticks
 	attack_cooldown_remaining_ticks = unit.attack_cooldown_remaining_ticks
 	attack_target_entity_id = unit.attack_target_entity_id
+	attack_is_retaliation = unit.attack_is_retaliation
 	is_attacking = unit.attack_target_entity_id != 0
 	armor = unit.armor
 	attacks_per_second = unit.attacks_per_second
@@ -149,6 +151,7 @@ func _apply_contact(contact: KnowledgeContact) -> void:
 	attack_cooldown_ticks = 0
 	attack_cooldown_remaining_ticks = 0
 	attack_target_entity_id = 0
+	attack_is_retaliation = false
 	is_attacking = false
 	armor = 0.0
 	attacks_per_second = 0.0

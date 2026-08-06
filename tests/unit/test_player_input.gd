@@ -13,6 +13,7 @@ func run() -> Array[String]:
 	_test_role_filtered_attack_and_targeted_orders(failures)
 	_test_produced_assault_defense_and_scout_orders(failures)
 	_test_context_attack_input(failures)
+	_test_harvester_attack_input_is_rejected(failures)
 	_test_engineering_and_building_attack_input(failures)
 	return failures
 
@@ -277,6 +278,54 @@ func _test_context_attack_input(failures: Array[String]) -> void:
 	input.select_at(enemy.position)
 	_expect(input.selected_entity_id == 0, "enemy should not be selectable by local player", failures)
 	_free_fixture(fixture)
+
+
+func _test_harvester_attack_input_is_rejected(failures: Array[String]) -> void:
+	var fixture := _create_fixture()
+	var input := fixture["input"] as InputController
+	var host := fixture["host"] as SimulationHost
+	var harvester := host.world.units[1] as UnitState
+	var enemy := host.world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	enemy.position = harvester.position + Vector2(48.0, 0.0)
+	enemy.can_attack = false
+	enemy.health = 1.0
+	host.world._update_faction_knowledge()
+	host.current_snapshot = host.world.create_snapshot()
+	input.select_at(harvester.position)
+	var result := input.context_command_selected_at(enemy.position)
+	_expect(result != null and result.status == CommandValidationResult.Status.REJECTED and result.reason == CommandValidationResult.Reason.INVALID_DEFINITION, "a selected harvester should clearly reject an active attack order", failures)
+	_expect(host.get_queue_size() == 0 and harvester.attack_target_entity_id == 0, "rejected harvester attacks must not enqueue or acquire a target", failures)
+	for _tick in range(6):
+		host.advance_tick()
+	_expect(enemy.enabled and is_equal_approx(enemy.health, 1.0), "clicking a passive enemy with a harvester must not damage or instantly destroy it", failures)
+	_free_fixture(fixture)
+
+	var produced_fixture := _create_fixture()
+	var produced_input := produced_fixture["input"] as InputController
+	var produced_host := produced_fixture["host"] as SimulationHost
+	var command_center := produced_host.current_snapshot.get_building(SimulationWorld.PLAYER_COMMAND_CENTER_ID)
+	produced_input.select_at(command_center.position)
+	var production_result := produced_input.produce_unit(&"harvester")
+	_expect(production_result != null and production_result.is_accepted(), "command center should accept the produced-harvester regression fixture", failures)
+	for _tick in range(35):
+		produced_host.advance_tick()
+	var produced := produced_host.world.units.get(1100) as UnitState
+	_expect(produced != null and produced.can_harvest, "new harvester should complete production for attack-order regression coverage", failures)
+	if produced != null:
+		var produced_enemy := produced_host.world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+		produced_enemy.position = produced.position + Vector2(48.0, 0.0)
+		produced_enemy.can_attack = false
+		produced_enemy.health = 1.0
+		produced_host.world._update_faction_knowledge()
+		produced_host.current_snapshot = produced_host.world.create_snapshot()
+		produced_input.select_at(produced.position)
+		var produced_result := produced_input.context_command_selected_at(produced_enemy.position)
+		_expect(produced_result != null and produced_result.reason == CommandValidationResult.Reason.INVALID_DEFINITION, "newly produced harvesters should share the same active-attack restriction", failures)
+		_expect(produced_host.get_queue_size() == 0 and produced.attack_target_entity_id == 0, "new harvester rejection must leave its command and combat state unchanged", failures)
+		for _tick in range(6):
+			produced_host.advance_tick()
+		_expect(produced_enemy.enabled and is_equal_approx(produced_enemy.health, 1.0), "new harvester must not damage a passive clicked enemy", failures)
+	_free_fixture(produced_fixture)
 
 
 func _test_engineering_and_building_attack_input(failures: Array[String]) -> void:

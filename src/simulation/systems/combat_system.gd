@@ -22,9 +22,14 @@ func advance(
 		var attacker := units[entity_id] as UnitState
 		if not attacker.enabled or not attacker.can_attack or attacker.attack_target_entity_id == 0:
 			continue
+		var target_id := attacker.attack_target_entity_id
+		if not attacker.can_accept_attack_orders:
+			var aggressor := units.get(target_id) as UnitState
+			if not attacker.attack_is_retaliation or aggressor == null or not aggressor.can_attack or aggressor.attack_target_entity_id != attacker.entity_id:
+				_clear_invalid_target(attacker, events, current_tick, "invalid_role")
+				continue
 		if attacker.attack_damage <= 0.0 or attacker.attack_range <= 0.0:
 			continue
-		var target_id := attacker.attack_target_entity_id
 		if not _entity_exists(target_id, units, buildings):
 			_clear_invalid_target(attacker, events, current_tick, "missing")
 			continue
@@ -150,8 +155,10 @@ func _apply_damage(entity_id: int, amount: float, units: Dictionary, buildings: 
 func _clear_invalid_target(unit: UnitState, events: Array[SimulationEvent], current_tick: int, reason: String) -> void:
 	var target_id := unit.attack_target_entity_id
 	if target_id == 0:
+		unit.attack_is_retaliation = false
 		return
 	unit.attack_target_entity_id = 0
+	unit.attack_is_retaliation = false
 	unit.pursuit_target_cell = Vector2i(-1, -1)
 	events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.TARGET_LOST, unit.entity_id, "target=%d;reason=%s" % [target_id, reason]))
 
@@ -183,5 +190,6 @@ func _disable_destroyed_target(entity_id: int, units: Dictionary, buildings: Dic
 	unit.attack_move_destination = unit.position
 	unit.pursuit_target_cell = Vector2i(-1, -1)
 	unit.attack_target_entity_id = 0
+	unit.attack_is_retaliation = false
 	unit.work_kind = UnitState.WorkKind.NONE
 	unit.work_target_building_id = 0

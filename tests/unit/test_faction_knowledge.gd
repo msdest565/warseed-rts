@@ -161,13 +161,15 @@ func _test_enemy_harvester_mines_and_defends_itself(failures: Array[String]) -> 
 	local_scout.position = harvester.position + Vector2(-48.0, 0.0)
 	local_scout.following_formation = false
 	world._update_faction_knowledge()
+	var attack := AttackCommand.new(world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, GameCommand.IssuerKind.PLAYER, world.current_tick, local_scout.entity_id, harvester.entity_id)
+	_expect(world.submit_command(attack).is_accepted(), "enemy harvester self-defense fixture should begin with a legal player attack", failures)
 	var health_before := local_scout.health
 	world.enemy_raid_agent.advance(world)
 	for _tick in range(6):
 		world.advance_tick()
 	_expect(harvester.can_attack, "enemy harvester should have a defensive weapon", failures)
 	_expect(harvester.harvest_ore_field_entity_id == SimulationWorld.ENEMY_ORE_FIELD_ID, "enemy harvester should keep its own ore assignment while defending", failures)
-	_expect(local_scout.health < health_before, "enemy harvester self-defense should apply real projectile damage", failures)
+	_expect(local_scout.health < health_before and harvester.attack_is_retaliation, "enemy harvester should apply real projectile damage only while retaliating", failures)
 	_expect(not world.enemy_raid_agent._combat_units(world).has(harvester), "enemy harvester should not abandon mining to join raid forces", failures)
 	_expect(not harvester.can_accept_attack_orders and not (world.units[1] as UnitState).can_accept_attack_orders, "both factions should share defensive-only harvester responsibilities", failures)
 

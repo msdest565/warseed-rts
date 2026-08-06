@@ -29,6 +29,7 @@ Clone and open the root `project.godot`. For command-line verification:
 - Grid navigation, formation slots, narrow-corridor column behavior and stuck recovery.
 - Typed catalogs for five unit types, combat values and three building types.
 - Authoritative projectiles, armor damage, pursuit and deterministic combat.
+- Harvesters reject active attack orders and retaliate only against visible in-range units currently attacking them; starter and newly produced harvester input paths are regression-tested.
 - Factions, buildings, 10000-primary/8000-expansion ore fields per side, harvesting, production and faction victory state.
 - Building-specific production catalogs, five-item FIFO queues, full/partial cancellation refunds and editable production rally points.
 - One-second bilingual cursor-following descriptions for units, buildings and ore fields.

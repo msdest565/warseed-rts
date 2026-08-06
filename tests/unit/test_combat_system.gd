@@ -9,6 +9,7 @@ func run() -> Array[String]:
 	_test_simultaneous_projectiles_are_deterministic(failures)
 	_test_distant_target_is_pursued_and_repathed(failures)
 	_test_formation_attack_responds_on_first_authoritative_tick(failures)
+	_test_defensive_weapon_requires_real_aggressor(failures)
 	_test_harvester_self_defense_does_not_enable_attack_orders(failures)
 	return failures
 
@@ -130,7 +131,6 @@ func _test_harvester_self_defense_does_not_enable_attack_orders(failures: Array[
 	harvester.harvest_phase = UnitState.HarvestPhase.LOADING
 	harvester.harvest_ticks_remaining = 100
 	var attacker := UnitState.new(2, Vector2(368.0, 360.0), 0.0, 2)
-	attacker.can_attack = false
 	world.factions[1] = FactionState.new(1, 1, 0)
 	world.ore_fields[99] = OreFieldState.new(99, harvester.position, 1000)
 	world.buildings[10] = BuildingState.new(10, &"command_center", 1, 1, harvester.position - Vector2(64.0, 0.0), 1000.0)
@@ -139,11 +139,44 @@ func _test_harvester_self_defense_does_not_enable_attack_orders(failures: Array[
 	var explicit_attack := AttackCommand.new(1, 1, GameCommand.IssuerKind.PLAYER, 0, 1, 2)
 	_expect(world.submit_command(explicit_attack).reason == CommandValidationResult.Reason.INVALID_DEFINITION, "harvester should reject active attack orders", failures)
 	var health_before := attacker.health
+	world.advance_tick()
+	_expect(harvester.attack_target_entity_id == 0, "nearby enemies that are not attacking the harvester must not trigger self-defense", failures)
+	_expect(is_equal_approx(attacker.health, health_before), "passive nearby enemies must not take harvester damage", failures)
+	attacker.attack_target_entity_id = harvester.entity_id
 	for _tick in range(6):
 		world.advance_tick()
-	_expect(harvester.attack_target_entity_id == attacker.entity_id, "working harvester should automatically retaliate against a nearby enemy", failures)
+	_expect(harvester.attack_target_entity_id == attacker.entity_id and harvester.attack_is_retaliation, "working harvester should retaliate only against an active aggressor", failures)
 	_expect(attacker.health < health_before, "harvester retaliation should use the shared projectile and damage systems", failures)
 	_expect(harvester.harvest_ore_field_entity_id == 99, "self-defense should preserve the harvester work assignment", failures)
+
+
+func _test_defensive_weapon_requires_real_aggressor(failures: Array[String]) -> void:
+	var harvester := UnitState.new(1, Vector2(100.0, 100.0), 0.0, 1)
+	var definition := SimulationWorld.UNIT_CATALOG.get_unit(&"harvester")
+	var world := SimulationWorld.new(false)
+	world._apply_unit_definition(harvester, definition)
+	var passive_enemy := UnitState.new(2, Vector2(120.0, 100.0), 0.0, 2)
+	var units := {1: harvester, 2: passive_enemy}
+	var buildings: Dictionary = {}
+	var projectiles: Dictionary = {}
+	var combat_events: Array[SimulationEvent] = []
+	harvester.attack_target_entity_id = passive_enemy.entity_id
+	harvester.attack_is_retaliation = false
+	CombatSystem.new().advance(units, buildings, projectiles, 1, combat_events, 1)
+	_expect(projectiles.is_empty() and harvester.attack_target_entity_id == 0, "combat system must clear an injected active target from a defensive-only unit", failures)
+	harvester.attack_target_entity_id = passive_enemy.entity_id
+	harvester.attack_is_retaliation = true
+	CombatSystem.new().advance(units, buildings, projectiles, 1, combat_events, 2)
+	_expect(projectiles.is_empty() and harvester.attack_target_entity_id == 0, "a retaliation flag alone must not permit firing at a passive enemy", failures)
+	passive_enemy.attack_target_entity_id = harvester.entity_id
+	harvester.attack_target_entity_id = passive_enemy.entity_id
+	harvester.attack_is_retaliation = true
+	CombatSystem.new().advance(units, buildings, projectiles, 1, combat_events, 3)
+	var harvester_fired := false
+	for projectile_variant in projectiles.values():
+		var projectile := projectile_variant as ProjectileState
+		harvester_fired = harvester_fired or projectile.source_entity_id == harvester.entity_id
+	_expect(harvester_fired, "a defensive weapon should fire once the target is an actual aggressor", failures)
 
 
 func _create_duel_world() -> SimulationWorld:

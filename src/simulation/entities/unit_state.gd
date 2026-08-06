@@ -52,6 +52,7 @@ var attack_damage: float = 20.0
 var attack_cooldown_ticks: int = 10
 var attack_cooldown_remaining_ticks: int = 0
 var attack_target_entity_id: int = 0
+var attack_is_retaliation: bool = false
 var armor: float = 0.0
 var attacks_per_second: float = 1.0
 var projectile_speed: float = 480.0

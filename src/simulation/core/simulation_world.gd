@@ -861,14 +861,38 @@ func _update_worker_self_defense() -> void:
 			continue
 		if worker.attack_target_entity_id != 0:
 			var target_id := worker.attack_target_entity_id
-			if is_entity_enabled(target_id) and get_entity_faction_id(target_id) != worker.faction_id and is_entity_visible_to_faction(target_id, worker.faction_id):
+			var aggressor := units.get(target_id) as UnitState
+			if worker.attack_is_retaliation and aggressor != null and aggressor.enabled and aggressor.can_attack \
+				and aggressor.faction_id != worker.faction_id \
+				and aggressor.attack_target_entity_id == worker.entity_id \
+				and is_entity_visible_to_faction(target_id, worker.faction_id):
 				if worker.position.distance_to(get_entity_position(target_id)) <= worker.attack_range * 1.15:
 					continue
-			_clear_attack_target(worker, "retaliation_range")
-		var nearby_target := _find_nearest_enemy_for_faction(worker.position, worker.faction_id, worker.attack_range)
-		if nearby_target != 0:
-			worker.attack_target_entity_id = nearby_target
-			events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.ATTACK_STARTED, worker.entity_id, "target=%d;retaliate=1" % nearby_target))
+			_clear_attack_target(worker, "retaliation_ended")
+		var aggressor_id := _find_worker_aggressor(worker)
+		if aggressor_id != 0:
+			worker.attack_target_entity_id = aggressor_id
+			worker.attack_is_retaliation = true
+			events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.ATTACK_STARTED, worker.entity_id, "target=%d;retaliate=1" % aggressor_id))
+
+
+func _find_worker_aggressor(worker: UnitState) -> int:
+	var best_id := 0
+	var best_distance := INF
+	var entity_ids := units.keys()
+	entity_ids.sort()
+	for entity_id in entity_ids:
+		var enemy := units[entity_id] as UnitState
+		if not enemy.enabled or not enemy.can_attack or enemy.faction_id == worker.faction_id or enemy.attack_target_entity_id != worker.entity_id:
+			continue
+		if not is_entity_visible_to_faction(enemy.entity_id, worker.faction_id):
+			continue
+		var distance := worker.position.distance_squared_to(enemy.position)
+		if distance > worker.attack_range * worker.attack_range or distance >= best_distance:
+			continue
+		best_id = enemy.entity_id
+		best_distance = distance
+	return best_id
 
 
 func _update_combat_orders() -> void:
@@ -902,6 +926,7 @@ func _update_combat_orders() -> void:
 			# Every member owns its target immediately; weapon range only decides
 			# whether the formation must keep closing the distance.
 			member.attack_target_entity_id = target_id
+			member.attack_is_retaliation = false
 			if member.position.distance_to(target_position) > member.attack_range:
 				members_out_of_range += 1
 		if members_out_of_range == 0:
@@ -936,6 +961,7 @@ func _update_individual_combat_orders() -> void:
 			var acquired_target := _find_nearest_enemy_for_faction(unit.position, unit.faction_id, minf(unit.sight_range, 320.0))
 			if acquired_target != 0:
 				unit.attack_target_entity_id = acquired_target
+				unit.attack_is_retaliation = false
 				unit.pursuit_target_cell = Vector2i(-1, -1)
 				events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.ATTACK_STARTED, unit.entity_id, "target=%d;attack_move=1" % acquired_target))
 		if unit.attack_target_entity_id == 0:
@@ -977,6 +1003,7 @@ func _resume_formation_route(formation: FormationState) -> void:
 		var member := units[entity_id] as UnitState
 		if member.enabled:
 			member.attack_target_entity_id = 0
+			member.attack_is_retaliation = false
 			member.is_attack_moving = true
 			member.following_formation = true
 			member.has_move_target = formation.is_moving
@@ -1565,6 +1592,7 @@ func _apply_attack(command: AttackCommand) -> void:
 			unit.attack_move_destination = unit.position
 		unit.pursuit_target_cell = Vector2i(-1, -1)
 		unit.attack_target_entity_id = command.attack_target_entity_id
+		unit.attack_is_retaliation = false
 		events.append(SimulationEvent.new(
 			current_tick,
 			SimulationEvent.Kind.ATTACK_STARTED,
@@ -1608,9 +1636,11 @@ func _detach_noncombat_members(formation_id: int) -> void:
 
 func _clear_attack_target(unit: UnitState, reason: String) -> void:
 	if unit.attack_target_entity_id == 0:
+		unit.attack_is_retaliation = false
 		return
 	var target_id := unit.attack_target_entity_id
 	unit.attack_target_entity_id = 0
+	unit.attack_is_retaliation = false
 	unit.pursuit_target_cell = Vector2i(-1, -1)
 	events.append(SimulationEvent.new(
 		current_tick,
