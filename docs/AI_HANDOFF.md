@@ -43,13 +43,14 @@ Clone and open the root `project.godot`. For command-line verification:
 - Friendly autonomous battlefield decisions every five ticks, with reachable frontier scouting, concurrent scout/defense ownership, emergency base defense, observed-contact counterattacks and explicit same-Agent task replacement.
 - Autonomous scouts evade nearby visible contacts through legal stop/move commands, never convert reconnaissance into an attack, and resume frontier scouting after reaching safety.
 - Contact presentation uses stable last-seen markers, a minimap ping and a bilingual alert instead of rendering hidden hostiles as live units.
-- A rule-driven Strategic Headquarters caps the core economy at two harvesters, preserves a 400-ore emergency reserve and orders a 1-scout/3-assault/2-missile combined-arms reserve through the existing command pipeline.
+- Under full takeover, Strategic Headquarters is the sole proactive production planner. It deduplicates cross-domain commitments, exposes pending/reserved/available ore, prioritizes economic recovery, releases the 400-ore reserve only for visible base threats, leaves one production slot for the player and applies bounded observed-composition adjustments.
+- Proactive development tasks execute harvesting and verify production instead of competing with Headquarters; explicit player development can still request a harvester and automatically resumes after a temporary resource or production block.
 - Presentation targets 120 FPS with VSync while authoritative simulation remains 10 Hz; proxy/HUD synchronization occurs once per new snapshot and render frames perform interpolation only.
 - First-tick formation target assignment, independent mixed-range firing, bounded stationary repathing, stalled-scout replanning and cleanup of empty temporary formations.
 - Automated end-to-end slice covering develop, missile takeover/rejoin, defend, attack and mission completion.
 
 ## Important limits
 
-This is a technical vertical slice, not the complete MVP. Unit repair/support logistics, multiple combat squads and general task graphs, patrol/escort/hold commands, a full cross-building commitment ledger and real 5-8 minute playtest tuning remain.
+This is a technical vertical slice, not the complete MVP. Unit repair/support logistics, multiple combat squads and general task graphs, patrol/escort/hold commands, construction/repair commitments, cancellable multi-step production plans and real 5-8 minute playtest tuning remain.
 
 The next priority is shared tactical hold/patrol/escort behavior, support logistics, resource reservation priorities and multi-squad task planning. Preserve the authoritative boundary and do not commit `.godot/`, `build/`, logs, screenshots or credentials.

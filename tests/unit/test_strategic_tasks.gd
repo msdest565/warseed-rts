@@ -5,6 +5,7 @@ extends RefCounted
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_develop_resource_completes_visible_work(failures)
+	_test_development_recovers_after_resource_block(failures)
 	_test_defend_area_respects_leash(failures)
 	_test_attack_target_advances_and_completes(failures)
 	_test_parallel_domains_and_dynamic_reinforcements(failures)
@@ -39,6 +40,37 @@ func _test_develop_resource_completes_visible_work(failures: Array[String]) -> v
 	_expect(_count_definition(world, &"harvester") >= 2, "develop-resource task should produce a second harvester", failures)
 	_expect(world.create_snapshot().get_task(task.task_id).kind == TaskState.Kind.DEVELOP_RESOURCE, "task snapshot should expose strategic kind", failures)
 	_expect(world.mission_state.developed_resource, "completed develop task should update mission progress", failures)
+
+
+func _test_development_recovers_after_resource_block(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	(world.factions[SimulationWorld.LOCAL_PLAYER_ID] as FactionState).ore = 0
+	for unit_variant in world.units.values():
+		var unit := unit_variant as UnitState
+		if unit.faction_id == SimulationWorld.ENEMY_PLAYER_ID:
+			unit.enabled = false
+	for building_variant in world.buildings.values():
+		var building := building_variant as BuildingState
+		if building.faction_id == SimulationWorld.ENEMY_PLAYER_ID:
+			building.enabled = false
+			building.operational = false
+	var ore_field := world.ore_fields[SimulationWorld.DEFAULT_ORE_FIELD_ID] as OreFieldState
+	var order := StrategicOrderCommand.new(
+		world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, world.current_tick,
+		StrategicOrderCommand.OrderKind.DEVELOP_RESOURCE, 0, ore_field.entity_id, ore_field.position
+	)
+	_expect(world.submit_command(order).is_accepted(), "resource-starved development should still enter the authoritative task pipeline", failures)
+	world.advance_tick()
+	var task := world.tasks.get(1) as TaskState
+	_expect(task != null and task.lifecycle == TaskState.Lifecycle.BLOCKED and task.blocked_reason == TaskState.BlockedReason.INSUFFICIENT_RESOURCES, "development should expose an initial resource block", failures)
+	var resumed := false
+	for _tick in range(1800):
+		world.advance_tick()
+		resumed = resumed or task.lifecycle == TaskState.Lifecycle.EXECUTING
+		if task.lifecycle == TaskState.Lifecycle.COMPLETED:
+			break
+	_expect(resumed, "mining income should automatically resume a resource-blocked development task", failures)
+	_expect(task.lifecycle == TaskState.Lifecycle.COMPLETED and _count_definition(world, &"harvester") >= 2, "recovered development should finish without a second player order", failures)
 
 
 func _test_defend_area_respects_leash(failures: Array[String]) -> void:

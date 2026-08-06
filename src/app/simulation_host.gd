@@ -308,6 +308,10 @@ func get_headquarters_decision_key() -> StringName:
 	return world.get_headquarters_decision_key()
 
 
+func get_headquarters_budget_snapshot() -> Dictionary:
+	return world.get_headquarters_budget_snapshot()
+
+
 func set_enemy_difficulty(difficulty: EnemyDifficultyProfile.Difficulty) -> void:
 	world.set_enemy_difficulty(difficulty)
 

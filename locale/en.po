@@ -66,6 +66,9 @@ msgstr "AI  Industry: %s | Battlefield: %s"
 msgid "WORKFLOW_HEADQUARTERS"
 msgstr "General Staff: %s"
 
+msgid "WORKFLOW_HEADQUARTERS_BUDGET"
+msgstr "Budget: pending %d | reserve %d | available %d"
+
 msgid "HQ_DECISION_STABLE"
 msgstr "force and economy targets stable"
 
@@ -80,6 +83,12 @@ msgstr "building the combined-arms reserve"
 
 msgid "HQ_DECISION_RESERVE"
 msgstr "holding emergency ore reserve"
+
+msgid "HQ_DECISION_EMERGENCY_DEFENSE"
+msgstr "base threatened; prioritizing frontline strength"
+
+msgid "HQ_DECISION_QUEUE_WAIT"
+msgstr "production lane reserved; waiting for queue capacity"
 msgid "ORDER_DEVELOP"
 msgstr "Develop"
 msgid "ORDER_DEFEND"

@@ -12,6 +12,10 @@ func run() -> Array[String]:
 	_test_autonomous_scout_evades_contact(failures)
 	_test_headquarters_balances_economy_and_combat(failures)
 	_test_headquarters_preserves_emergency_reserve(failures)
+	_test_full_takeover_arbitrates_low_resources(failures)
+	_test_headquarters_reserves_player_queue_capacity(failures)
+	_test_emergency_defense_can_use_reserved_ore(failures)
+	_test_friendly_composition_responds_to_observed_threat(failures)
 	_test_difficulty_profiles_and_reaction_windows(failures)
 	_test_target_scoring_prefers_combat_threat(failures)
 	_test_observed_composition_changes_production(failures)
@@ -100,6 +104,7 @@ func _test_autonomous_base_threat_triggers_emergency_defense(failures: Array[Str
 	var enemy := world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
 	enemy.position = base.position + Vector2(96.0, 0.0)
 	world._update_faction_knowledge()
+	world.set_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID, AgentPolicy.Authorization.AUTONOMOUS)
 	world.set_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, AgentPolicy.Authorization.AUTONOMOUS)
 	for _tick in range(4):
 		world.advance_tick()
@@ -216,6 +221,79 @@ func _test_headquarters_preserves_emergency_reserve(failures: Array[String]) -> 
 	var factory := world.buildings[SimulationWorld.PLAYER_FACTORY_ID] as BuildingState
 	_expect(factory.production_count() == 0, "general staff should not spend below its emergency reserve on optional combat production", failures)
 	_expect(world.get_headquarters_decision_key() == &"HQ_DECISION_RESERVE", "reserve hold should be visible in the general-staff decision summary", failures)
+
+
+func _test_full_takeover_arbitrates_low_resources(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	(world.factions[SimulationWorld.LOCAL_PLAYER_ID] as FactionState).ore = 250
+	for unit_variant in world.units.values():
+		var unit := unit_variant as UnitState
+		if unit.faction_id == SimulationWorld.ENEMY_PLAYER_ID:
+			unit.enabled = false
+	world.set_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID, AgentPolicy.Authorization.AUTONOMOUS)
+	world.set_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, AgentPolicy.Authorization.AUTONOMOUS)
+	for _tick in range(14):
+		world.advance_tick()
+	var center := world.buildings[SimulationWorld.PLAYER_COMMAND_CENTER_ID] as BuildingState
+	var factory := world.buildings[SimulationWorld.PLAYER_FACTORY_ID] as BuildingState
+	var develop_tasks := 0
+	for task_variant in world.tasks.values():
+		var task := task_variant as TaskState
+		if task.agent_id == StrategicTaskSystem.INDUSTRIAL_AGENT_ID and task.kind == TaskState.Kind.DEVELOP_RESOURCE:
+			develop_tasks += 1
+	_expect(world.strategic_headquarters._committed_unit_count(world, &"harvester") == StrategicHeadquarters.TARGET_HARVESTER_COUNT, "full takeover should create exactly one coordinated harvester commitment", failures)
+	_expect(center.production_count() == 1 and develop_tasks == 1, "Strategic Headquarters and the development task must not enqueue duplicate harvesters", failures)
+	_expect(factory.production_count() == 0, "combat production must wait while low-resource economic recovery is unfunded", failures)
+	var budget := world.get_headquarters_budget_snapshot()
+	_expect(int(budget["reserved"]) == StrategicHeadquarters.EMERGENCY_ORE_RESERVE and world.get_headquarters_decision_key() == &"HQ_DECISION_RESERVE", "the visible budget ledger should explain why combat production is waiting", failures)
+
+
+func _test_headquarters_reserves_player_queue_capacity(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	(world.factions[SimulationWorld.LOCAL_PLAYER_ID] as FactionState).ore = 5000
+	var factory := world.buildings[SimulationWorld.PLAYER_FACTORY_ID] as BuildingState
+	factory.production_definition_id = &"assault_vehicle"
+	factory.production_ticks_remaining = 1000
+	factory.production_queue.assign([&"assault_vehicle", &"assault_vehicle", &"assault_vehicle"])
+	world.set_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, AgentPolicy.Authorization.AUTONOMOUS)
+	world.advance_tick()
+	world.advance_tick()
+	_expect(factory.production_count() == BuildingState.MAX_PRODUCTION_QUEUE_SIZE - StrategicHeadquarters.PLAYER_RESERVED_QUEUE_SLOTS, "autonomous production should preserve one factory queue slot for the player", failures)
+	_expect(world.get_headquarters_decision_key() == &"HQ_DECISION_QUEUE_WAIT", "queue-capacity arbitration should be visible in the headquarters decision", failures)
+	var player_order := ProduceUnitCommand.new(
+		world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, GameCommand.IssuerKind.PLAYER,
+		world.current_tick, factory.entity_id, &"missile_vehicle"
+	)
+	_expect(world.submit_command(player_order).is_accepted(), "the queue slot reserved by the AI should remain usable by a direct player production order", failures)
+
+
+func _test_emergency_defense_can_use_reserved_ore(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	(world.factions[SimulationWorld.LOCAL_PLAYER_ID] as FactionState).ore = 300
+	var base := world.buildings[SimulationWorld.PLAYER_COMMAND_CENTER_ID] as BuildingState
+	var enemy := world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	enemy.position = base.position + Vector2(96.0, 0.0)
+	world._update_faction_knowledge()
+	world.set_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, AgentPolicy.Authorization.AUTONOMOUS)
+	world.advance_tick()
+	world.advance_tick()
+	var factory := world.buildings[SimulationWorld.PLAYER_FACTORY_ID] as BuildingState
+	_expect(factory.production_definition_id == &"assault_vehicle", "a visible base emergency should outrank noncritical development and permit frontline production from the reserve", failures)
+	_expect(world.strategic_headquarters.last_posture == StrategicHeadquarters.Posture.BASE_DEFENSE and world.get_headquarters_decision_key() == &"HQ_DECISION_EMERGENCY_DEFENSE", "emergency reserve use should publish the base-defense posture", failures)
+
+
+func _test_friendly_composition_responds_to_observed_threat(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	var observer := world.units[3] as UnitState
+	var enemy_origin := observer.position + Vector2(64.0, 0.0)
+	for entity_id in [1090, 1091]:
+		var definition := SimulationWorld.UNIT_CATALOG.get_unit(&"missile_vehicle")
+		var missile := UnitState.new(entity_id, enemy_origin + Vector2(0.0, float(entity_id - 1090) * 32.0), definition.move_speed, SimulationWorld.ENEMY_PLAYER_ID)
+		world._apply_unit_definition(missile, definition)
+		world.units[entity_id] = missile
+	world._update_faction_knowledge()
+	var targets := world.strategic_headquarters._combat_targets(world, false)
+	_expect(int(targets[&"assault_vehicle"]) == StrategicHeadquarters.TARGET_ASSAULT_COUNT + StrategicHeadquarters.MAX_DYNAMIC_TARGET_BONUS, "observed missile-heavy opposition should increase the friendly frontline target", failures)
 
 
 func _ids_overlap(first: Array[int], second: Array[int]) -> bool:

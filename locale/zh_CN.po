@@ -66,6 +66,9 @@ msgstr "AI  工业：%s | 战场：%s"
 msgid "WORKFLOW_HEADQUARTERS"
 msgstr "参谋部：%s"
 
+msgid "WORKFLOW_HEADQUARTERS_BUDGET"
+msgstr "预算：待付 %d | 储备 %d | 可用 %d"
+
 msgid "HQ_DECISION_STABLE"
 msgstr "经济与兵力目标稳定"
 
@@ -80,6 +83,12 @@ msgstr "扩充合成作战预备队"
 
 msgid "HQ_DECISION_RESERVE"
 msgstr "保留紧急资源储备"
+
+msgid "HQ_DECISION_EMERGENCY_DEFENSE"
+msgstr "基地告急，优先补充前线战力"
+
+msgid "HQ_DECISION_QUEUE_WAIT"
+msgstr "生产通道已预留，等待队列容量"
 msgid "ORDER_DEVELOP"
 msgstr "发展矿区"
 msgid "ORDER_DEFEND"

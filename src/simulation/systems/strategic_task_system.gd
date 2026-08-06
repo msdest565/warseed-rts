@@ -27,6 +27,8 @@ func advance(world: SimulationWorld) -> void:
 				task.set_lifecycle(TaskState.Lifecycle.EXECUTING, world.current_tick)
 				task.set_phase(TaskState.Phase.PREPARING, world.current_tick, "Reinforcements assigned; task resumed")
 				_emit_task_event(task, world)
+		if task.lifecycle == TaskState.Lifecycle.BLOCKED:
+			_try_resume_blocked_development(task, world)
 		if task.lifecycle != TaskState.Lifecycle.EXECUTING:
 			continue
 		match task.kind:
@@ -59,7 +61,11 @@ func _advance_develop_resource(task: TaskState, world: SimulationWorld) -> void:
 		if factory == null:
 			_block(task, world, TaskState.BlockedReason.PRODUCTION_UNAVAILABLE, "No operational command center is available")
 			return
-		if factory.production_count() < BuildingState.MAX_PRODUCTION_QUEUE_SIZE and _count_definition(world, task.faction_id, &"harvester") <= task.expected_unit_count:
+		var production_is_committed := _count_committed_definition(world, task.faction_id, &"harvester") > task.expected_unit_count
+		if not task.requires_proactive_authorization and not production_is_committed:
+			if factory.production_count() >= BuildingState.MAX_PRODUCTION_QUEUE_SIZE:
+				_block(task, world, TaskState.BlockedReason.PRODUCTION_UNAVAILABLE, "Command-center production queue is full")
+				return
 			var production := ProduceUnitCommand.new(
 				world.allocate_command_id(),
 				task.faction_id,
@@ -74,7 +80,8 @@ func _advance_develop_resource(task: TaskState, world: SimulationWorld) -> void:
 				var reason := TaskState.BlockedReason.INSUFFICIENT_RESOURCES if production_result.reason == CommandValidationResult.Reason.INSUFFICIENT_ORE else TaskState.BlockedReason.PRODUCTION_UNAVAILABLE
 				_block(task, world, reason, production_result.describe())
 				return
-		task.set_phase(TaskState.Phase.HARVESTING, world.current_tick, "Harvester cycling; second harvester queued")
+		var detail := "Harvester cycling; production coordinated by Strategic Headquarters" if task.requires_proactive_authorization else "Harvester cycling; second harvester queued"
+		task.set_phase(TaskState.Phase.HARVESTING, world.current_tick, detail)
 		_emit_task_event(task, world)
 		return
 
@@ -372,6 +379,45 @@ func _count_definition(world: SimulationWorld, faction_id: int, definition_id: S
 		if unit.enabled and unit.faction_id == faction_id and unit.definition_id == definition_id:
 			count += 1
 	return count
+
+
+func _count_committed_definition(world: SimulationWorld, faction_id: int, definition_id: StringName) -> int:
+	var count := _count_definition(world, faction_id, definition_id)
+	for building_variant in world.buildings.values():
+		var building := building_variant as BuildingState
+		if building.faction_id != faction_id:
+			continue
+		if building.production_definition_id == definition_id:
+			count += 1
+		for queued_definition_id in building.production_queue:
+			if queued_definition_id == definition_id:
+				count += 1
+	for queued_command in world.command_queue.snapshot():
+		if not queued_command is ProduceUnitCommand:
+			continue
+		var production := queued_command as ProduceUnitCommand
+		var building := world.buildings.get(production.target_entity_id) as BuildingState
+		if building != null and building.faction_id == faction_id and production.unit_definition_id == definition_id:
+			count += 1
+	return count
+
+
+func _try_resume_blocked_development(task: TaskState, world: SimulationWorld) -> void:
+	if task.kind != TaskState.Kind.DEVELOP_RESOURCE or task.blocked_reason not in [TaskState.BlockedReason.INSUFFICIENT_RESOURCES, TaskState.BlockedReason.PRODUCTION_UNAVAILABLE]:
+		return
+	if not world.ore_fields.has(task.target_entity_id) or _first_enabled_participant(task, world, &"harvester") == null:
+		return
+	var refinery := _find_faction_building(world, task.faction_id, &"command_center", true)
+	if refinery == null or refinery.production_count() >= BuildingState.MAX_PRODUCTION_QUEUE_SIZE:
+		return
+	if not task.requires_proactive_authorization and _count_committed_definition(world, task.faction_id, &"harvester") <= task.expected_unit_count:
+		var faction := world.factions.get(task.faction_id) as FactionState
+		var definition := SimulationWorld.UNIT_CATALOG.get_unit(&"harvester")
+		if faction == null or definition == null or faction.ore < definition.production_cost:
+			return
+	task.set_lifecycle(TaskState.Lifecycle.EXECUTING, world.current_tick)
+	task.set_phase(TaskState.Phase.PREPARING, world.current_tick, "Development prerequisites recovered; task resumed")
+	_emit_task_event(task, world)
 
 
 func _enroll_compatible_units(task: TaskState, world: SimulationWorld) -> int:

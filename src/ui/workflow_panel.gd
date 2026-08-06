@@ -67,6 +67,7 @@ func update_snapshot(snapshot: WorldSnapshot) -> void:
 	var authorization_line := ""
 	var recommendation_line := ""
 	var headquarters_line := ""
+	var headquarters_budget_line := ""
 	if simulation_host != null:
 		authorization_line = GameText.t(&"WORKFLOW_AI_STATUS") % [
 			GameText.enum_name("AI_AUTH", AgentPolicy.Authorization.keys()[simulation_host.get_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID)]),
@@ -77,5 +78,7 @@ func update_snapshot(snapshot: WorldSnapshot) -> void:
 			GameText.t(simulation_host.get_agent_recommendation_key(StrategicTaskSystem.BATTLEFIELD_AGENT_ID)),
 		]
 		headquarters_line = GameText.t(&"WORKFLOW_HEADQUARTERS") % GameText.t(simulation_host.get_headquarters_decision_key())
+		var budget := simulation_host.get_headquarters_budget_snapshot()
+		headquarters_budget_line = GameText.t(&"WORKFLOW_HEADQUARTERS_BUDGET") % [int(budget["pending"]), int(budget["reserved"]), int(budget["available"])]
 	var task_text := GameText.t(&"WORKFLOW_NONE") if task_lines.is_empty() else "\n".join(task_lines)
-	tasks_label.text = "%s\n%s\n%s\n%s" % [authorization_line, headquarters_line, recommendation_line, task_text] if not authorization_line.is_empty() else task_text
+	tasks_label.text = "%s\n%s\n%s\n%s\n%s" % [authorization_line, headquarters_line, headquarters_budget_line, recommendation_line, task_text] if not authorization_line.is_empty() else task_text

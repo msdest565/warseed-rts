@@ -375,6 +375,10 @@ func get_headquarters_decision_key() -> StringName:
 	return strategic_headquarters.last_decision_key
 
 
+func get_headquarters_budget_snapshot() -> Dictionary:
+	return strategic_headquarters.budget_snapshot()
+
+
 func _has_open_task_for_agent(agent_id: int) -> bool:
 	for task_variant in tasks.values():
 		var task := task_variant as TaskState
