@@ -1,19 +1,23 @@
 class_name TaskPanel
 extends PanelContainer
 
+signal headquarters_settings_changed
+
 @onready var title_label: Label = $Margin/Layout/Intel/Title
 @onready var mission_label: Label = $Margin/Layout/Intel/Mission
 @onready var selection_title_label: Label = $Margin/Layout/Intel/SelectionTitle
 @onready var selection_label: Label = $Margin/Layout/Intel/Selection
 @onready var task_label: Label = $Margin/Layout/Intel/TaskStatus
 @onready var strategic_title_label: Label = $Margin/Layout/Strategic/Title
+@onready var headquarters_directive_label: Label = $Margin/Layout/Strategic/DirectiveLabel
+@onready var headquarters_directive_selector: OptionButton = $Margin/Layout/Strategic/Directive
 @onready var operations_title_label: Label = $Margin/Layout/Operations/Title
 @onready var production_title_label: Label = $Margin/Layout/ProductionSection/Title
 @onready var production_queue_label: Label = $Margin/Layout/ProductionSection/Queue
-@onready var develop_button: Button = $Margin/Layout/Strategic/Develop
-@onready var defend_button: Button = $Margin/Layout/Strategic/Defend
-@onready var scout_button: Button = $Margin/Layout/Strategic/Scout
-@onready var attack_button: Button = $Margin/Layout/Strategic/Attack
+@onready var develop_button: Button = $Margin/Layout/Strategic/Commands/Develop
+@onready var defend_button: Button = $Margin/Layout/Strategic/Commands/Defend
+@onready var scout_button: Button = $Margin/Layout/Strategic/Commands/Scout
+@onready var attack_button: Button = $Margin/Layout/Strategic/Commands/Attack
 @onready var build_factory_button: Button = $Margin/Layout/Operations/Grid/BuildFactory
 @onready var build_support_button: Button = $Margin/Layout/Operations/Grid/BuildSupport
 @onready var repair_button: Button = $Margin/Layout/Operations/Grid/Repair
@@ -51,6 +55,7 @@ func _ready() -> void:
 	defend_button.pressed.connect(_submit_defend)
 	scout_button.pressed.connect(_submit_scout)
 	attack_button.pressed.connect(_submit_attack)
+	headquarters_directive_selector.item_selected.connect(_select_headquarters_directive)
 	build_factory_button.pressed.connect(_begin_build.bind(&"automated_factory"))
 	build_support_button.pressed.connect(_begin_build.bind(&"forward_support_station"))
 	repair_button.pressed.connect(_begin_repair)
@@ -66,13 +71,15 @@ func _ready() -> void:
 
 
 func refresh_locale() -> void:
-	for control in [title_label, mission_label, selection_title_label, selection_label, task_label, strategic_title_label, operations_title_label, production_title_label, production_queue_label, develop_button, defend_button, scout_button, attack_button, build_factory_button, build_support_button, repair_button, pause_button, resume_button, cancel_button, harvest_button, cancel_production_button, rally_button]:
+	for control in [title_label, mission_label, selection_title_label, selection_label, task_label, strategic_title_label, headquarters_directive_label, headquarters_directive_selector, operations_title_label, production_title_label, production_queue_label, develop_button, defend_button, scout_button, attack_button, build_factory_button, build_support_button, repair_button, pause_button, resume_button, cancel_button, harvest_button, cancel_production_button, rally_button]:
 		(control as Control).auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	for button in production_buttons:
 		button.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	title_label.text = GameText.t(&"HUD_TITLE")
 	selection_title_label.text = GameText.t(&"HUD_SELECTION")
-	strategic_title_label.text = GameText.t(&"HUD_STRATEGIC")
+	strategic_title_label.text = GameText.t(&"HUD_HEADQUARTERS")
+	headquarters_directive_label.text = GameText.t(&"HQ_DIRECTIVE_LABEL")
+	_populate_headquarters_directives()
 	operations_title_label.text = GameText.t(&"HUD_OPERATIONS")
 	production_title_label.text = GameText.t(&"HUD_PRODUCTION")
 	develop_button.text = GameText.t(&"ORDER_DEVELOP")
@@ -99,7 +106,8 @@ func update_snapshot(snapshot: WorldSnapshot) -> void:
 		return
 	var industrial_authorization := simulation_host.get_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID)
 	var battlefield_authorization := simulation_host.get_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID)
-	strategic_title_label.text = GameText.t(&"HUD_STRATEGIC_AUTH") % [
+	headquarters_directive_selector.select(simulation_host.get_headquarters_directive())
+	strategic_title_label.text = GameText.t(&"HUD_HEADQUARTERS_AUTH") % [
 		GameText.t(StringName("AI_AUTH_SHORT_%s" % AgentPolicy.Authorization.keys()[industrial_authorization])),
 		GameText.t(StringName("AI_AUTH_SHORT_%s" % AgentPolicy.Authorization.keys()[battlefield_authorization])),
 	]
@@ -249,6 +257,25 @@ func _submit_develop() -> void:
 		ore_field.entity_id,
 		ore_field.position
 	))
+
+
+func _select_headquarters_directive(index: int) -> void:
+	if simulation_host == null:
+		return
+	var directive: StrategicHeadquarters.Directive = int(headquarters_directive_selector.get_item_metadata(index))
+	if simulation_host.set_headquarters_directive(directive):
+		last_status = GameText.t(&"HQ_DIRECTIVE_APPLIED") % GameText.t(simulation_host.get_headquarters_directive_key())
+		headquarters_settings_changed.emit()
+
+
+func _populate_headquarters_directives() -> void:
+	var selected := simulation_host.get_headquarters_directive() if simulation_host != null else StrategicHeadquarters.Directive.NONE
+	headquarters_directive_selector.clear()
+	for directive_index in range(StrategicHeadquarters.Directive.size()):
+		var directive_name: String = StrategicHeadquarters.Directive.keys()[directive_index]
+		headquarters_directive_selector.add_item(GameText.t(StringName("HQ_DIRECTIVE_%s" % directive_name)))
+		headquarters_directive_selector.set_item_metadata(directive_index, directive_index)
+	headquarters_directive_selector.select(selected)
 
 
 func _submit_defend() -> void:

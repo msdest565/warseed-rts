@@ -16,6 +16,8 @@ func run() -> Array[String]:
 	_test_headquarters_reserves_player_queue_capacity(failures)
 	_test_emergency_defense_can_use_reserved_ore(failures)
 	_test_friendly_composition_responds_to_observed_threat(failures)
+	_test_general_staff_directive_enables_full_takeover(failures)
+	_test_general_staff_directives_change_battlefield_posture(failures)
 	_test_difficulty_profiles_and_reaction_windows(failures)
 	_test_target_scoring_prefers_combat_threat(failures)
 	_test_observed_composition_changes_production(failures)
@@ -294,6 +296,53 @@ func _test_friendly_composition_responds_to_observed_threat(failures: Array[Stri
 	world._update_faction_knowledge()
 	var targets := world.strategic_headquarters._combat_targets(world, false)
 	_expect(int(targets[&"assault_vehicle"]) == StrategicHeadquarters.TARGET_ASSAULT_COUNT + StrategicHeadquarters.MAX_DYNAMIC_TARGET_BONUS, "observed missile-heavy opposition should increase the friendly frontline target", failures)
+
+
+func _test_general_staff_directive_enables_full_takeover(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	(world.factions[SimulationWorld.LOCAL_PLAYER_ID] as FactionState).ore = 5000
+	_expect(world.set_headquarters_directive(StrategicHeadquarters.Directive.OFFENSIVE), "a direct General Staff directive should be accepted", failures)
+	_expect(world.get_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID) == AgentPolicy.Authorization.AUTONOMOUS, "General Staff takeover should authorize the industrial supervisor", failures)
+	_expect(world.get_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID) == AgentPolicy.Authorization.AUTONOMOUS, "General Staff takeover should authorize the battlefield commander", failures)
+	for _tick in range(24):
+		world.advance_tick()
+	_expect(world.strategic_headquarters._committed_unit_count(world, &"assault_vehicle") > 1, "offensive takeover should autonomously commit new combat production", failures)
+	var targets := world.strategic_headquarters._combat_targets(world, false)
+	_expect(int(targets[&"assault_vehicle"]) >= StrategicHeadquarters.TARGET_ASSAULT_COUNT + 2, "offensive doctrine should raise the frontline force objective", failures)
+	world.set_headquarters_directive(StrategicHeadquarters.Directive.NONE)
+	_expect(world.get_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID) == AgentPolicy.Authorization.ASSISTED and world.get_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID) == AgentPolicy.Authorization.ASSISTED, "leaving General Staff takeover should restore explicit-assistance authority", failures)
+	for task_variant in world.tasks.values():
+		var task := task_variant as TaskState
+		if task.requires_proactive_authorization and task.agent_id == StrategicTaskSystem.BATTLEFIELD_AGENT_ID:
+			_expect(not world._is_open_task(task), "leaving takeover should close proactive battlefield tasks without cancelling player assignments", failures)
+
+
+func _test_general_staff_directives_change_battlefield_posture(failures: Array[String]) -> void:
+	var defensive_world := SimulationWorld.new()
+	var defensive_scout := defensive_world.units[3] as UnitState
+	var defensive_enemy := defensive_world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	defensive_scout.position = defensive_world.logic_grid.cell_to_world(Vector2i(36, 24))
+	defensive_scout.following_formation = false
+	defensive_enemy.position = defensive_scout.position + Vector2(96.0, 0.0)
+	defensive_world._update_faction_knowledge()
+	defensive_world.set_headquarters_directive(StrategicHeadquarters.Directive.DEFENSIVE)
+	defensive_world.advance_tick()
+	defensive_world.advance_tick()
+	var defensive_task := defensive_world._find_open_battlefield_task(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, false)
+	_expect(defensive_task != null and defensive_task.kind == TaskState.Kind.DEFEND_AREA, "base-defense doctrine should hold combat units at home instead of chasing a distant scout contact", failures)
+
+	var offensive_world := SimulationWorld.new()
+	var offensive_scout := offensive_world.units[3] as UnitState
+	var offensive_enemy := offensive_world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	offensive_scout.position = offensive_world.logic_grid.cell_to_world(Vector2i(36, 24))
+	offensive_scout.following_formation = false
+	offensive_enemy.position = offensive_scout.position + Vector2(96.0, 0.0)
+	offensive_world._update_faction_knowledge()
+	offensive_world.set_headquarters_directive(StrategicHeadquarters.Directive.OFFENSIVE)
+	offensive_world.advance_tick()
+	offensive_world.advance_tick()
+	var offensive_task := offensive_world._find_open_battlefield_task(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, false)
+	_expect(offensive_task != null and offensive_task.kind == TaskState.Kind.ATTACK_TARGET, "offensive doctrine should convert a distant visible contact into an autonomous attack task", failures)
 
 
 func _ids_overlap(first: Array[int], second: Array[int]) -> bool:

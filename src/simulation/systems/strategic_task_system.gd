@@ -14,6 +14,8 @@ const SCOUT_EVADE_DISTANCE := 448.0
 const SCOUT_EVADE_REPLAN_TICKS := 15
 const SCOUT_THREAT_BUFFER := 96.0
 const RETREAT_SURVIVOR_RATIO := 0.5
+const ATTACK_SEARCH_TICKS := 30
+const ATTACK_SEARCH_RADIUS := 96.0
 
 
 func advance(world: SimulationWorld) -> void:
@@ -173,7 +175,23 @@ func _advance_attack_target(task: TaskState, world: SimulationWorld) -> void:
 	if not target_enabled:
 		_complete(task, world, "Assigned hostile target destroyed")
 		return
-	if task.phase == TaskState.Phase.PREPARING:
+	var target_visible := known_unit.is_visible_to_local_player if known_unit != null else known_building.is_visible
+	task.target_position = known_unit.position if known_unit != null else known_building.position
+	if not target_visible:
+		if formation.anchor_position.distance_to(task.target_position) > ATTACK_SEARCH_RADIUS:
+			task.ticks_without_progress = 0
+			if not formation.is_moving and not _submit_formation_move(task, formation, task.target_position, world):
+				return
+			task.route = formation.path.duplicate()
+			task.set_phase(TaskState.Phase.ADVANCING, world.current_tick, "Target lost from sight; advancing to its last confirmed position")
+			return
+		task.ticks_without_progress += 1
+		task.set_phase(TaskState.Phase.ENGAGING, world.current_tick, "Searching the target's last confirmed position")
+		if task.ticks_without_progress >= ATTACK_SEARCH_TICKS:
+			_fail(task, world, "Target could not be reacquired at its last confirmed position")
+		return
+	task.ticks_without_progress = 0
+	if task.phase == TaskState.Phase.PREPARING or formation.order_target_entity_id != task.target_entity_id:
 		var attack := AttackCommand.new(
 			world.allocate_command_id(),
 			task.faction_id,

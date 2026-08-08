@@ -45,6 +45,7 @@ func _test_last_seen_contact_and_snapshot_copy(failures: Array[String]) -> void:
 	var stale_contact := hidden_snapshot.get_unit(enemy.entity_id)
 	_expect(stale_contact != null, "previously observed hostile should remain as last-seen contact", failures)
 	_expect(not stale_contact.is_visible_to_local_player, "last-seen contact must not masquerade as current visibility", failures)
+	_expect(stale_contact.enabled and stale_contact.death_tick < 0, "losing the observer must not mark a surviving hostile contact as destroyed", failures)
 	_expect(stale_contact.position == last_seen_position, "hidden hostile contact must retain last known position", failures)
 	_expect(stale_contact.last_seen_tick < hidden_snapshot.tick, "hidden contact should expose an older last-seen tick", failures)
 	_expect(visible_snapshot.knowledge.get_cell_state(old_knowledge_cell) == old_knowledge_state, "old knowledge snapshot must remain immutable", failures)

@@ -312,6 +312,18 @@ func get_headquarters_budget_snapshot() -> Dictionary:
 	return world.get_headquarters_budget_snapshot()
 
 
+func set_headquarters_directive(directive: StrategicHeadquarters.Directive) -> bool:
+	return world.set_headquarters_directive(directive)
+
+
+func get_headquarters_directive() -> StrategicHeadquarters.Directive:
+	return world.get_headquarters_directive()
+
+
+func get_headquarters_directive_key() -> StringName:
+	return world.get_headquarters_directive_key()
+
+
 func set_enemy_difficulty(difficulty: EnemyDifficultyProfile.Difficulty) -> void:
 	world.set_enemy_difficulty(difficulty)
 

@@ -10,10 +10,19 @@ enum Posture {
 	STABLE,
 }
 
+enum Directive {
+	NONE,
+	BALANCED,
+	ECONOMY_FIRST,
+	DEFENSIVE,
+	OFFENSIVE,
+}
+
 const DECISION_INTERVAL_TICKS := 10
 const EMERGENCY_ORE_RESERVE := 400
 const PLAYER_RESERVED_QUEUE_SLOTS := 1
 const TARGET_HARVESTER_COUNT := 2
+const ECONOMY_TARGET_HARVESTER_COUNT := 3
 const TARGET_SCOUT_COUNT := 1
 const TARGET_ASSAULT_COUNT := 3
 const TARGET_MISSILE_COUNT := 2
@@ -27,6 +36,7 @@ var last_pending_ore: int = 0
 var last_reserved_ore: int = 0
 var last_available_ore: int = 0
 var last_production_definition_id: StringName = &""
+var directive: Directive = Directive.NONE
 
 
 func advance(world: SimulationWorld) -> void:
@@ -51,7 +61,7 @@ func advance(world: SimulationWorld) -> void:
 		return
 	if battlefield_active and base_threat and _advance_combat_production(world, true):
 		return
-	if industrial_active and harvester_commitments < TARGET_HARVESTER_COUNT:
+	if industrial_active and harvester_commitments < _target_harvester_count():
 		_set_decision(Posture.DEVELOPMENT, &"HQ_DECISION_ECONOMY_DEVELOPMENT")
 		_queue_production(world, &"harvester", StrategicTaskSystem.INDUSTRIAL_AGENT_ID, 0)
 		return
@@ -63,7 +73,16 @@ func advance(world: SimulationWorld) -> void:
 
 func should_start_industrial_development(world: SimulationWorld) -> bool:
 	var enabled := _enabled_unit_count(world, &"harvester")
-	return enabled > 0 and enabled < TARGET_HARVESTER_COUNT
+	return enabled > 0 and enabled < _target_harvester_count()
+
+
+func set_directive(new_directive: Directive) -> void:
+	directive = new_directive
+	last_decision_tick = -DECISION_INTERVAL_TICKS
+
+
+func directive_key() -> StringName:
+	return StringName("HQ_DIRECTIVE_%s" % Directive.keys()[directive])
 
 
 func budget_snapshot() -> Dictionary:
@@ -133,6 +152,12 @@ func _combat_targets(world: SimulationWorld, base_threat: bool) -> Dictionary:
 	var snapshot := world.create_faction_snapshot(SimulationWorld.LOCAL_PLAYER_ID)
 	var observed_assault := 0
 	var observed_missile := 0
+	if directive == Directive.DEFENSIVE:
+		targets[&"assault_vehicle"] += 1
+		targets[&"missile_vehicle"] += 1
+	elif directive == Directive.OFFENSIVE:
+		targets[&"assault_vehicle"] += 2
+		targets[&"missile_vehicle"] += 1
 	for contact in snapshot.units:
 		if contact.faction_id == SimulationWorld.LOCAL_PLAYER_ID or not contact.enabled:
 			continue
@@ -147,6 +172,10 @@ func _combat_targets(world: SimulationWorld, base_threat: bool) -> Dictionary:
 	if base_threat:
 		targets[&"assault_vehicle"] += MAX_DYNAMIC_TARGET_BONUS
 	return targets
+
+
+func _target_harvester_count() -> int:
+	return ECONOMY_TARGET_HARVESTER_COUNT if directive == Directive.ECONOMY_FIRST else TARGET_HARVESTER_COUNT
 
 
 func _has_visible_base_threat(world: SimulationWorld) -> bool:

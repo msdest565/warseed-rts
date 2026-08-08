@@ -47,7 +47,7 @@ func apply_snapshot(unit: UnitSnapshot) -> void:
 
 
 func _draw() -> void:
-	if faction_id != SimulationWorld.LOCAL_PLAYER_ID and not currently_visible:
+	if is_last_seen_contact():
 		_draw_last_seen_marker()
 		return
 	if formation_member and not selected:
@@ -101,8 +101,25 @@ func _draw() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(-38.0, 55.0), GameText.unit_name(definition_id), HORIZONTAL_ALIGNMENT_CENTER, 76.0, 10, Color("9fb4b5"))
 
 
+func is_last_seen_contact() -> bool:
+	return enabled and faction_id != SimulationWorld.LOCAL_PLAYER_ID and not currently_visible
+
+
 func _draw_last_seen_marker() -> void:
-	draw_circle(Vector2.ZERO, 18.0, Color(LAST_SEEN_COLOR, 0.12))
-	draw_arc(Vector2.ZERO, 18.0, 0.0, TAU, 24, LAST_SEEN_COLOR, 2.0)
-	draw_line(Vector2(-8.0, -8.0), Vector2(8.0, 8.0), LAST_SEEN_COLOR, 2.0)
-	draw_line(Vector2(-8.0, 8.0), Vector2(8.0, -8.0), LAST_SEEN_COLOR, 2.0)
+	draw_colored_polygon(
+		PackedVector2Array([
+			Vector2(-16.0, -9.0), Vector2(10.0, -9.0), Vector2(17.0, 0.0),
+			Vector2(10.0, 9.0), Vector2(-16.0, 9.0),
+		]),
+		Color(LAST_SEEN_COLOR, 0.1)
+	)
+	draw_polyline(
+		PackedVector2Array([
+			Vector2(-16.0, -9.0), Vector2(10.0, -9.0), Vector2(17.0, 0.0),
+			Vector2(10.0, 9.0), Vector2(-16.0, 9.0), Vector2(-16.0, -9.0),
+		]),
+		LAST_SEEN_COLOR,
+		2.0
+	)
+	draw_arc(Vector2.ZERO, 24.0, PI * 0.15, PI * 0.85, 12, LAST_SEEN_COLOR, 1.5)
+	draw_circle(Vector2(0.0, 15.0), 2.0, LAST_SEEN_COLOR)

@@ -36,6 +36,8 @@ func _ready() -> void:
 	input_controller.attack_preview_cleared.connect(world_presentation.clear_attack_preview)
 	task_panel.simulation_host = simulation_host
 	task_panel.input_controller = input_controller
+	if not task_panel.headquarters_settings_changed.is_connected(_on_headquarters_settings_changed):
+		task_panel.headquarters_settings_changed.connect(_on_headquarters_settings_changed)
 	workflow_panel.simulation_host = simulation_host
 	pause_menu.language_changed.connect(_on_language_changed)
 	pause_menu.enemy_difficulty_changed.connect(simulation_host.set_enemy_difficulty)
@@ -59,6 +61,14 @@ func _on_language_changed(_locale: String) -> void:
 	contact_alert.refresh_locale()
 	input_controller.refresh_locale_status()
 	world_presentation.refresh_locale()
+
+
+func _on_headquarters_settings_changed() -> void:
+	pause_menu.set_ai_settings(
+		simulation_host.get_enemy_difficulty(),
+		simulation_host.get_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID),
+		simulation_host.get_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID)
+	)
 
 
 func _process(delta: float) -> void:

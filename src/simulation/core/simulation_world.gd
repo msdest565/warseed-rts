@@ -109,6 +109,11 @@ func set_agent_authorization(agent_id: int, authorization: AgentPolicy.Authoriza
 	if policy == null or policy.domain == AgentPolicy.Domain.ENEMY:
 		return false
 	policy.authorization = authorization
+	if agent_id in [StrategicTaskSystem.INDUSTRIAL_AGENT_ID, StrategicTaskSystem.BATTLEFIELD_AGENT_ID]:
+		if authorization != AgentPolicy.Authorization.AUTONOMOUS and strategic_headquarters.directive != StrategicHeadquarters.Directive.NONE:
+			strategic_headquarters.set_directive(StrategicHeadquarters.Directive.NONE)
+		elif strategic_headquarters.directive == StrategicHeadquarters.Directive.NONE and get_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID) == AgentPolicy.Authorization.AUTONOMOUS and get_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID) == AgentPolicy.Authorization.AUTONOMOUS:
+			strategic_headquarters.set_directive(StrategicHeadquarters.Directive.BALANCED)
 	command_queue.remove_if(func(command: GameCommand) -> bool: return _required_agent_id(command) == agent_id and not _agent_authorization_allows(command))
 	if not policy.allows_explicit_tasks() or not policy.allows_proactive_tasks():
 		for task_variant in tasks.values():
@@ -379,6 +384,41 @@ func get_headquarters_budget_snapshot() -> Dictionary:
 	return strategic_headquarters.budget_snapshot()
 
 
+func set_headquarters_directive(new_directive: StrategicHeadquarters.Directive) -> bool:
+	if new_directive < StrategicHeadquarters.Directive.NONE or new_directive > StrategicHeadquarters.Directive.OFFENSIVE:
+		return false
+	strategic_headquarters.set_directive(new_directive)
+	var authorization: AgentPolicy.Authorization = AgentPolicy.Authorization.ASSISTED if new_directive == StrategicHeadquarters.Directive.NONE else AgentPolicy.Authorization.AUTONOMOUS
+	set_agent_authorization(StrategicTaskSystem.INDUSTRIAL_AGENT_ID, authorization)
+	set_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, authorization)
+	_cancel_proactive_battlefield_tasks("Replanned by a direct General Staff directive")
+	_last_friendly_autonomy_tick = current_tick - FRIENDLY_AUTONOMY_INTERVAL_TICKS
+	return true
+
+
+func get_headquarters_directive() -> StrategicHeadquarters.Directive:
+	return strategic_headquarters.directive
+
+
+func get_headquarters_directive_key() -> StringName:
+	return strategic_headquarters.directive_key()
+
+
+func _cancel_proactive_battlefield_tasks(detail: String) -> void:
+	command_queue.remove_if(func(command: GameCommand) -> bool:
+		return command is StrategicOrderCommand and command.issuer_kind == GameCommand.IssuerKind.AGENT and command.agent_id == StrategicTaskSystem.BATTLEFIELD_AGENT_ID
+	)
+	for task_variant in tasks.values():
+		var task := task_variant as TaskState
+		if task.agent_id != StrategicTaskSystem.BATTLEFIELD_AGENT_ID or not task.requires_proactive_authorization or not _is_open_task(task):
+			continue
+		task.set_lifecycle(TaskState.Lifecycle.CANCELLED, current_tick, TaskState.BlockedReason.NONE, detail)
+		task.set_phase(TaskState.Phase.DONE, current_tick, detail)
+		_stop_task_formation(task)
+		release_task_participants(task)
+		events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.TASK_STATE_CHANGED, task.task_id, "CANCELLED:headquarters_directive"))
+
+
 func _has_open_task_for_agent(agent_id: int) -> bool:
 	for task_variant in tasks.values():
 		var task := task_variant as TaskState
@@ -410,6 +450,7 @@ func _submit_autonomous_battlefield_orders(policy: AgentPolicy) -> void:
 	var contact := _best_visible_hostile(snapshot, base_position)
 	var open_combat_task := _find_open_battlefield_task(policy.agent_id, false)
 	var combat_ids := _autonomous_combat_units(policy.faction_id, open_combat_task)
+	var hold_territory := strategic_headquarters.directive in [StrategicHeadquarters.Directive.ECONOMY_FIRST, StrategicHeadquarters.Directive.DEFENSIVE]
 	if not contact.is_empty() and not combat_ids.is_empty():
 		var target_position := contact["position"] as Vector2
 		var target_id := int(contact["entity_id"])
@@ -417,6 +458,9 @@ func _submit_autonomous_battlefield_orders(policy: AgentPolicy) -> void:
 		if threatens_base:
 			if open_combat_task == null or open_combat_task.kind != TaskState.Kind.DEFEND_AREA or open_combat_task.priority < AUTONOMY_PRIORITY_BASE_THREAT:
 				_submit_autonomous_defense(policy, combat_ids, base_position, AUTONOMY_PRIORITY_BASE_THREAT, open_combat_task.task_id if open_combat_task != null else 0)
+		elif hold_territory:
+			if open_combat_task == null or open_combat_task.kind != TaskState.Kind.DEFEND_AREA:
+				_submit_autonomous_defense(policy, combat_ids, base_position, AUTONOMY_PRIORITY_DEFEND, open_combat_task.task_id if open_combat_task != null else 0)
 		elif open_combat_task == null or open_combat_task.kind != TaskState.Kind.ATTACK_TARGET or open_combat_task.target_entity_id != target_id:
 			_submit_autonomous_attack(policy, combat_ids, target_id, target_position, open_combat_task.task_id if open_combat_task != null else 0)
 	elif open_combat_task == null and not combat_ids.is_empty():

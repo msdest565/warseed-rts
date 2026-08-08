@@ -260,35 +260,68 @@ theme_override_constants/separation = 5
 layout_mode = 2
 theme_override_colors/font_color = Color(0.35, 0.78, 0.72, 1)
 theme_override_font_sizes/font_size = 10
-text = "STRATEGY"
+text = "GENERAL STAFF"
 
-[node name="Develop" type="Button" parent="HUDLayer/TaskPanel/Margin/Layout/Strategic"]
-custom_minimum_size = Vector2(0, 38)
+[node name="DirectiveLabel" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/Strategic"]
 layout_mode = 2
+theme_override_colors/font_color = Color(0.68, 0.74, 0.72, 1)
+theme_override_font_sizes/font_size = 9
+text = "STRATEGIC DIRECTIVE"
+
+[node name="Directive" type="OptionButton" parent="HUDLayer/TaskPanel/Margin/Layout/Strategic"]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+item_count = 5
+selected = 0
+popup/item_0/text = "Manual / No Takeover"
+popup/item_0/id = 0
+popup/item_1/text = "Balanced Takeover"
+popup/item_1/id = 1
+popup/item_2/text = "Economy First"
+popup/item_2/id = 2
+popup/item_3/text = "Base Defense"
+popup/item_3/id = 3
+popup/item_4/text = "Offensive Operations"
+popup/item_4/id = 4
+
+[node name="Commands" type="GridContainer" parent="HUDLayer/TaskPanel/Margin/Layout/Strategic"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/h_separation = 5
+theme_override_constants/v_separation = 5
+columns = 2
+
+[node name="Develop" type="Button" parent="HUDLayer/TaskPanel/Margin/Layout/Strategic/Commands"]
+custom_minimum_size = Vector2(0, 26)
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_styles/normal = SubResource("StyleBox_strategic")
 theme_override_styles/hover = SubResource("StyleBox_strategic_hover")
 theme_override_styles/pressed = SubResource("StyleBox_strategic_hover")
 text = "Develop"
 
-[node name="Defend" type="Button" parent="HUDLayer/TaskPanel/Margin/Layout/Strategic"]
-custom_minimum_size = Vector2(0, 30)
+[node name="Defend" type="Button" parent="HUDLayer/TaskPanel/Margin/Layout/Strategic/Commands"]
+custom_minimum_size = Vector2(0, 26)
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_styles/normal = SubResource("StyleBox_strategic")
 theme_override_styles/hover = SubResource("StyleBox_strategic_hover")
 theme_override_styles/pressed = SubResource("StyleBox_strategic_hover")
 text = "Defend"
 
-[node name="Scout" type="Button" parent="HUDLayer/TaskPanel/Margin/Layout/Strategic"]
-custom_minimum_size = Vector2(0, 30)
+[node name="Scout" type="Button" parent="HUDLayer/TaskPanel/Margin/Layout/Strategic/Commands"]
+custom_minimum_size = Vector2(0, 26)
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_styles/normal = SubResource("StyleBox_strategic")
 theme_override_styles/hover = SubResource("StyleBox_strategic_hover")
 theme_override_styles/pressed = SubResource("StyleBox_strategic_hover")
 text = "Scout"
 
-[node name="Attack" type="Button" parent="HUDLayer/TaskPanel/Margin/Layout/Strategic"]
-custom_minimum_size = Vector2(0, 30)
+[node name="Attack" type="Button" parent="HUDLayer/TaskPanel/Margin/Layout/Strategic/Commands"]
+custom_minimum_size = Vector2(0, 26)
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_styles/normal = SubResource("StyleBox_attack")
 theme_override_styles/hover = SubResource("StyleBox_attack_hover")
 theme_override_styles/pressed = SubResource("StyleBox_attack_hover")

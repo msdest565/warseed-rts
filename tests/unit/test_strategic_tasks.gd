@@ -8,6 +8,7 @@ func run() -> Array[String]:
 	_test_development_recovers_after_resource_block(failures)
 	_test_defend_area_respects_leash(failures)
 	_test_attack_target_advances_and_completes(failures)
+	_test_attack_target_reacquires_after_visibility_loss(failures)
 	_test_parallel_domains_and_dynamic_reinforcements(failures)
 	_test_produced_assault_reinforces_delegated_defense(failures)
 	_test_task_controls_use_command_pipeline(failures)
@@ -119,6 +120,30 @@ func _test_attack_target_advances_and_completes(failures: Array[String]) -> void
 	_expect(saw_route_or_engagement, "attack task should expose its route or engagement phase", failures)
 	_expect(not enemy.enabled and task.lifecycle == TaskState.Lifecycle.COMPLETED, "attack task should complete after destroying its target", failures)
 	_expect(world.mission_state.attacked_target, "completed attack should update mission progress", failures)
+
+
+func _test_attack_target_reacquires_after_visibility_loss(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	var formation := world.formations[SimulationWorld.DEFAULT_FORMATION_ID] as FormationState
+	var enemy := world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	enemy.position = formation.anchor_position + Vector2(192.0, 0.0)
+	world._update_faction_knowledge()
+	var order := StrategicOrderCommand.new(
+		world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, world.current_tick,
+		StrategicOrderCommand.OrderKind.ATTACK_TARGET, formation.formation_id, enemy.entity_id, enemy.position
+	)
+	_expect(world.submit_command(order).is_accepted(), "reacquisition fixture should accept an initially visible strategic attack", failures)
+	world.advance_tick()
+	enemy.position = world.logic_grid.cell_to_world(Vector2i(70, 50))
+	world._update_faction_knowledge()
+	world.advance_tick()
+	var task := world.tasks[1] as TaskState
+	_expect(task.lifecycle == TaskState.Lifecycle.EXECUTING and task.phase == TaskState.Phase.ADVANCING, "an attack task should advance toward the last confirmed position instead of stalling when sight is lost", failures)
+	enemy.position = formation.anchor_position + Vector2(64.0, 0.0)
+	world._update_faction_knowledge()
+	world.advance_tick()
+	world.advance_tick()
+	_expect(task.lifecycle == TaskState.Lifecycle.EXECUTING and formation.order_target_entity_id == enemy.entity_id, "a strategic attack should reacquire and resume engagement when the target becomes visible again", failures)
 
 
 func _test_parallel_domains_and_dynamic_reinforcements(failures: Array[String]) -> void:
