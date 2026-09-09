@@ -18,6 +18,7 @@ var formation_id: int
 var participant_entity_ids: Array[int]
 var original_participant_entity_ids: Array[int]
 var route: PackedVector2Array
+var planned_route: PackedVector2Array
 var accepted_tick: int
 var last_transition_tick: int
 var progress_current: int
@@ -25,6 +26,13 @@ var progress_target: int
 var last_detail: String
 var requires_proactive_authorization: bool
 var discovered_contact_count: int
+var unit_card_id: StringName
+var persistent_order: bool
+var activation_tick: int
+var final_target_position: Vector2
+var has_staged_target: bool
+var requires_observed_contact: bool
+var reinforcement_committed: bool
 
 func _init(task: TaskState) -> void:
 	task_id = task.task_id
@@ -44,6 +52,7 @@ func _init(task: TaskState) -> void:
 	participant_entity_ids = task.participant_entity_ids.duplicate()
 	original_participant_entity_ids = task.original_participant_entity_ids.duplicate()
 	route = task.route.duplicate()
+	planned_route = task.planned_route.duplicate()
 	accepted_tick = task.accepted_tick
 	last_transition_tick = task.last_transition_tick
 	progress_current = task.progress_current
@@ -51,6 +60,13 @@ func _init(task: TaskState) -> void:
 	last_detail = task.last_detail
 	requires_proactive_authorization = task.requires_proactive_authorization
 	discovered_contact_count = task.discovered_contact_count
+	unit_card_id = task.unit_card_id
+	persistent_order = task.persistent_order
+	activation_tick = task.activation_tick
+	final_target_position = task.final_target_position
+	has_staged_target = task.has_staged_target
+	requires_observed_contact = task.requires_observed_contact
+	reinforcement_committed = task.reinforcement_committed
 
 func get_participant_count() -> int:
 	return participant_entity_ids.size()

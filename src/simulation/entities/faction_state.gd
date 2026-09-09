@@ -6,6 +6,14 @@ var controller_id: int
 var ore: int
 var defeated: bool = false
 var victorious: bool = false
+var supply: int = 0
+var supply_capacity: int = 0
+var population: int = 0
+var population_capacity: int = 0
+var air_recon_cooldown_until_tick: int = 0
+var fortify_cooldown_until_tick: int = 0
+var reinforcement_cooldown_until_tick: int = 0
+var support_cooldown_until_by_kind: Dictionary = {}
 
 
 func _init(new_faction_id: int, new_controller_id: int, initial_ore: int) -> void:

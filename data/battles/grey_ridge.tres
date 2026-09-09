@@ -1,0 +1,272 @@
+[gd_resource type="Resource" script_class="BattleDefinition" load_steps=30 format=3]
+
+[ext_resource type="Script" path="res://src/data/battle_definition.gd" id="1_battle"]
+[ext_resource type="Resource" path="res://data/objectives/standard_card_battle_objectives.tres" id="objectives"]
+[ext_resource type="Script" path="res://src/data/battle_region_definition.gd" id="2_region"]
+[ext_resource type="Script" path="res://src/data/battle_intel_definition.gd" id="3_intel"]
+[ext_resource type="Script" path="res://src/data/battle_formation_definition.gd" id="4_formation"]
+[ext_resource type="Script" path="res://src/data/battle_support_definition.gd" id="5_support"]
+[ext_resource type="Script" path="res://src/data/battle_enemy_plan_definition.gd" id="6_plan"]
+[ext_resource type="Script" path="res://src/data/battle_reaction_rule_definition.gd" id="7_reaction"]
+[ext_resource type="Resource" path="res://data/army/bai_jiuyang.tres" id="8_bai"]
+[ext_resource type="Resource" path="res://data/army/di_tian.tres" id="9_di"]
+[ext_resource type="Resource" path="res://data/army/lin_mo.tres" id="10_lin"]
+[ext_resource type="Resource" path="res://data/army/falcon_recon_group.tres" id="11_falcon"]
+[ext_resource type="Resource" path="res://data/army/ironwall_assault_group.tres" id="12_ironwall"]
+[ext_resource type="Resource" path="res://data/army/armored_spearhead.tres" id="13_armor"]
+[ext_resource type="Resource" path="res://data/army/thunder_fire_group.tres" id="14_thunder"]
+[ext_resource type="Resource" path="res://data/army/covert_search.tres" id="15_covert"]
+[ext_resource type="Resource" path="res://data/army/alternating_cover.tres" id="16_cover"]
+[ext_resource type="Resource" path="res://data/army/fire_preparation.tres" id="17_fire"]
+[ext_resource type="Resource" path="res://data/army/concentrated_breakthrough.tres" id="18_breakthrough"]
+
+[sub_resource type="Resource" id="RegionWest"]
+script = ExtResource("2_region")
+region_id = &"west_mine"
+display_name_key = &"GREY_RIDGE_WEST"
+terrain_key = &"TERRAIN_OPEN"
+position = Vector2(1440, 2080)
+radius = 220.0
+supply_per_settlement = 2
+adjacent_region_ids = Array[StringName]([&"central_relay"])
+support_cooldown_ticks = 300
+
+[sub_resource type="Resource" id="RegionCentral"]
+script = ExtResource("2_region")
+region_id = &"central_relay"
+display_name_key = &"GREY_RIDGE_CENTRAL"
+terrain_key = &"TERRAIN_RUINS"
+position = Vector2(3072, 2080)
+radius = 220.0
+supply_per_settlement = 1
+adjacent_region_ids = Array[StringName]([&"west_mine", &"east_supply"])
+support_cooldown_ticks = 150
+
+[sub_resource type="Resource" id="RegionEast"]
+script = ExtResource("2_region")
+region_id = &"east_supply"
+display_name_key = &"GREY_RIDGE_EAST"
+terrain_key = &"TERRAIN_FOREST"
+position = Vector2(4704, 2080)
+radius = 220.0
+supply_per_settlement = 2
+adjacent_region_ids = Array[StringName]([&"central_relay"])
+support_cooldown_ticks = 300
+
+[sub_resource type="Resource" id="IntelCentral"]
+script = ExtResource("3_intel")
+source_key = &"INTEL_SOURCE_OPTICAL"
+target_category_key = &"INTEL_ASSAULT"
+estimated_min = 12
+estimated_max = 12
+region_id = &"central_relay"
+direction_key = &"INTEL_DIRECTION_SOUTH"
+confidence_key = &"INTEL_CONFIDENCE_HIGH"
+eta_min_ticks = 230
+eta_max_ticks = 270
+
+[sub_resource type="Resource" id="IntelWest"]
+script = ExtResource("3_intel")
+source_key = &"INTEL_SOURCE_ACOUSTIC"
+target_category_key = &"INTEL_TRACKED_VEHICLE"
+estimated_min = 1
+estimated_max = 3
+region_id = &"west_mine"
+direction_key = &"INTEL_DIRECTION_EAST"
+confidence_key = &"INTEL_CONFIDENCE_MEDIUM"
+eta_min_ticks = 320
+eta_max_ticks = 380
+
+[sub_resource type="Resource" id="IntelEast"]
+script = ExtResource("3_intel")
+source_key = &"INTEL_SOURCE_NONE"
+target_category_key = &"INTEL_UNKNOWN"
+region_id = &"east_supply"
+direction_key = &"INTEL_DIRECTION_UNKNOWN"
+confidence_key = &"INTEL_CONFIDENCE_NONE"
+has_estimate = false
+
+[sub_resource type="Resource" id="FormationAssault"]
+script = ExtResource("4_formation")
+formation_id = 3
+role_id = &"assault"
+faction_id = 2
+unit_definition_id = &"assault_vehicle"
+strength = 12
+spawn_position = Vector2(3344, 1040)
+first_entity_id = 1001
+facing = Vector2(0, 1)
+agent_id = 301
+task_id = 9001
+tactical_role = 2
+
+[sub_resource type="Resource" id="FormationProbe"]
+script = ExtResource("4_formation")
+formation_id = 4
+role_id = &"probe"
+faction_id = 2
+unit_definition_id = &"scout_vehicle"
+strength = 2
+spawn_position = Vector2(2512, 912)
+first_entity_id = 1013
+facing = Vector2(0, 1)
+agent_id = 301
+task_id = 9001
+tactical_role = 1
+
+[sub_resource type="Resource" id="SupportRecon"]
+script = ExtResource("5_support")
+support_id = &"air_recon"
+support_kind = 0
+supply_cost = 2
+duration_ticks = 200
+cooldown_ticks = 300
+
+[sub_resource type="Resource" id="SupportFortify"]
+script = ExtResource("5_support")
+support_id = &"emergency_fortify"
+support_kind = 1
+supply_cost = 2
+duration_ticks = 200
+cooldown_ticks = 300
+armor_bonus = 4.0
+
+[sub_resource type="Resource" id="SupportReinforcement"]
+script = ExtResource("5_support")
+support_id = &"field_reinforcement"
+support_kind = 2
+supply_cost = 2
+duration_ticks = 0
+cooldown_ticks = 300
+strength = 2
+
+[sub_resource type="Resource" id="PlanCentral"]
+script = ExtResource("6_plan")
+plan_id = &"central_assault"
+action_key = &"CENTRAL_ASSAULT_WITH_WESTERN_PROBE"
+assault_target_region_id = &"central_relay"
+assault_target_position = Vector2(3344, 2064)
+probe_target_region_id = &"west_mine"
+probe_target_position = Vector2(1440, 2080)
+commitment_ticks = 180
+
+[sub_resource type="Resource" id="PlanWest"]
+script = ExtResource("6_plan")
+plan_id = &"western_hook"
+action_key = &"WESTERN_HOOK_WITH_CENTRAL_SCREEN"
+assault_target_region_id = &"west_mine"
+assault_target_position = Vector2(1440, 2080)
+assault_route_region_ids = Array[StringName]([&"central_relay"])
+probe_target_region_id = &"central_relay"
+probe_target_position = Vector2(3072, 2080)
+commitment_ticks = 180
+
+[sub_resource type="Resource" id="PlanFeint"]
+script = ExtResource("6_plan")
+plan_id = &"western_feint"
+action_key = &"WESTERN_FEINT_STAGE_ONE"
+assault_target_region_id = &"central_relay"
+assault_target_position = Vector2(3344, 2064)
+probe_target_region_id = &"west_mine"
+probe_target_position = Vector2(1440, 2080)
+commitment_ticks = 300
+followup_tick = 240
+followup_formation_role_id = &"probe"
+followup_target_region_id = &"central_relay"
+followup_target_position = Vector2(3072, 2080)
+
+[sub_resource type="Resource" id="ReactionHq"]
+script = ExtResource("7_reaction")
+rule_id = &"hq_defense"
+priority = 100
+trigger_kind = 0
+action_kind = 0
+delay_ticks = 10
+commitment_ticks = 100
+
+[sub_resource type="Resource" id="ReactionWithdraw"]
+script = ExtResource("7_reaction")
+rule_id = &"depleted_withdrawal"
+priority = 90
+trigger_kind = 3
+action_kind = 3
+delay_ticks = 5
+commitment_ticks = 120
+
+[sub_resource type="Resource" id="ReactionFlank"]
+script = ExtResource("7_reaction")
+rule_id = &"flank_intercept"
+priority = 70
+trigger_kind = 2
+action_kind = 2
+delay_ticks = 40
+commitment_ticks = 120
+
+[sub_resource type="Resource" id="ReactionCentral"]
+script = ExtResource("7_reaction")
+rule_id = &"central_counterattack"
+priority = 60
+trigger_kind = 1
+action_kind = 1
+delay_ticks = 25
+commitment_ticks = 100
+
+[resource]
+script = ExtResource("1_battle")
+scenario_id = &"grey_ridge"
+display_name_key = &"GREY_RIDGE_TITLE"
+operation_number = 1
+scene_path = "res://scenes/game/grey_ridge.tscn"
+selector_briefing_key = &"BATTLE_SELECT_GREY_RIDGE_BRIEFING"
+selector_mechanics_key = &"BATTLE_SELECT_GREY_RIDGE_MECHANICS"
+available_in_selector = true
+battlefield_bounds = Rect2(0, 0, 6144, 4096)
+time_limit_ticks = 4800
+base_supply_interval_ticks = 200
+region_settlement_interval_ticks = 300
+starting_supply = 5
+supply_capacity = 10
+population_capacity = 40
+deployment_radius = 384.0
+player_headquarters_position = Vector2(3088, 3536)
+enemy_headquarters_position = Vector2(3088, 272)
+friendly_formation_ids = Array[int]([1, 2])
+friendly_spawn_positions = Array[Vector2]([Vector2(2832, 2512), Vector2(3344, 2960)])
+next_dynamic_unit_id = 1100
+next_dynamic_formation_id = 5
+enemy_offensive_followup_tick = 1800
+enemy_agent_id = 301
+enemy_task_id = 9001
+commander_definitions = Array[ExtResource("8_bai")]([ExtResource("8_bai"), ExtResource("9_di"), ExtResource("10_lin")])
+unit_card_definitions = Array[ExtResource("11_falcon")]([ExtResource("11_falcon"), ExtResource("12_ironwall"), ExtResource("13_armor"), ExtResource("14_thunder")])
+doctrine_definitions = Array[ExtResource("15_covert")]([ExtResource("15_covert"), ExtResource("16_cover"), ExtResource("17_fire"), ExtResource("18_breakthrough")])
+starting_card_count = 2
+commander_agent_ids = {
+&"bai_jiuyang": 201,
+&"di_tian": 202,
+&"lin_mo": 203
+}
+default_commander_by_unit_card = {
+&"armored_spearhead": &"di_tian",
+&"falcon_recon_group": &"bai_jiuyang",
+&"ironwall_assault_group": &"di_tian",
+&"thunder_fire_group": &"lin_mo"
+}
+default_doctrine_by_commander = {
+&"bai_jiuyang": &"covert_search",
+&"di_tian": &"alternating_cover",
+&"lin_mo": &"fire_preparation"
+}
+default_posture_by_commander = {
+&"bai_jiuyang": 0,
+&"di_tian": 1,
+&"lin_mo": 1
+}
+default_starting_unit_card_ids = Array[StringName]([&"falcon_recon_group", &"ironwall_assault_group"])
+strategic_regions = Array[SubResource("RegionWest")]([SubResource("RegionWest"), SubResource("RegionCentral"), SubResource("RegionEast")])
+initial_intel = Array[SubResource("IntelCentral")]([SubResource("IntelCentral"), SubResource("IntelWest"), SubResource("IntelEast")])
+enemy_formations = Array[SubResource("FormationAssault")]([SubResource("FormationAssault"), SubResource("FormationProbe")])
+support_abilities = Array[SubResource("SupportRecon")]([SubResource("SupportRecon"), SubResource("SupportFortify"), SubResource("SupportReinforcement")])
+enemy_plans = Array[SubResource("PlanCentral")]([SubResource("PlanCentral"), SubResource("PlanWest"), SubResource("PlanFeint")])
+enemy_reaction_rules = Array[SubResource("ReactionHq")]([SubResource("ReactionHq"), SubResource("ReactionWithdraw"), SubResource("ReactionFlank"), SubResource("ReactionCentral")])
+objective_set = ExtResource("objectives")

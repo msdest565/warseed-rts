@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="BattleContentCatalog" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://src/data/battle_content_catalog.gd" id="1_catalog"]
+[ext_resource type="Resource" path="res://data/battles/grey_ridge.tres" id="2_grey"]
+[ext_resource type="Resource" path="res://data/battles/loader_test.tres" id="3_test"]
+[ext_resource type="Resource" path="res://data/battles/broken_bridge.tres" id="4_bridge"]
+[ext_resource type="Resource" path="res://data/battles/fog_forest.tres" id="5_forest"]
+[ext_resource type="Resource" path="res://data/battles/black_well.tres" id="6_black_well"]
+
+[resource]
+script = ExtResource("1_catalog")
+battles = Array[ExtResource("2_grey")]([ExtResource("2_grey"), ExtResource("3_test"), ExtResource("4_bridge"), ExtResource("5_forest"), ExtResource("6_black_well")])

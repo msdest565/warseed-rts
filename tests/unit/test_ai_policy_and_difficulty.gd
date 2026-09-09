@@ -10,6 +10,7 @@ func run() -> Array[String]:
 	_test_autonomous_base_threat_triggers_emergency_defense(failures)
 	_test_long_autonomous_run_reclaims_temporary_formations(failures)
 	_test_autonomous_scout_evades_contact(failures)
+	_test_persistent_scout_rotates_observation_frontier(failures)
 	_test_headquarters_balances_economy_and_combat(failures)
 	_test_headquarters_preserves_emergency_reserve(failures)
 	_test_full_takeover_arbitrates_low_resources(failures)
@@ -194,6 +195,57 @@ func _test_autonomous_scout_evades_contact(failures: Array[String]) -> void:
 	_expect(scout_task.phase == TaskState.Phase.EVADING, "an autonomous scout should enter evasion after detecting a nearby hostile", failures)
 	_expect(scout.attack_target_entity_id == 0, "reconnaissance evasion must not turn into an attack order", failures)
 	_expect(scout.position.distance_to(enemy.position) > initial_distance, "evasion should move the scout farther away from the contact", failures)
+	var contact_reported := false
+	for event in world.events:
+		contact_reported = contact_reported or event.kind == SimulationEvent.Kind.SCOUT_CONTACT_REPORTED and event.entity_id == scout_task.task_id
+	_expect(contact_reported, "a reconnaissance formation should emit an explicit contact report before or while withdrawing", failures)
+	var report_count_before_reacquisition := 0
+	for event in world.events:
+		if event.kind == SimulationEvent.Kind.SCOUT_CONTACT_REPORTED and event.entity_id == scout_task.task_id:
+			report_count_before_reacquisition += 1
+	enemy.position = world.logic_grid.cell_to_world(Vector2i(78, 54))
+	world._update_faction_knowledge()
+	world.strategic_task_system._update_scout_intelligence(scout_task, world)
+	enemy.position = scout.position + Vector2(96.0, 0.0)
+	world._update_faction_knowledge()
+	world.strategic_task_system._update_scout_intelligence(scout_task, world)
+	var report_count_after_reacquisition := 0
+	for event in world.events:
+		if event.kind == SimulationEvent.Kind.SCOUT_CONTACT_REPORTED and event.entity_id == scout_task.task_id:
+			report_count_after_reacquisition += 1
+	_expect(report_count_after_reacquisition == report_count_before_reacquisition + 1, "a scout should report the same armed contact again after losing and reacquiring it, without spamming while it remains visible", failures)
+
+
+func _test_persistent_scout_rotates_observation_frontier(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	world.set_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID, AgentPolicy.Authorization.AUTONOMOUS)
+	for _tick in range(3):
+		world.advance_tick()
+	var scout_task: TaskState
+	for task_variant in world.tasks.values():
+		var candidate := task_variant as TaskState
+		if candidate.kind == TaskState.Kind.SCOUT_AREA and candidate.lifecycle == TaskState.Lifecycle.EXECUTING:
+			scout_task = candidate
+			break
+	_expect(scout_task != null, "persistent reconnaissance fixture should create a scout task", failures)
+	if scout_task == null:
+		return
+	for unit_variant in world.units.values():
+		var unit := unit_variant as UnitState
+		if unit.faction_id != scout_task.faction_id:
+			unit.enabled = false
+	var scout := world.units[scout_task.participant_entity_ids[0]] as UnitState
+	var formation := world.formations[scout_task.formation_id] as FormationState
+	formation.anchor_position = scout.position
+	formation.is_moving = false
+	scout_task.target_position = scout.position
+	scout_task.progress_current = StrategicTaskSystem.SCOUT_OBSERVE_TICKS - 1
+	scout_task.persistent_order = true
+	scout_task.set_phase(TaskState.Phase.SCOUTING, world.current_tick)
+	world._update_faction_knowledge()
+	var previous_observation := scout_task.target_position
+	world.strategic_task_system.advance(world)
+	_expect(scout_task.phase == TaskState.Phase.PREPARING and not scout_task.target_position.is_equal_approx(previous_observation), "persistent scouts should disperse toward a new reachable frontier after each observation interval", failures)
 
 
 func _test_headquarters_balances_economy_and_combat(failures: Array[String]) -> void:

@@ -7,6 +7,7 @@ signal headquarters_settings_changed
 @onready var mission_label: Label = $Margin/Layout/Intel/Mission
 @onready var selection_title_label: Label = $Margin/Layout/Intel/SelectionTitle
 @onready var selection_label: Label = $Margin/Layout/Intel/Selection
+@onready var instruction_label: Label = $Margin/Layout/Intel/Instruction
 @onready var task_label: Label = $Margin/Layout/Intel/TaskStatus
 @onready var strategic_title_label: Label = $Margin/Layout/Strategic/Title
 @onready var headquarters_directive_label: Label = $Margin/Layout/Strategic/DirectiveLabel
@@ -71,14 +72,12 @@ func _ready() -> void:
 
 
 func refresh_locale() -> void:
-	for control in [title_label, mission_label, selection_title_label, selection_label, task_label, strategic_title_label, headquarters_directive_label, headquarters_directive_selector, operations_title_label, production_title_label, production_queue_label, develop_button, defend_button, scout_button, attack_button, build_factory_button, build_support_button, repair_button, pause_button, resume_button, cancel_button, harvest_button, cancel_production_button, rally_button]:
+	for control in [title_label, mission_label, selection_title_label, selection_label, instruction_label, task_label, strategic_title_label, headquarters_directive_label, headquarters_directive_selector, operations_title_label, production_title_label, production_queue_label, develop_button, defend_button, scout_button, attack_button, build_factory_button, build_support_button, repair_button, pause_button, resume_button, cancel_button, harvest_button, cancel_production_button, rally_button]:
 		(control as Control).auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	for button in production_buttons:
 		button.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	title_label.text = GameText.t(&"HUD_TITLE")
 	selection_title_label.text = GameText.t(&"HUD_SELECTION")
-	strategic_title_label.text = GameText.t(&"HUD_HEADQUARTERS")
-	headquarters_directive_label.text = GameText.t(&"HQ_DIRECTIVE_LABEL")
 	_populate_headquarters_directives()
 	operations_title_label.text = GameText.t(&"HUD_OPERATIONS")
 	production_title_label.text = GameText.t(&"HUD_PRODUCTION")
@@ -86,6 +85,7 @@ func refresh_locale() -> void:
 	defend_button.text = GameText.t(&"ORDER_DEFEND")
 	scout_button.text = GameText.t(&"ORDER_SCOUT")
 	attack_button.text = GameText.t(&"ORDER_ATTACK")
+	_refresh_strategy_locale()
 	build_factory_button.text = _building_button_text(&"automated_factory", &"BUILD_FACTORY")
 	build_support_button.text = _building_button_text(&"forward_support_station", &"BUILD_SUPPORT")
 	repair_button.text = GameText.t(&"REPAIR_BUILDING")
@@ -99,6 +99,27 @@ func refresh_locale() -> void:
 		production_buttons[index].text = _production_button_text(PRODUCTION_DEFINITIONS[index])
 	if current_task_id == 0:
 		last_status = GameText.t(&"TASK_NONE")
+
+
+func _refresh_strategy_locale() -> void:
+	if strategic_title_label == null or headquarters_directive_label == null or headquarters_directive_selector == null:
+		return
+	var card_battle := simulation_host != null and SimulationWorld.is_card_battle_kind(simulation_host.scenario_kind)
+	strategic_title_label.text = GameText.t(&"HUD_CARD_COMMANDS" if card_battle else &"HUD_HEADQUARTERS")
+	strategic_title_label.tooltip_text = GameText.t(&"CARD_COMMANDS_TOOLTIP" if card_battle else &"HQ_DIRECTIVE_TOOLTIP")
+	headquarters_directive_label.text = GameText.t(&"CARD_COMMANDS_GUIDANCE" if card_battle else &"HQ_DIRECTIVE_LABEL")
+	headquarters_directive_label.tooltip_text = strategic_title_label.tooltip_text
+	headquarters_directive_label.custom_minimum_size = Vector2.ZERO
+	headquarters_directive_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	headquarters_directive_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	headquarters_directive_label.visible = true
+	headquarters_directive_selector.visible = not card_battle
+	if defend_button != null:
+		defend_button.tooltip_text = GameText.t(&"ORDER_DEFEND_TOOLTIP")
+	if scout_button != null:
+		scout_button.tooltip_text = GameText.t(&"ORDER_SCOUT_TOOLTIP")
+	if attack_button != null:
+		attack_button.tooltip_text = GameText.t(&"ORDER_ATTACK_TOOLTIP")
 
 
 func update_snapshot(snapshot: WorldSnapshot) -> void:
@@ -178,8 +199,10 @@ func _update_mission(mission: MissionSnapshot) -> void:
 
 
 func _update_task(task: TaskSnapshot) -> void:
+	var instruction := input_controller.get_operation_guidance() if input_controller != null else GameText.t(&"STATUS_READY")
+	instruction_label.text = GameText.t(&"HUD_CURRENT_OPERATION") % instruction
 	if task == null:
-		task_label.text = input_controller.last_command_status if input_controller != null and not input_controller.last_command_status.is_empty() else last_status
+		task_label.text = last_status
 		return
 	task_label.text = GameText.t(&"TASK_COMPACT") % [
 		task.task_id,

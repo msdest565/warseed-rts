@@ -9,6 +9,23 @@ enum ControlState {
 	DISABLED,
 }
 
+enum TacticalRole {
+	NONE,
+	SCOUT,
+	ASSAULT,
+	ARMOR,
+	FIREPOWER,
+}
+
+enum TerrainKind {
+	NONE,
+	OPEN,
+	RUINS,
+	FOREST,
+	BRIDGE,
+	HIGH_GROUND,
+}
+
 enum HarvestPhase {
 	IDLE,
 	TO_FIELD,
@@ -86,6 +103,15 @@ var last_command_tick: int = -1
 var rejoin_formation_id: int = 0
 var rejoin_slot_id: int = -1
 var rejoin_pending: bool = false
+var unit_card_id: StringName
+var tactical_role: TacticalRole = TacticalRole.NONE
+var terrain_kind: TerrainKind = TerrainKind.NONE
+var terrain_effect_key: StringName = &"TERRAIN_EFFECT_NONE"
+var base_move_speed: float = 0.0
+var base_armor: float = 0.0
+var base_attack_damage: float = 0.0
+var base_attack_range: float = 0.0
+var base_sight_range: float = 0.0
 
 
 func _init(

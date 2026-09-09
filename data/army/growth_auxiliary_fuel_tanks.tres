@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="GrowthDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://src/data/growth_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+definition_id = &"auxiliary_fuel_tanks"
+kind = 1
+display_name_key = &"GROWTH_AUXILIARY_FUEL_TANKS"
+benefit_key = &"GROWTH_AUXILIARY_FUEL_TANKS_BENEFIT"
+tradeoff_key = &"GROWTH_AUXILIARY_FUEL_TANKS_TRADEOFF"
+replacement_cost = 4
+refit_days = 1
+armor_bonus = -1.0
+move_speed_multiplier = 1.15

@@ -1,0 +1,57 @@
+[gd_resource type="Resource" script_class="BattleDefinition" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://src/data/battle_definition.gd" id="1_battle"]
+[ext_resource type="Script" path="res://src/data/battle_region_definition.gd" id="2_region"]
+[ext_resource type="Resource" path="res://data/army/bai_jiuyang.tres" id="3_commander"]
+[ext_resource type="Resource" path="res://data/army/falcon_recon_group.tres" id="4_card"]
+[ext_resource type="Resource" path="res://data/army/covert_search.tres" id="5_doctrine"]
+[ext_resource type="Resource" path="res://data/army/alternating_cover.tres" id="6_cover"]
+
+[sub_resource type="Resource" id="RegionTest"]
+script = ExtResource("2_region")
+region_id = &"test_region"
+display_name_key = &"GREY_RIDGE_CENTRAL"
+terrain_key = &"TERRAIN_OPEN"
+position = Vector2(512, 512)
+radius = 128.0
+support_cooldown_ticks = 300
+
+[resource]
+script = ExtResource("1_battle")
+scenario_id = &"loader_test"
+display_name_key = &"GREY_RIDGE_TITLE"
+battlefield_bounds = Rect2(0, 0, 1024, 1024)
+time_limit_ticks = 600
+base_supply_interval_ticks = 100
+region_settlement_interval_ticks = 100
+starting_supply = 2
+supply_capacity = 5
+population_capacity = 10
+deployment_radius = 128.0
+player_headquarters_position = Vector2(512, 896)
+enemy_headquarters_position = Vector2(512, 128)
+friendly_formation_ids = Array[int]([1])
+friendly_spawn_positions = Array[Vector2]([Vector2(512, 768)])
+next_dynamic_unit_id = 100
+next_dynamic_formation_id = 2
+enemy_offensive_followup_tick = 300
+enemy_agent_id = 301
+enemy_task_id = 9001
+commander_definitions = Array[ExtResource("3_commander")]([ExtResource("3_commander")])
+unit_card_definitions = Array[ExtResource("4_card")]([ExtResource("4_card")])
+doctrine_definitions = Array[ExtResource("5_doctrine")]([ExtResource("5_doctrine"), ExtResource("6_cover")])
+starting_card_count = 1
+commander_agent_ids = {
+&"bai_jiuyang": 201
+}
+default_commander_by_unit_card = {
+&"falcon_recon_group": &"bai_jiuyang"
+}
+default_doctrine_by_commander = {
+&"bai_jiuyang": &"covert_search"
+}
+default_posture_by_commander = {
+&"bai_jiuyang": 0
+}
+default_starting_unit_card_ids = Array[StringName]([&"falcon_recon_group"])
+strategic_regions = Array[SubResource("RegionTest")]([SubResource("RegionTest")])

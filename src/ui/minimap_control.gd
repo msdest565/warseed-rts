@@ -1,7 +1,7 @@
 class_name MinimapControl
 extends Control
 
-const WORLD_RECT := Rect2(Vector2.ZERO, Vector2(3072.0, 2048.0))
+const WORLD_RECT := SimulationWorld.BATTLEFIELD_BOUNDS
 
 var snapshot: WorldSnapshot
 var camera_controller: CameraController
@@ -10,6 +10,12 @@ var logic_grid := LogicGrid.create_test_map()
 var dragging_camera: bool = false
 var _contact_pings: Array[Dictionary] = []
 var _last_camera_rect := Rect2()
+var world_rect: Rect2 = WORLD_RECT
+var situation: BattlefieldSituationSnapshot
+var show_frontlines := true
+var show_tasks := true
+var show_threats := true
+var show_intelligence := true
 
 const CONTACT_PING_DURATION := 3.0
 
@@ -54,8 +60,26 @@ func set_state(
 	queue_redraw()
 
 
+func set_world_rect(value: Rect2) -> void:
+	world_rect = value if value.size.x > 0.0 and value.size.y > 0.0 else WORLD_RECT
+	queue_redraw()
+
+
+func set_situation(new_situation: BattlefieldSituationSnapshot) -> void:
+	situation = new_situation
+	queue_redraw()
+
+
+func set_layer_visibility(frontlines: bool, tasks: bool, threats: bool, intelligence: bool) -> void:
+	show_frontlines = frontlines
+	show_tasks = tasks
+	show_threats = threats
+	show_intelligence = intelligence
+	queue_redraw()
+
+
 func get_content_rect() -> Rect2:
-	var world_aspect := WORLD_RECT.size.x / WORLD_RECT.size.y
+	var world_aspect := world_rect.size.x / world_rect.size.y
 	var control_aspect := size.x / size.y if size.y > 0.0 else world_aspect
 	var content_size := size
 	if control_aspect > world_aspect:
@@ -67,7 +91,7 @@ func get_content_rect() -> Rect2:
 
 func world_to_minimap(world_position: Vector2) -> Vector2:
 	var content := get_content_rect()
-	var normalized := (world_position - WORLD_RECT.position) / WORLD_RECT.size
+	var normalized := (world_position - world_rect.position) / world_rect.size
 	return content.position + normalized * content.size
 
 
@@ -75,7 +99,7 @@ func minimap_to_world(local_position: Vector2) -> Vector2:
 	var content := get_content_rect()
 	var clamped := local_position.clamp(content.position, content.end)
 	var normalized := (clamped - content.position) / content.size
-	return WORLD_RECT.position + normalized * WORLD_RECT.size
+	return world_rect.position + normalized * world_rect.size
 
 
 func navigate_camera(local_position: Vector2) -> void:
@@ -107,6 +131,22 @@ func _draw() -> void:
 		var bottom_right := world_to_minimap(cell_world_rect.end)
 		draw_rect(Rect2(top_left, bottom_right - top_left), Color("53676b"), true)
 	if snapshot != null:
+		for region in snapshot.strategic_regions:
+			if not region.capturable:
+				continue
+			var region_color := Color("7f898e")
+			if region.contested:
+				region_color = Color("f3c44e")
+			elif region.controller_faction_id == SimulationWorld.LOCAL_PLAYER_ID:
+				region_color = Color("3b8eea")
+			elif region.controller_faction_id != 0:
+				region_color = Color("d95c5c")
+			var point := world_to_minimap(region.position)
+			draw_circle(point, 6.0, Color(region_color, 0.45), true)
+			draw_circle(point, 6.0, region_color, false, 2.0)
+			if region.capture_faction_id != 0 and region.capture_faction_id != region.controller_faction_id and region.capture_progress > 0.0:
+				var capture_color := Color("3b8eea") if region.capture_faction_id == SimulationWorld.LOCAL_PLAYER_ID else Color("d95757")
+				draw_arc(point, 8.5, -PI * 0.5, -PI * 0.5 + TAU * region.capture_progress, 24, capture_color, 2.5)
 		for unit in snapshot.units:
 			if not unit.enabled:
 				continue
@@ -117,14 +157,46 @@ func _draw() -> void:
 				continue
 			var color := Color.WHITE if selected_entity_ids.has(unit.entity_id) else (Color("42b7ad") if is_local else Color("d95c5c"))
 			draw_circle(point, 3.5 if selected_entity_ids.has(unit.entity_id) else 2.5, color)
+	_draw_situation()
 	for ping in _contact_pings:
 		var progress := 1.0 - float(ping["remaining"]) / CONTACT_PING_DURATION
 		var radius := lerpf(4.0, 16.0, progress)
 		var alpha := 1.0 - progress
 		draw_arc(world_to_minimap(ping["position"]), radius, 0.0, TAU, 32, Color(1.0, 0.76, 0.2, alpha), 2.0)
 	if camera_controller != null:
-		var camera_rect := camera_controller.get_visible_world_rect().intersection(WORLD_RECT)
+		var camera_rect := camera_controller.get_visible_world_rect().intersection(world_rect)
 		var camera_start := world_to_minimap(camera_rect.position)
 		var camera_end := world_to_minimap(camera_rect.end)
 		draw_rect(Rect2(camera_start, camera_end - camera_start), Color(0.96, 0.84, 0.38, 0.95), false, 1.5)
 	draw_rect(content, Color("91a9ad"), false, 2.0)
+
+
+func _draw_situation() -> void:
+	if situation == null:
+		return
+	if show_intelligence:
+		for zone in situation.uncertainty_zones:
+			if int(zone["state"]) != FactionKnowledge.CellState.UNEXPLORED:
+				continue
+			var world_zone := zone["rect"] as Rect2
+			var top_left := world_to_minimap(world_zone.position)
+			var bottom_right := world_to_minimap(world_zone.end)
+			draw_rect(Rect2(top_left, bottom_right - top_left), Color(0.01, 0.018, 0.02, 0.16), true)
+	if show_tasks:
+		for axis in situation.task_axes:
+			var route := axis["route"] as PackedVector2Array
+			var points := PackedVector2Array()
+			for world_point in route:
+				points.append(world_to_minimap(world_point))
+			if points.size() >= 2:
+				draw_polyline(points, Color("52d1c8"), 1.5)
+	if show_frontlines:
+		for segment in situation.frontline_segments:
+			draw_line(world_to_minimap(segment["start"]), world_to_minimap(segment["end"]), Color("f1c75b"), 2.0)
+	if show_threats:
+		for threat in situation.threat_zones:
+			var point := world_to_minimap(threat["position"])
+			var radius := maxf(4.0, float(threat["radius"]) / world_rect.size.x * get_content_rect().size.x)
+			var color := Color("ef6758") if bool(threat["known_threat"]) else Color("9aa7a2")
+			draw_circle(point, radius, Color(color, 0.12))
+			draw_arc(point, radius, 0.0, TAU, 20, Color(color, 0.8), 1.5)

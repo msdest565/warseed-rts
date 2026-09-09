@@ -1,0 +1,275 @@
+[gd_resource type="Resource" script_class="BattleDefinition" load_steps=32 format=3]
+
+[ext_resource type="Script" path="res://src/data/battle_definition.gd" id="1_battle"]
+[ext_resource type="Resource" path="res://data/objectives/standard_card_battle_objectives.tres" id="objectives"]
+[ext_resource type="Script" path="res://src/data/battle_region_definition.gd" id="2_region"]
+[ext_resource type="Script" path="res://src/data/battle_intel_definition.gd" id="3_intel"]
+[ext_resource type="Script" path="res://src/data/battle_formation_definition.gd" id="4_formation"]
+[ext_resource type="Script" path="res://src/data/battle_support_definition.gd" id="5_support"]
+[ext_resource type="Script" path="res://src/data/battle_enemy_plan_definition.gd" id="6_plan"]
+[ext_resource type="Script" path="res://src/data/battle_reaction_rule_definition.gd" id="7_reaction"]
+[ext_resource type="Script" path="res://src/data/battle_engineering_route_definition.gd" id="8_route"]
+[ext_resource type="Resource" path="res://data/army/bai_jiuyang_broken_bridge.tres" id="9_bai"]
+[ext_resource type="Resource" path="res://data/army/di_tian_broken_bridge.tres" id="10_di"]
+[ext_resource type="Resource" path="res://data/army/lin_mo_broken_bridge.tres" id="11_lin"]
+[ext_resource type="Resource" path="res://data/army/falcon_recon_group.tres" id="12_falcon"]
+[ext_resource type="Resource" path="res://data/army/ironwall_assault_group.tres" id="13_ironwall"]
+[ext_resource type="Resource" path="res://data/army/armored_spearhead.tres" id="14_armor"]
+[ext_resource type="Resource" path="res://data/army/thunder_fire_group.tres" id="15_thunder"]
+[ext_resource type="Resource" path="res://data/army/bridge_engineer_group.tres" id="16_engineers"]
+[ext_resource type="Resource" path="res://data/army/highland_fire_group.tres" id="17_highland"]
+[ext_resource type="Resource" path="res://data/army/covert_search.tres" id="18_covert"]
+[ext_resource type="Resource" path="res://data/army/alternating_cover.tres" id="19_cover"]
+[ext_resource type="Resource" path="res://data/army/fire_preparation.tres" id="20_fire"]
+[ext_resource type="Resource" path="res://data/army/concentrated_breakthrough.tres" id="21_breakthrough"]
+[ext_resource type="Resource" path="res://data/army/rapid_bridging.tres" id="22_bridging"]
+[ext_resource type="Resource" path="res://data/army/overwatch_lattice.tres" id="23_overwatch"]
+
+[sub_resource type="Resource" id="RegionHeights"]
+script = ExtResource("2_region")
+region_id = &"west_mine"
+display_name_key = &"BROKEN_BRIDGE_HEIGHTS"
+terrain_key = &"TERRAIN_HIGH_GROUND"
+position = Vector2(1664, 1472)
+radius = 420.0
+supply_per_settlement = 2
+adjacent_region_ids = Array[StringName]([&"central_relay"])
+support_cooldown_ticks = 260
+
+[sub_resource type="Resource" id="RegionBridge"]
+script = ExtResource("2_region")
+region_id = &"central_relay"
+display_name_key = &"BROKEN_BRIDGE_MAIN_CROSSING"
+terrain_key = &"TERRAIN_BRIDGE"
+position = Vector2(3072, 2048)
+radius = 360.0
+supply_per_settlement = 1
+adjacent_region_ids = Array[StringName]([&"west_mine", &"east_supply"])
+support_cooldown_ticks = 140
+
+[sub_resource type="Resource" id="RegionFord"]
+script = ExtResource("2_region")
+region_id = &"east_supply"
+display_name_key = &"BROKEN_BRIDGE_DAMAGED_FORD"
+terrain_key = &"TERRAIN_RUINS"
+position = Vector2(4704, 1664)
+radius = 400.0
+supply_per_settlement = 2
+adjacent_region_ids = Array[StringName]([&"central_relay"])
+support_cooldown_ticks = 260
+
+[sub_resource type="Resource" id="IntelBridge"]
+script = ExtResource("3_intel")
+source_key = &"INTEL_SOURCE_OPTICAL"
+target_category_key = &"INTEL_ASSAULT"
+estimated_min = 12
+estimated_max = 16
+region_id = &"central_relay"
+direction_key = &"INTEL_DIRECTION_SOUTH"
+confidence_key = &"INTEL_CONFIDENCE_HIGH"
+eta_min_ticks = 240
+eta_max_ticks = 300
+
+[sub_resource type="Resource" id="IntelHeights"]
+script = ExtResource("3_intel")
+source_key = &"INTEL_SOURCE_ACOUSTIC"
+target_category_key = &"INTEL_TRACKED_VEHICLE"
+estimated_min = 2
+estimated_max = 5
+region_id = &"west_mine"
+direction_key = &"INTEL_DIRECTION_EAST"
+confidence_key = &"INTEL_CONFIDENCE_MEDIUM"
+eta_min_ticks = 300
+eta_max_ticks = 380
+
+[sub_resource type="Resource" id="IntelFord"]
+script = ExtResource("3_intel")
+source_key = &"INTEL_SOURCE_NONE"
+target_category_key = &"INTEL_UNKNOWN"
+region_id = &"east_supply"
+direction_key = &"INTEL_DIRECTION_UNKNOWN"
+confidence_key = &"INTEL_CONFIDENCE_NONE"
+has_estimate = false
+
+[sub_resource type="Resource" id="EnemyAssault"]
+script = ExtResource("4_formation")
+formation_id = 3
+role_id = &"assault"
+faction_id = 2
+unit_definition_id = &"assault_vehicle"
+strength = 14
+spawn_position = Vector2(3200, 704)
+first_entity_id = 1001
+facing = Vector2(0, 1)
+agent_id = 302
+task_id = 9101
+tactical_role = 2
+
+[sub_resource type="Resource" id="EnemyProbe"]
+script = ExtResource("4_formation")
+formation_id = 4
+role_id = &"probe"
+faction_id = 2
+unit_definition_id = &"scout_vehicle"
+strength = 4
+spawn_position = Vector2(4608, 768)
+first_entity_id = 1015
+facing = Vector2(0, 1)
+agent_id = 302
+task_id = 9101
+tactical_role = 1
+
+[sub_resource type="Resource" id="SupportRecon"]
+script = ExtResource("5_support")
+support_id = &"air_recon"
+support_kind = 0
+supply_cost = 2
+duration_ticks = 200
+cooldown_ticks = 280
+
+[sub_resource type="Resource" id="SupportFortify"]
+script = ExtResource("5_support")
+support_id = &"emergency_fortify"
+support_kind = 1
+supply_cost = 2
+duration_ticks = 220
+cooldown_ticks = 300
+armor_bonus = 4.0
+
+[sub_resource type="Resource" id="SupportReinforcement"]
+script = ExtResource("5_support")
+support_id = &"field_reinforcement"
+support_kind = 2
+supply_cost = 2
+cooldown_ticks = 300
+strength = 2
+
+[sub_resource type="Resource" id="SupportEngineering"]
+script = ExtResource("5_support")
+support_id = &"engineering_route"
+support_kind = 3
+supply_cost = 2
+cooldown_ticks = 0
+
+[sub_resource type="Resource" id="PlanRush"]
+script = ExtResource("6_plan")
+plan_id = &"bridge_rush"
+action_key = &"BROKEN_BRIDGE_PLAN_RUSH"
+assault_target_region_id = &"central_relay"
+assault_target_position = Vector2(3072, 2048)
+probe_target_region_id = &"east_supply"
+probe_target_position = Vector2(4704, 1728)
+commitment_ticks = 200
+
+[sub_resource type="Resource" id="PlanHeights"]
+script = ExtResource("6_plan")
+plan_id = &"height_screen"
+action_key = &"BROKEN_BRIDGE_PLAN_HEIGHTS"
+assault_target_region_id = &"west_mine"
+assault_target_position = Vector2(1664, 1472)
+assault_route_region_ids = Array[StringName]([&"central_relay"])
+probe_target_region_id = &"central_relay"
+probe_target_position = Vector2(3072, 2048)
+commitment_ticks = 220
+
+[sub_resource type="Resource" id="PlanFeint"]
+script = ExtResource("6_plan")
+plan_id = &"ford_feint"
+action_key = &"BROKEN_BRIDGE_PLAN_FORD_FEINT"
+assault_target_region_id = &"central_relay"
+assault_target_position = Vector2(3072, 2048)
+probe_target_region_id = &"east_supply"
+probe_target_position = Vector2(4704, 1728)
+commitment_ticks = 320
+followup_tick = 260
+followup_formation_role_id = &"probe"
+followup_target_region_id = &"central_relay"
+followup_target_position = Vector2(3328, 1824)
+
+[sub_resource type="Resource" id="ReactionHq"]
+script = ExtResource("7_reaction")
+rule_id = &"hq_defense"
+priority = 100
+trigger_kind = 0
+action_kind = 0
+delay_ticks = 10
+commitment_ticks = 100
+
+[sub_resource type="Resource" id="ReactionWithdraw"]
+script = ExtResource("7_reaction")
+rule_id = &"depleted_withdrawal"
+priority = 90
+trigger_kind = 3
+action_kind = 3
+delay_ticks = 5
+commitment_ticks = 120
+
+[sub_resource type="Resource" id="ReactionFlank"]
+script = ExtResource("7_reaction")
+rule_id = &"flank_intercept"
+priority = 70
+trigger_kind = 2
+action_kind = 2
+delay_ticks = 35
+commitment_ticks = 120
+
+[sub_resource type="Resource" id="ReactionBridge"]
+script = ExtResource("7_reaction")
+rule_id = &"bridge_counterattack"
+priority = 60
+trigger_kind = 1
+action_kind = 1
+delay_ticks = 20
+commitment_ticks = 100
+
+[sub_resource type="Resource" id="RouteFord"]
+script = ExtResource("8_route")
+route_id = &"east_engineering_ford"
+display_name_key = &"BROKEN_BRIDGE_ENGINEERING_FORD"
+linked_region_id = &"east_supply"
+cleared_rects = Array[Rect2i]([Rect2i(140, 60, 16, 8)])
+
+[resource]
+script = ExtResource("1_battle")
+scenario_id = &"broken_bridge"
+display_name_key = &"BROKEN_BRIDGE_TITLE"
+operation_number = 2
+scene_path = "res://scenes/game/broken_bridge.tscn"
+selector_briefing_key = &"BATTLE_SELECT_BROKEN_BRIDGE_BRIEFING"
+selector_mechanics_key = &"BATTLE_SELECT_BROKEN_BRIDGE_MECHANICS"
+available_in_selector = true
+battlefield_bounds = Rect2(0, 0, 6144, 4096)
+time_limit_ticks = 5400
+base_supply_interval_ticks = 200
+region_settlement_interval_ticks = 300
+starting_supply = 6
+supply_capacity = 12
+population_capacity = 52
+deployment_radius = 420.0
+player_headquarters_position = Vector2(3072, 3648)
+enemy_headquarters_position = Vector2(3072, 384)
+friendly_formation_ids = Array[int]([1, 2, 5])
+friendly_spawn_positions = Array[Vector2]([Vector2(2672, 3104), Vector2(3072, 3200), Vector2(3472, 3104)])
+next_dynamic_unit_id = 1100
+next_dynamic_formation_id = 6
+enemy_offensive_followup_tick = 1900
+enemy_agent_id = 302
+enemy_task_id = 9101
+commander_definitions = Array[ExtResource("9_bai")]([ExtResource("9_bai"), ExtResource("10_di"), ExtResource("11_lin")])
+unit_card_definitions = Array[ExtResource("12_falcon")]([ExtResource("12_falcon"), ExtResource("13_ironwall"), ExtResource("14_armor"), ExtResource("15_thunder"), ExtResource("16_engineers"), ExtResource("17_highland")])
+doctrine_definitions = Array[ExtResource("18_covert")]([ExtResource("18_covert"), ExtResource("19_cover"), ExtResource("20_fire"), ExtResource("21_breakthrough"), ExtResource("22_bridging"), ExtResource("23_overwatch")])
+starting_card_count = 3
+commander_agent_ids = {&"bai_jiuyang": 201, &"di_tian": 202, &"lin_mo": 203}
+default_commander_by_unit_card = {&"armored_spearhead": &"di_tian", &"bridge_engineer_group": &"di_tian", &"falcon_recon_group": &"bai_jiuyang", &"highland_fire_group": &"lin_mo", &"ironwall_assault_group": &"di_tian", &"thunder_fire_group": &"lin_mo"}
+default_doctrine_by_commander = {&"bai_jiuyang": &"covert_search", &"di_tian": &"rapid_bridging", &"lin_mo": &"overwatch_lattice"}
+default_posture_by_commander = {&"bai_jiuyang": 0, &"di_tian": 1, &"lin_mo": 1}
+default_starting_unit_card_ids = Array[StringName]([&"bridge_engineer_group", &"ironwall_assault_group", &"thunder_fire_group"])
+strategic_regions = Array[SubResource("RegionHeights")]([SubResource("RegionHeights"), SubResource("RegionBridge"), SubResource("RegionFord")])
+initial_intel = Array[SubResource("IntelBridge")]([SubResource("IntelBridge"), SubResource("IntelHeights"), SubResource("IntelFord")])
+enemy_formations = Array[SubResource("EnemyAssault")]([SubResource("EnemyAssault"), SubResource("EnemyProbe")])
+support_abilities = Array[SubResource("SupportRecon")]([SubResource("SupportRecon"), SubResource("SupportFortify"), SubResource("SupportReinforcement"), SubResource("SupportEngineering")])
+enemy_plans = Array[SubResource("PlanRush")]([SubResource("PlanRush"), SubResource("PlanHeights"), SubResource("PlanFeint")])
+enemy_reaction_rules = Array[SubResource("ReactionHq")]([SubResource("ReactionHq"), SubResource("ReactionWithdraw"), SubResource("ReactionFlank"), SubResource("ReactionBridge")])
+navigation_blocked_rects = Array[Rect2i]([Rect2i(0, 60, 92, 8), Rect2i(100, 60, 92, 8)])
+engineering_routes = Array[SubResource("RouteFord")]([SubResource("RouteFord")])
+objective_set = ExtResource("objectives")

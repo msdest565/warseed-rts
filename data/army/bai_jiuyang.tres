@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CommanderDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/data/commander_definition.gd" id="1_commander"]
+
+[resource]
+script = ExtResource("1_commander")
+definition_id = &"bai_jiuyang"
+display_name_key = &"COMMANDER_BAI_JIUYANG"
+capacity = 3
+personality_key = &"PERSONALITY_CAUTIOUS"
+specialty_keys = Array[StringName]([&"SPECIALTY_CONCEALMENT", &"SPECIALTY_IDENTIFICATION", &"SPECIALTY_DISENGAGEMENT"])
+doctrine_keys = Array[StringName]([&"DOCTRINE_COVERT_SEARCH"])
+available_doctrine_ids = Array[StringName]([&"covert_search", &"alternating_cover"])

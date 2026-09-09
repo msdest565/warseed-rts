@@ -3,11 +3,13 @@ extends RefCounted
 
 const MAP_DEFINITION: MapDefinition = preload("res://data/maps/test_arena.tres")
 const CELL_SIZE := 32.0
-const GRID_SIZE := Vector2i(96, 64)
+const GRID_SIZE := Vector2i(192, 128)
 const WORLD_ORIGIN := Vector2.ZERO
 
 var blocked_cells: Dictionary = {}
 var revision: int = 0
+var grid_size: Vector2i = GRID_SIZE
+var world_origin: Vector2 = WORLD_ORIGIN
 
 
 static func create_test_map() -> LogicGrid:
@@ -31,6 +33,31 @@ static func create_test_map() -> LogicGrid:
 			grid.set_blocked(Vector2i(60, y), true)
 	# Preserve a second compact 2x2 corner obstacle in the expanded arena.
 	grid._block_rect(Rect2i(72, 30, 2, 2))
+	# Large-theater terrain keeps the new three quarters tactically meaningful.
+	for y in range(24, 104):
+		if y < 62 or y > 65:
+			grid.set_blocked(Vector2i(95, y), true)
+	grid._block_rect(Rect2i(60, 24, 16, 12))
+	grid._block_rect(Rect2i(116, 92, 20, 12))
+	grid._block_rect(Rect2i(134, 48, 8, 16))
+	for y in range(10, 50):
+		if y < 28 or y > 35:
+			grid.set_blocked(Vector2i(120, y), true)
+	grid._block_rect(Rect2i(144, 60, 4, 4))
+	return grid
+
+
+static func create_for_battle(definition: BattleDefinition) -> LogicGrid:
+	if definition == null:
+		return create_test_map()
+	var grid := LogicGrid.new() if not definition.navigation_blocked_rects.is_empty() else create_test_map()
+	grid.world_origin = definition.battlefield_bounds.position
+	grid.grid_size = Vector2i(
+		ceili(definition.battlefield_bounds.size.x / CELL_SIZE),
+		ceili(definition.battlefield_bounds.size.y / CELL_SIZE)
+	)
+	for rect in definition.navigation_blocked_rects:
+		grid._block_rect(rect)
 	return grid
 
 
@@ -41,7 +68,7 @@ func _block_rect(rect: Rect2i) -> void:
 
 
 func is_in_bounds(cell: Vector2i) -> bool:
-	return cell.x >= 0 and cell.y >= 0 and cell.x < GRID_SIZE.x and cell.y < GRID_SIZE.y
+	return cell.x >= 0 and cell.y >= 0 and cell.x < grid_size.x and cell.y < grid_size.y
 
 
 func set_blocked(cell: Vector2i, blocked: bool) -> void:
@@ -90,12 +117,16 @@ func get_corridor_width(cell: Vector2i, direction: Vector2i) -> int:
 
 
 func world_to_cell(world_position: Vector2) -> Vector2i:
-	var local := world_position - WORLD_ORIGIN
+	var local := world_position - world_origin
 	return Vector2i(floori(local.x / CELL_SIZE), floori(local.y / CELL_SIZE))
 
 
 func cell_to_world(cell: Vector2i) -> Vector2:
-	return WORLD_ORIGIN + Vector2(cell) * CELL_SIZE + Vector2.ONE * CELL_SIZE * 0.5
+	return world_origin + Vector2(cell) * CELL_SIZE + Vector2.ONE * CELL_SIZE * 0.5
+
+
+func get_world_rect() -> Rect2:
+	return Rect2(world_origin, Vector2(grid_size) * CELL_SIZE)
 
 
 func get_footprint_cells(world_position: Vector2, footprint_size: Vector2i) -> Array[Vector2i]:

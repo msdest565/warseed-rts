@@ -42,4 +42,10 @@ export_credentials.cfg
 # Local UI verification captures
 /ui-verification*.png
 /ui-verification*.png.import
+/ui-verification*.wav
+/ui-verification*.wav.import
 .codex_artifacts/
+
+# Local Godot test profiles and generated verification evidence
+/.test-profile/
+/artifacts/

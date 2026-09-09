@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="GrowthDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://src/data/growth_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+definition_id = &"reinforced_side_skirts"
+kind = 1
+display_name_key = &"GROWTH_REINFORCED_SIDE_SKIRTS"
+benefit_key = &"GROWTH_REINFORCED_SIDE_SKIRTS_BENEFIT"
+tradeoff_key = &"GROWTH_REINFORCED_SIDE_SKIRTS_TRADEOFF"
+replacement_cost = 6
+refit_days = 2
+armor_bonus = 2.0
+move_speed_multiplier = 0.9

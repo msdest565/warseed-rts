@@ -13,7 +13,38 @@ func run() -> Array[String]:
 	_test_column_history_follows_turn(failures)
 	_test_formation_routes_around_block_both_directions(failures)
 	_test_path_cache_reuses_and_invalidates(failures)
+	_test_recon_formation_uses_search_fan(failures)
+	_test_battle_navigation_uses_scenario_bounds(failures)
 	return failures
+
+
+func _test_battle_navigation_uses_scenario_bounds(failures: Array[String]) -> void:
+	var loaded := BattleContentLoader.load_battle(&"black_well")
+	if not loaded.is_valid():
+		failures.append("Black Well navigation fixture did not load")
+		return
+	var grid := LogicGrid.create_for_battle(loaded.battle)
+	var pathfinder := GridPathfinder.new(grid)
+	_expect(grid.grid_size == Vector2i(224, 144), "battle navigation should derive its cell dimensions from the 7168x4608 scenario bounds", failures)
+	_expect(grid.is_world_position_walkable(loaded.battle.player_headquarters_position), "the expanded Black Well player headquarters must remain inside the navigation world", failures)
+	_expect(not pathfinder.find_path(loaded.battle.player_headquarters_position, Vector2(3584.0, 2208.0)).is_empty(), "the expanded southern headquarters should have a valid route to the Black Well core", failures)
+
+
+func _test_recon_formation_uses_search_fan(failures: Array[String]) -> void:
+	var formation := FormationState.new(77, [701, 702, 703, 704], Vector2(1024.0, 1024.0))
+	var units: Dictionary = {}
+	for entity_id in formation.member_entity_ids:
+		var scout := UnitState.new(entity_id, formation.anchor_position, 220.0, SimulationWorld.LOCAL_PLAYER_ID)
+		scout.definition_id = &"scout_vehicle"
+		units[entity_id] = scout
+	var system := FormationMovementSystem.new(LogicGrid.new(), GridPathfinder.new(LogicGrid.new()))
+	var desired := system._create_desired_positions(formation, Vector2.RIGHT, true)
+	var minimum_y := INF
+	var maximum_y := -INF
+	for position in desired.values():
+		minimum_y = minf(minimum_y, (position as Vector2).y)
+		maximum_y = maxf(maximum_y, (position as Vector2).y)
+	_expect(maximum_y - minimum_y >= 170.0, "a reconnaissance detachment should spread into a broad search fan instead of one compact combat block", failures)
 
 
 func _test_grid_conversion_and_static_obstacles(failures: Array[String]) -> void:

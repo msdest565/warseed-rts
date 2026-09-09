@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CommanderDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/data/commander_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+definition_id = &"gu_hanxing"
+display_name_key = &"COMMANDER_GU_HANXING"
+capacity = 6
+personality_key = &"PERSONALITY_OPPORTUNISTIC"
+specialty_keys = Array[StringName]([&"SPECIALTY_MOBILE_RESERVE", &"SPECIALTY_COUNTERATTACK", &"SPECIALTY_REINFORCEMENT"])
+doctrine_keys = Array[StringName]([&"DOCTRINE_RESERVE_COMMITMENT"])
+available_doctrine_ids = Array[StringName]([&"reserve_commitment", &"mutual_support", &"encounter_disengagement"])

@@ -58,6 +58,11 @@ var last_command_tick: int
 var rejoin_formation_id: int
 var rejoin_slot_id: int
 var rejoin_pending: bool
+var unit_card_id: StringName
+var tactical_role: UnitState.TacticalRole
+var terrain_kind: UnitState.TerrainKind
+var terrain_effect_key: StringName
+var intel_freshness: float = 1.0
 
 
 func _init(unit: UnitState = null, contact: KnowledgeContact = null) -> void:
@@ -126,6 +131,10 @@ func _init(unit: UnitState = null, contact: KnowledgeContact = null) -> void:
 	rejoin_formation_id = unit.rejoin_formation_id
 	rejoin_slot_id = unit.rejoin_slot_id
 	rejoin_pending = unit.rejoin_pending
+	unit_card_id = unit.unit_card_id
+	tactical_role = unit.tactical_role
+	terrain_kind = unit.terrain_kind
+	terrain_effect_key = unit.terrain_effect_key
 
 
 func _apply_contact(contact: KnowledgeContact) -> void:
@@ -186,3 +195,7 @@ func _apply_contact(contact: KnowledgeContact) -> void:
 	rejoin_formation_id = 0
 	rejoin_slot_id = -1
 	rejoin_pending = false
+	unit_card_id = &""
+	tactical_role = UnitState.TacticalRole.NONE
+	terrain_kind = UnitState.TerrainKind.NONE
+	terrain_effect_key = &"TERRAIN_EFFECT_NONE"

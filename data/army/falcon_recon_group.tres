@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="UnitCardDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/data/unit_card_definition.gd" id="1_unit_card"]
+
+[resource]
+script = ExtResource("1_unit_card")
+definition_id = &"falcon_recon_group"
+display_name_key = &"UNIT_CARD_FALCON"
+role_key = &"UNIT_CARD_ROLE_RECON"
+commander_definition_id = &"bai_jiuyang"
+command_cost = 1
+authorized_strength = 8
+unit_definition_id = &"scout_vehicle"
+supply_cost = 2
+deployment_ticks = 100

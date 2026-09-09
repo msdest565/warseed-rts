@@ -2,6 +2,8 @@ class_name BuildingProxy
 extends Node2D
 
 var snapshot: BuildingSnapshot
+var hit_flash_remaining: float = 0.0
+var destruction_flash_remaining: float = 0.0
 var selected: bool = false:
 	set(value):
 		selected = value
@@ -11,6 +13,23 @@ var selected: bool = false:
 func apply_snapshot(building: BuildingSnapshot) -> void:
 	snapshot = building
 	position = building.position
+	queue_redraw()
+
+
+func play_hit_feedback(destroyed: bool = false) -> void:
+	hit_flash_remaining = 0.22
+	if destroyed:
+		destruction_flash_remaining = 0.7
+	set_process(true)
+	queue_redraw()
+
+
+func _process(delta: float) -> void:
+	if hit_flash_remaining <= 0.0 and destruction_flash_remaining <= 0.0:
+		set_process(false)
+		return
+	hit_flash_remaining = maxf(0.0, hit_flash_remaining - delta)
+	destruction_flash_remaining = maxf(0.0, destruction_flash_remaining - delta)
 	queue_redraw()
 
 
@@ -45,3 +64,9 @@ func _draw() -> void:
 		draw_rect(Rect2(-size.x * 0.5, size.y * 0.5 + 35.0, size.x * progress, 4.0), Color("f2c94c"), true)
 	if not snapshot.production_definition_id.is_empty():
 		draw_arc(Vector2.ZERO, size.x * 0.32, 0.0, TAU, 30, Color("f2c94c"), 3.0)
+	if hit_flash_remaining > 0.0:
+		var alpha := clampf(hit_flash_remaining / 0.22, 0.0, 1.0)
+		draw_rect(Rect2(-size * 0.5 - Vector2(4.0, 4.0), size + Vector2(8.0, 8.0)), Color(1.0, 0.9, 0.62, alpha * 0.82), false, 6.0)
+	if destruction_flash_remaining > 0.0:
+		var progress := 1.0 - destruction_flash_remaining / 0.7
+		draw_arc(Vector2.ZERO, size.x * (0.45 + progress * 0.5), 0.0, TAU, 40, Color(1.0, 0.32, 0.12, (1.0 - progress) * 0.9), 6.0)

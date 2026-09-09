@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="UnitCardDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/data/unit_card_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+definition_id = &"frontline_logistics_column"
+display_name_key = &"UNIT_CARD_FRONTLINE_LOGISTICS"
+role_key = &"UNIT_CARD_ROLE_LOGISTICS"
+commander_definition_id = &"di_tian"
+command_cost = 2
+authorized_strength = 4
+unit_definition_id = &"supply_truck"
+supply_cost = 3
+deployment_ticks = 90
+starts_in_reserve = false

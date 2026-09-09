@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/data/unit_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/units/supply_truck_combat.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+definition_id = &"supply_truck"
+display_name = "Supply Truck"
+move_speed = 132.0
+production_cost = 160
+production_ticks = 28
+can_attack = false
+can_accept_attack_orders = false
+auto_retaliate = false
+sight_range = 176.0
+combat = ExtResource("2")

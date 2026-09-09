@@ -11,6 +11,9 @@ enum CommandMode {
 	DEFEND_TARGETING,
 	SCOUT_TARGETING,
 	RALLY_TARGETING,
+	DEPLOY_UNIT_CARD_TARGETING,
+	FORMATION_ROUTE_TARGETING,
+	COMMANDER_ROUTE_TARGETING,
 }
 
 signal move_intent_changed(target_position: Vector2, intent_sequence: int)
@@ -20,23 +23,49 @@ signal build_preview_cleared
 signal attack_targeting_started
 signal attack_preview_changed(target_position: Vector2, target_entity_id: int)
 signal attack_preview_cleared
+signal formation_plan_preview_changed(route_points: PackedVector2Array, line_start: Vector2, line_end: Vector2, drawing_line: bool)
+signal formation_plan_preview_cleared
+signal commander_intent_preview_changed(commander_id: StringName, target_position: Vector2)
+signal commander_intent_preview_cleared
+signal commander_plan_preview_changed(commander_id: StringName, route_points: PackedVector2Array, target_position: Vector2)
+signal commander_plan_preview_cleared
+signal command_mode_changed(mode: CommandMode)
 
 const HIT_RADIUS_SCREEN := 34.0
 const DRAG_THRESHOLD := 6.0
+const FORMATION_HANDLE_HIT_RADIUS_SCREEN := 18.0
+const COMMANDER_TASK_HANDLE_HIT_RADIUS_SCREEN := 20.0
+const FORMATION_DRAG_NONE := -1
+const FORMATION_DRAG_LINE_START := -2
+const FORMATION_DRAG_LINE_END := -3
 
 var selected_entity_id: int = 0
 var selected_entity_ids: Array[int] = []
 var selected_building_id: int = 0
+var selected_unit_card_id: StringName
+var selected_commander_id: StringName
 var intent_sequence: int = 0
 var pending_move_target: Vector2
 var pending_move_active: bool = false
 var coalesced_count: int = 0
 var last_command_status: String = ""
+var route_feedback_override: String = ""
 var control_groups: Dictionary = {}
 var drag_start_screen: Vector2
 var drag_current_screen: Vector2
 var left_dragging: bool = false
 var command_mode: CommandMode = CommandMode.NORMAL
+var diagnostic_individual_selection_enabled: bool = false
+var formation_route_points: PackedVector2Array = PackedVector2Array()
+var formation_line_start: Vector2
+var formation_line_end: Vector2
+var formation_line_drawing: bool = false
+var formation_dragged_handle: int = FORMATION_DRAG_NONE
+var commander_drag_active: bool = false
+var commander_drag_id: StringName
+var commander_drag_start_screen: Vector2
+var commander_drag_current_screen: Vector2
+var commander_route_points: PackedVector2Array = PackedVector2Array()
 
 @export var simulation_host: SimulationHost
 @export var world_presentation: WorldPresentation
@@ -48,8 +77,62 @@ func _ready() -> void:
 	refresh_locale_status()
 
 
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey:
+		var key := event as InputEventKey
+		if key.pressed and not key.echo and key.keycode == KEY_C and command_mode != CommandMode.NORMAL:
+			cancel_command_mode()
+			var route_viewport := get_viewport()
+			if route_viewport != null:
+				route_viewport.set_input_as_handled()
+			return
+	if not commander_drag_active or not _handle_commander_drag_input(event):
+		return
+	var viewport := get_viewport()
+	if viewport != null:
+		viewport.set_input_as_handled()
+
+
 func refresh_locale_status() -> void:
 	last_command_status = GameText.t(&"STATUS_READY")
+
+
+func get_operation_guidance() -> String:
+	var status := route_feedback_override if not route_feedback_override.is_empty() else last_command_status
+	if status.is_empty():
+		status = GameText.t(&"STATUS_READY")
+	var guidance_key := _command_mode_guidance_key()
+	if guidance_key.is_empty():
+		return status
+	var mode_guidance := GameText.t(guidance_key)
+	if status == mode_guidance:
+		return status
+	return "%s\n%s" % [status, mode_guidance]
+
+
+func _command_mode_guidance_key() -> StringName:
+	match command_mode:
+		CommandMode.ATTACK_MOVE_TARGETING:
+			return &"STATUS_ATTACK_MOVE_TARGET"
+		CommandMode.BUILD_FACTORY_TARGETING, CommandMode.BUILD_SUPPORT_TARGETING:
+			return &"STATUS_BUILD_TARGET"
+		CommandMode.REPAIR_TARGETING:
+			return &"STATUS_REPAIR_TARGET"
+		CommandMode.HARVEST_TARGETING:
+			return &"STATUS_HARVEST_TARGET"
+		CommandMode.DEFEND_TARGETING:
+			return &"STATUS_DEFEND_TARGET"
+		CommandMode.SCOUT_TARGETING:
+			return &"STATUS_SCOUT_TARGET"
+		CommandMode.RALLY_TARGETING:
+			return &"STATUS_RALLY_TARGET"
+		CommandMode.DEPLOY_UNIT_CARD_TARGETING:
+			return &"GUIDANCE_DEPLOY_UNIT_CARD_TARGET"
+		CommandMode.FORMATION_ROUTE_TARGETING:
+			return &"STATUS_ROUTE_TARGETING"
+		CommandMode.COMMANDER_ROUTE_TARGETING:
+			return &"STATUS_COMMANDER_ROUTE_TARGETING"
+	return &""
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -72,6 +155,20 @@ func _unhandled_input(event: InputEvent) -> void:
 		if targeting_mouse.pressed and targeting_mouse.button_index == MOUSE_BUTTON_LEFT:
 			attack_or_move_selected_at(_screen_to_world(targeting_mouse.position))
 			return
+	if command_mode == CommandMode.DEPLOY_UNIT_CARD_TARGETING and event is InputEventMouseButton:
+		var deployment_mouse := event as InputEventMouseButton
+		if deployment_mouse.pressed and deployment_mouse.button_index == MOUSE_BUTTON_RIGHT:
+			cancel_command_mode()
+			return
+		if deployment_mouse.pressed and deployment_mouse.button_index == MOUSE_BUTTON_LEFT:
+			deploy_selected_unit_card_at(_screen_to_world(deployment_mouse.position))
+			return
+	if command_mode == CommandMode.FORMATION_ROUTE_TARGETING:
+		_handle_formation_route_input(event)
+		return
+	if command_mode == CommandMode.COMMANDER_ROUTE_TARGETING:
+		_handle_commander_route_input(event)
+		return
 	if command_mode in [CommandMode.HARVEST_TARGETING, CommandMode.DEFEND_TARGETING, CommandMode.SCOUT_TARGETING, CommandMode.RALLY_TARGETING] and event is InputEventMouseButton:
 		var target_mouse := event as InputEventMouseButton
 		if target_mouse.pressed and target_mouse.button_index == MOUSE_BUTTON_RIGHT:
@@ -101,6 +198,16 @@ func _unhandled_input(event: InputEvent) -> void:
 				var definition_id: StringName = &"automated_factory" if command_mode == CommandMode.BUILD_FACTORY_TARGETING else &"forward_support_station"
 				build_selected_at(definition_id, world_position)
 			return
+	if command_mode == CommandMode.NORMAL and event is InputEventMouseButton:
+		var task_mouse := event as InputEventMouseButton
+		if task_mouse.pressed and task_mouse.button_index == MOUSE_BUTTON_LEFT:
+			var task_world_position := _screen_to_world(task_mouse.position)
+			var task_commander_id := _find_commander_task_handle_at(task_world_position)
+			if not task_commander_id.is_empty() and begin_commander_drag(task_commander_id, task_mouse.position):
+				var commander := simulation_host.current_snapshot.get_commander(task_commander_id)
+				commander_intent_preview_changed.emit(task_commander_id, commander.target_position)
+				last_command_status = GameText.t(&"STATUS_COMMANDER_TASK_DRAG_TARGET") % GameText.t(commander.display_name_key)
+				return
 	if event is InputEventMouseMotion and left_dragging:
 		drag_current_screen = (event as InputEventMouseMotion).position
 		selection_overlay.update_drag(drag_current_screen)
@@ -155,7 +262,7 @@ func select_at(world_position: Vector2, additive: bool = false, select_formation
 			last_command_status = GameText.t(&"STATUS_SELECTION_CLEARED")
 		return
 	var atom: Array[int] = []
-	if select_formation:
+	if select_formation or _formal_card_selection_enabled():
 		atom = _get_selection_atom(best_id)
 	else:
 		atom.append(best_id)
@@ -182,7 +289,10 @@ func select_in_rect(world_rect: Rect2, additive: bool = false) -> void:
 	if snapshot != null:
 		for unit in snapshot.units:
 			if _is_selectable(unit) and world_rect.has_point(unit.position):
-				matches.append(unit.entity_id)
+				if _formal_card_selection_enabled():
+					matches.append_array(_get_selection_atom(unit.entity_id))
+				else:
+					matches.append(unit.entity_id)
 	if matches.is_empty() and additive:
 		return
 	if additive:
@@ -191,7 +301,575 @@ func select_in_rect(world_rect: Rect2, additive: bool = false) -> void:
 	last_command_status = GameText.t(&"STATUS_SELECTED") % selected_entity_ids.size()
 
 
+func select_unit_card(unit_card_id: StringName) -> void:
+	var snapshot := simulation_host.current_snapshot
+	var unit_card := snapshot.get_unit_card(unit_card_id) if snapshot != null else null
+	if unit_card == null or unit_card.faction_id != SimulationWorld.LOCAL_PLAYER_ID:
+		last_command_status = GameText.t(&"STATUS_UNIT_CARD_UNAVAILABLE")
+		return
+	if command_mode == CommandMode.FORMATION_ROUTE_TARGETING and selected_unit_card_id != unit_card_id:
+		cancel_command_mode()
+	simulation_host.record_playtest_ui_event("unit_card_selected", unit_card_id)
+	if unit_card.deployment_state == UnitCardState.DeploymentState.RESERVE:
+		selected_entity_ids.clear()
+		selected_entity_id = 0
+		selected_building_id = 0
+		selected_unit_card_id = unit_card_id
+		selected_commander_id = unit_card.commander_definition_id
+		command_mode = CommandMode.DEPLOY_UNIT_CARD_TARGETING
+		command_mode_changed.emit(command_mode)
+		world_presentation.set_selected_entities([], 0, 0)
+		last_command_status = GameText.t(&"STATUS_DEPLOY_UNIT_CARD_TARGET") % [
+			GameText.t(unit_card.display_name_key), unit_card.supply_cost,
+		]
+		return
+	if unit_card.deployment_state == UnitCardState.DeploymentState.DEPLOYING:
+		selected_unit_card_id = unit_card_id
+		selected_commander_id = unit_card.commander_definition_id
+		last_command_status = GameText.t(&"STATUS_UNIT_CARD_DEPLOYING") % (unit_card.deployment_ticks_remaining * SimulationWorld.TICK_SECONDS)
+		return
+	if unit_card.deployment_state != UnitCardState.DeploymentState.DEPLOYED:
+		last_command_status = GameText.t(&"STATUS_UNIT_CARD_UNAVAILABLE")
+		return
+	_set_selection(unit_card.active_member_entity_ids)
+	selected_unit_card_id = unit_card_id
+	selected_commander_id = unit_card.commander_definition_id
+	last_command_status = GameText.t(&"STATUS_UNIT_CARD_SELECTED") % [
+		GameText.t(unit_card.display_name_key), unit_card.current_strength,
+	]
+
+
+func deploy_selected_unit_card_at(world_position: Vector2) -> CommandValidationResult:
+	if selected_unit_card_id.is_empty():
+		last_command_status = GameText.t(&"STATUS_UNIT_CARD_UNAVAILABLE")
+		return null
+	var result := simulation_host.submit_command(
+		simulation_host.create_deploy_unit_card_command(selected_unit_card_id, world_position, selected_commander_id)
+	)
+	last_command_status = GameText.t(&"STATUS_DEPLOY_UNIT_CARD") % GameText.command_result(result)
+	if result.is_accepted():
+		command_mode = CommandMode.NORMAL
+		command_mode_changed.emit(command_mode)
+	return result
+
+
+func begin_reserve_card_drag(unit_card_id: StringName) -> bool:
+	var snapshot := simulation_host.current_snapshot if simulation_host != null else null
+	var unit_card := snapshot.get_unit_card(unit_card_id) if snapshot != null else null
+	if unit_card == null or unit_card.faction_id != SimulationWorld.LOCAL_PLAYER_ID or unit_card.deployment_state != UnitCardState.DeploymentState.RESERVE:
+		last_command_status = GameText.t(&"STATUS_UNIT_CARD_UNAVAILABLE")
+		return false
+	selected_entity_ids.clear()
+	selected_entity_id = 0
+	selected_building_id = 0
+	selected_unit_card_id = unit_card_id
+	selected_commander_id = unit_card.commander_definition_id
+	command_mode = CommandMode.NORMAL
+	world_presentation.set_selected_entities([], 0, 0)
+	simulation_host.record_playtest_ui_event("reserve_card_drag_started", unit_card_id)
+	last_command_status = GameText.t(&"STATUS_RESERVE_DRAG_TARGET") % GameText.t(unit_card.display_name_key)
+	return true
+
+
+func preview_reserve_card_drop(commander_id: StringName) -> void:
+	var snapshot := simulation_host.current_snapshot if simulation_host != null else null
+	var unit_card := snapshot.get_unit_card(selected_unit_card_id) if snapshot != null else null
+	if unit_card == null or unit_card.deployment_state != UnitCardState.DeploymentState.RESERVE:
+		return
+	if commander_id.is_empty():
+		last_command_status = GameText.t(&"STATUS_RESERVE_DRAG_TARGET") % GameText.t(unit_card.display_name_key)
+		return
+	var hovered_commander := snapshot.get_commander(commander_id)
+	var assigned_commander := snapshot.get_commander(unit_card.commander_definition_id)
+	if hovered_commander == null or assigned_commander == null:
+		return
+	if commander_id == unit_card.commander_definition_id:
+		last_command_status = GameText.t(&"STATUS_RESERVE_DROP_READY") % [
+			GameText.t(unit_card.display_name_key), GameText.t(hovered_commander.display_name_key), unit_card.supply_cost,
+		]
+	else:
+		last_command_status = GameText.t(&"STATUS_RESERVE_DROP_MISMATCH") % [
+			GameText.t(unit_card.display_name_key), GameText.t(assigned_commander.display_name_key), GameText.t(hovered_commander.display_name_key),
+		]
+
+
+func cancel_reserve_card_drag() -> void:
+	command_mode = CommandMode.NORMAL
+	last_command_status = GameText.t(&"STATUS_RESERVE_DRAG_CANCELLED")
+
+
+func deploy_reserve_card_to_commander(unit_card_id: StringName, commander_id: StringName) -> CommandValidationResult:
+	var snapshot := simulation_host.current_snapshot if simulation_host != null else null
+	var unit_card := snapshot.get_unit_card(unit_card_id) if snapshot != null else null
+	if unit_card == null:
+		last_command_status = GameText.t(&"STATUS_UNIT_CARD_UNAVAILABLE")
+		return null
+	var commander := snapshot.get_commander(commander_id)
+	var result := simulation_host.submit_command(
+		simulation_host.create_deploy_unit_card_command(
+			unit_card_id,
+			_default_reserve_deployment_position(commander_id),
+			commander_id
+		)
+	)
+	var previous_mode := command_mode
+	command_mode = CommandMode.NORMAL
+	if previous_mode != command_mode:
+		command_mode_changed.emit(command_mode)
+	last_command_status = GameText.t(&"STATUS_RESERVE_DEPLOY_SUBMITTED") % [
+		GameText.t(unit_card.display_name_key),
+		GameText.t(commander.display_name_key) if commander != null else String(commander_id),
+		GameText.command_result(result),
+	]
+	return result
+
+
+func _default_reserve_deployment_position(commander_id: StringName) -> Vector2:
+	var snapshot := simulation_host.current_snapshot if simulation_host != null else null
+	if snapshot == null:
+		return Vector2.ZERO
+	var headquarters := snapshot.get_building(SimulationWorld.PLAYER_COMMAND_CENTER_ID)
+	if headquarters == null:
+		return Vector2.ZERO
+	var commander := snapshot.get_commander(commander_id)
+	var direction := commander.target_position - headquarters.position if commander != null else Vector2.UP
+	if direction.length_squared() < 4096.0:
+		direction = Vector2.UP
+	return headquarters.position + direction.normalized() * 192.0
+
+
+func begin_unit_card_route(unit_card_id: StringName) -> void:
+	if is_unit_card_route_planning(unit_card_id):
+		cancel_command_mode()
+		return
+	var snapshot := simulation_host.current_snapshot
+	var unit_card := snapshot.get_unit_card(unit_card_id) if snapshot != null else null
+	if unit_card == null or unit_card.deployment_state != UnitCardState.DeploymentState.DEPLOYED or unit_card.formation_id == 0:
+		last_command_status = GameText.t(&"STATUS_UNIT_CARD_UNAVAILABLE")
+		return
+	select_unit_card(unit_card_id)
+	route_feedback_override = ""
+	command_mode = CommandMode.FORMATION_ROUTE_TARGETING
+	command_mode_changed.emit(command_mode)
+	var formation := snapshot.get_formation(unit_card.formation_id)
+	formation_route_points = formation.planned_route.duplicate() if formation != null else PackedVector2Array()
+	formation_line_start = formation.deployment_line_start if formation != null and formation.has_deployment_line else Vector2.ZERO
+	formation_line_end = formation.deployment_line_end if formation != null and formation.has_deployment_line else Vector2.ZERO
+	formation_line_drawing = false
+	formation_dragged_handle = FORMATION_DRAG_NONE
+	last_command_status = GameText.t(&"STATUS_ROUTE_EDITING" if formation != null and (not formation.planned_route.is_empty() or formation.has_deployment_line) else &"STATUS_ROUTE_TARGETING")
+	formation_plan_preview_changed.emit(formation_route_points, formation_line_start, formation_line_end, formation != null and formation.has_deployment_line)
+
+
+func is_unit_card_route_planning(unit_card_id: StringName = &"") -> bool:
+	return command_mode == CommandMode.FORMATION_ROUTE_TARGETING and (unit_card_id.is_empty() or selected_unit_card_id == unit_card_id)
+
+
+func submit_selected_formation_route() -> CommandValidationResult:
+	if command_mode != CommandMode.FORMATION_ROUTE_TARGETING:
+		return null
+	return _submit_formation_plan()
+
+
+func begin_commander_route(commander_id: StringName) -> void:
+	if is_commander_route_planning(commander_id):
+		cancel_commander_route_planning()
+		return
+	var snapshot := simulation_host.current_snapshot if simulation_host != null else null
+	var commander := snapshot.get_commander(commander_id) if snapshot != null else null
+	if commander == null or commander.faction_id != SimulationWorld.LOCAL_PLAYER_ID:
+		last_command_status = GameText.t(&"STATUS_COMMANDER_UNAVAILABLE")
+		return
+	select_commander_card(commander_id)
+	route_feedback_override = ""
+	command_mode = CommandMode.COMMANDER_ROUTE_TARGETING
+	command_mode_changed.emit(command_mode)
+	commander_route_points = commander.planned_route.duplicate()
+	var preview_target := commander.target_position
+	commander_plan_preview_changed.emit(commander_id, commander_route_points, preview_target)
+	last_command_status = GameText.t(&"STATUS_COMMANDER_ROUTE_TARGETING")
+
+
+func _handle_commander_route_input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion:
+		commander_plan_preview_changed.emit(selected_commander_id, commander_route_points, _screen_to_world((event as InputEventMouseMotion).position))
+		return
+	if not event is InputEventMouseButton:
+		return
+	var mouse := event as InputEventMouseButton
+	if not mouse.pressed:
+		return
+	var world_position := _screen_to_world(mouse.position)
+	if mouse.button_index == MOUSE_BUTTON_LEFT:
+		if commander_route_points.size() < 8:
+			route_feedback_override = ""
+			commander_route_points.append(world_position)
+			commander_plan_preview_changed.emit(selected_commander_id, commander_route_points, world_position)
+			last_command_status = GameText.t(&"STATUS_COMMANDER_ROUTE_WAYPOINT") % commander_route_points.size()
+		return
+	if mouse.button_index != MOUSE_BUTTON_RIGHT:
+		return
+	submit_commander_route(world_position)
+
+
+func submit_commander_route(target_position: Vector2) -> CommandValidationResult:
+	if command_mode != CommandMode.COMMANDER_ROUTE_TARGETING or selected_commander_id.is_empty():
+		return null
+	var result := simulation_host.submit_command(
+		simulation_host.create_commander_objective_command(selected_commander_id, target_position, commander_route_points)
+	)
+	last_command_status = GameText.t(&"STATUS_COMMANDER_ROUTE_SUBMITTED") % GameText.command_result(result)
+	route_feedback_override = "" if result.is_accepted() else last_command_status
+	if result.is_accepted():
+		command_mode = CommandMode.NORMAL
+		command_mode_changed.emit(command_mode)
+		commander_route_points = PackedVector2Array()
+		commander_plan_preview_cleared.emit()
+	return result
+
+
+func submit_selected_commander_route() -> CommandValidationResult:
+	if command_mode != CommandMode.COMMANDER_ROUTE_TARGETING:
+		return null
+	if commander_route_points.is_empty():
+		last_command_status = GameText.t(&"STATUS_COMMANDER_ROUTE_NEEDS_TARGET")
+		return null
+	return submit_commander_route(commander_route_points[-1])
+
+
+func undo_commander_route_waypoint() -> bool:
+	if command_mode != CommandMode.COMMANDER_ROUTE_TARGETING or commander_route_points.is_empty():
+		return false
+	commander_route_points.remove_at(commander_route_points.size() - 1)
+	var snapshot := simulation_host.current_snapshot if simulation_host != null else null
+	var commander := snapshot.get_commander(selected_commander_id) if snapshot != null else null
+	var target := commander.target_position if commander != null else Vector2.ZERO
+	commander_plan_preview_changed.emit(selected_commander_id, commander_route_points, target)
+	last_command_status = GameText.t(&"STATUS_COMMANDER_ROUTE_WAYPOINT") % commander_route_points.size()
+	return true
+
+
+func is_commander_route_planning(commander_id: StringName = &"") -> bool:
+	return command_mode == CommandMode.COMMANDER_ROUTE_TARGETING and (commander_id.is_empty() or selected_commander_id == commander_id)
+
+
+func cancel_commander_route_planning() -> void:
+	if command_mode != CommandMode.COMMANDER_ROUTE_TARGETING:
+		return
+	cancel_command_mode()
+	last_command_status = GameText.t(&"STATUS_COMMANDER_ROUTE_CANCELLED")
+
+
+func undo_formation_route_waypoint() -> bool:
+	if command_mode != CommandMode.FORMATION_ROUTE_TARGETING or formation_route_points.is_empty():
+		return false
+	formation_dragged_handle = FORMATION_DRAG_NONE
+	formation_route_points.remove_at(formation_route_points.size() - 1)
+	formation_plan_preview_changed.emit(formation_route_points, formation_line_start, formation_line_end, formation_line_start != formation_line_end)
+	last_command_status = GameText.t(&"STATUS_ROUTE_WAYPOINT_REMOVED") % formation_route_points.size()
+	return true
+
+
+func clear_selected_formation_route() -> CommandValidationResult:
+	if command_mode != CommandMode.FORMATION_ROUTE_TARGETING:
+		return null
+	var result := stop_selected()
+	cancel_command_mode()
+	last_command_status = GameText.t(&"STATUS_ROUTE_CLEARED") % GameText.command_result(result) if result != null else GameText.t(&"STATUS_NO_VALID_SELECTION")
+	return result
+
+
+func _handle_formation_route_input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion:
+		var motion := event as InputEventMouseMotion
+		if formation_dragged_handle != FORMATION_DRAG_NONE:
+			_move_formation_handle(_screen_to_world(motion.position))
+			return
+		if formation_line_drawing:
+			formation_line_end = _screen_to_world(motion.position)
+			_emit_formation_plan_preview()
+			return
+	if not event is InputEventMouseButton:
+		return
+	var mouse := event as InputEventMouseButton
+	if mouse.button_index == MOUSE_BUTTON_LEFT:
+		if mouse.pressed:
+			route_feedback_override = ""
+			formation_dragged_handle = _find_formation_handle(_screen_to_world(mouse.position))
+			if formation_dragged_handle != FORMATION_DRAG_NONE:
+				return
+			if formation_route_points.size() < 8:
+				formation_route_points.append(_screen_to_world(mouse.position))
+				_emit_formation_plan_preview()
+				last_command_status = GameText.t(&"STATUS_ROUTE_WAYPOINT_ADDED") % formation_route_points.size()
+		elif formation_dragged_handle != FORMATION_DRAG_NONE:
+			_move_formation_handle(_screen_to_world(mouse.position), true)
+		return
+	if mouse.button_index != MOUSE_BUTTON_RIGHT:
+		return
+	if mouse.pressed:
+		formation_dragged_handle = FORMATION_DRAG_NONE
+		formation_line_start = _screen_to_world(mouse.position)
+		formation_line_end = formation_line_start
+		formation_line_drawing = true
+		_emit_formation_plan_preview()
+		return
+	if formation_line_drawing:
+		formation_line_drawing = false
+		formation_line_end = _screen_to_world(mouse.position)
+		if formation_line_start.distance_to(formation_line_end) < 48.0:
+			formation_line_start -= Vector2(0.0, 80.0)
+			formation_line_end += Vector2(0.0, 80.0)
+		_submit_formation_plan()
+
+
+func _find_formation_handle(world_position: Vector2) -> int:
+	var hit_radius := FORMATION_HANDLE_HIT_RADIUS_SCREEN / camera_controller.zoom.x if camera_controller != null else FORMATION_HANDLE_HIT_RADIUS_SCREEN
+	var best_handle := FORMATION_DRAG_NONE
+	var best_distance := hit_radius
+	for index in range(formation_route_points.size()):
+		var distance := formation_route_points[index].distance_to(world_position)
+		if distance <= best_distance:
+			best_handle = index
+			best_distance = distance
+	if formation_line_start != formation_line_end:
+		var start_distance := formation_line_start.distance_to(world_position)
+		if start_distance <= best_distance:
+			best_handle = FORMATION_DRAG_LINE_START
+			best_distance = start_distance
+		var end_distance := formation_line_end.distance_to(world_position)
+		if end_distance <= best_distance:
+			best_handle = FORMATION_DRAG_LINE_END
+	return best_handle
+
+
+func _move_formation_handle(world_position: Vector2, finished: bool = false) -> void:
+	route_feedback_override = ""
+	if formation_dragged_handle >= 0 and formation_dragged_handle < formation_route_points.size():
+		formation_route_points[formation_dragged_handle] = world_position
+		last_command_status = GameText.t(&"STATUS_ROUTE_WAYPOINT_MOVED") % (formation_dragged_handle + 1)
+	elif formation_dragged_handle == FORMATION_DRAG_LINE_START:
+		formation_line_start = world_position
+		last_command_status = GameText.t(&"STATUS_FORMATION_LINE_ADJUSTED")
+	elif formation_dragged_handle == FORMATION_DRAG_LINE_END:
+		formation_line_end = world_position
+		last_command_status = GameText.t(&"STATUS_FORMATION_LINE_ADJUSTED")
+	_emit_formation_plan_preview()
+	if finished:
+		formation_dragged_handle = FORMATION_DRAG_NONE
+
+
+func _emit_formation_plan_preview() -> void:
+	formation_plan_preview_changed.emit(
+		formation_route_points,
+		formation_line_start,
+		formation_line_end,
+		formation_line_start != formation_line_end
+	)
+
+
+func _submit_formation_plan() -> CommandValidationResult:
+	var snapshot := simulation_host.current_snapshot
+	var unit_card := snapshot.get_unit_card(selected_unit_card_id) if snapshot != null else null
+	if unit_card == null or unit_card.formation_id == 0:
+		cancel_command_mode()
+		return null
+	var has_deployment_line := formation_line_start.distance_to(formation_line_end) >= 48.0
+	if formation_route_points.is_empty() and not has_deployment_line:
+		last_command_status = GameText.t(&"STATUS_ROUTE_NEEDS_TARGET")
+		return null
+	var target_position := (formation_line_start + formation_line_end) * 0.5 if has_deployment_line else formation_route_points[-1]
+	var result := simulation_host.submit_command(simulation_host.create_formation_move_command(
+		unit_card.formation_id,
+		target_position,
+		GameCommand.IssuerKind.PLAYER,
+		formation_route_points,
+		formation_line_start,
+		formation_line_end,
+		has_deployment_line
+	))
+	last_command_status = GameText.t(&"STATUS_ROUTE_SUBMITTED") % GameText.command_result(result)
+	route_feedback_override = "" if result.is_accepted() else last_command_status
+	if result.is_accepted():
+		command_mode = CommandMode.NORMAL
+		command_mode_changed.emit(command_mode)
+		formation_route_points = PackedVector2Array()
+		formation_line_start = Vector2.ZERO
+		formation_line_end = Vector2.ZERO
+		formation_dragged_handle = FORMATION_DRAG_NONE
+		formation_plan_preview_cleared.emit()
+	return result
+
+
+func set_unit_card_control(unit_card_id: StringName, action: UnitCardControlCommand.Action) -> CommandValidationResult:
+	var result := simulation_host.submit_command(
+		simulation_host.create_unit_card_control_command(unit_card_id, action)
+	)
+	last_command_status = GameText.t(&"STATUS_UNIT_CARD_CONTROL") % [
+		GameText.t(StringName("UNIT_CARD_CONTROL_%s" % UnitCardControlCommand.Action.keys()[action])),
+		GameText.command_result(result),
+	]
+	return result
+
+
+func select_commander_card(commander_id: StringName) -> void:
+	var snapshot := simulation_host.current_snapshot
+	var commander := snapshot.get_commander(commander_id) if snapshot != null else null
+	if commander == null or commander.faction_id != SimulationWorld.LOCAL_PLAYER_ID:
+		last_command_status = GameText.t(&"STATUS_COMMANDER_UNAVAILABLE")
+		return
+	simulation_host.record_playtest_ui_event("commander_card_selected", commander_id)
+	var member_ids: Array[int] = []
+	for unit_card_id in commander.subordinate_unit_card_ids:
+		var unit_card := snapshot.get_unit_card(unit_card_id)
+		if unit_card != null:
+			member_ids.append_array(unit_card.active_member_entity_ids)
+	_set_selection(member_ids)
+	selected_unit_card_id = &""
+	selected_commander_id = commander_id
+	last_command_status = GameText.t(&"STATUS_COMMANDER_SELECTED") % [
+		GameText.t(commander.display_name_key), member_ids.size(),
+	]
+
+
+func begin_commander_drag(commander_id: StringName, start_screen_position: Vector2) -> bool:
+	var snapshot := simulation_host.current_snapshot if simulation_host != null else null
+	var commander := snapshot.get_commander(commander_id) if snapshot != null else null
+	if commander == null or commander.faction_id != SimulationWorld.LOCAL_PLAYER_ID:
+		last_command_status = GameText.t(&"STATUS_COMMANDER_UNAVAILABLE")
+		return false
+	select_commander_card(commander_id)
+	commander_drag_active = true
+	commander_drag_id = commander_id
+	commander_drag_start_screen = start_screen_position
+	commander_drag_current_screen = start_screen_position
+	last_command_status = GameText.t(&"STATUS_COMMANDER_DRAG_TARGET") % GameText.t(commander.display_name_key)
+	return true
+
+
+func complete_commander_drag(world_position: Vector2) -> CommandValidationResult:
+	if not commander_drag_active or commander_drag_id.is_empty():
+		return null
+	var issued_commander_id := commander_drag_id
+	var snapshot := simulation_host.current_snapshot if simulation_host != null else null
+	var commander := snapshot.get_commander(issued_commander_id) if snapshot != null else null
+	var affected_cards := 0
+	if commander != null:
+		for unit_card_id in commander.subordinate_unit_card_ids:
+			var card := snapshot.get_unit_card(unit_card_id)
+			if card != null and card.deployment_state == UnitCardState.DeploymentState.DEPLOYED:
+				affected_cards += 1
+	var result := simulation_host.submit_command(
+		simulation_host.create_commander_objective_command(issued_commander_id, world_position)
+	)
+	_clear_commander_drag()
+	last_command_status = GameText.t(&"STATUS_COMMANDER_DRAG_SUBMITTED") % [
+		GameText.t(commander.display_name_key) if commander != null else String(issued_commander_id),
+		affected_cards,
+		GameText.command_result(result),
+	]
+	return result
+
+
+func cancel_commander_drag() -> void:
+	if not commander_drag_active:
+		return
+	_clear_commander_drag()
+	last_command_status = GameText.t(&"STATUS_COMMANDER_DRAG_CANCELLED")
+
+
+func _handle_commander_drag_input(event: InputEvent) -> bool:
+	if event is InputEventKey:
+		var key := event as InputEventKey
+		if key.pressed and not key.echo and key.keycode == KEY_C:
+			cancel_commander_drag()
+			return true
+		return false
+	if event is InputEventMouseMotion:
+		commander_drag_current_screen = (event as InputEventMouseMotion).position
+		commander_intent_preview_changed.emit(commander_drag_id, _screen_to_world(commander_drag_current_screen))
+		return true
+	if not event is InputEventMouseButton:
+		return false
+	var mouse := event as InputEventMouseButton
+	if mouse.pressed and mouse.button_index == MOUSE_BUTTON_RIGHT:
+		cancel_commander_drag()
+		return true
+	if mouse.pressed or mouse.button_index != MOUSE_BUTTON_LEFT:
+		return false
+	commander_drag_current_screen = mouse.position
+	var viewport := get_viewport()
+	var hovered := viewport.gui_get_hovered_control() if viewport != null else null
+	if hovered != null and hovered.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		cancel_commander_drag()
+	else:
+		complete_commander_drag(_screen_to_world(mouse.position))
+	return true
+
+
+func _clear_commander_drag() -> void:
+	commander_drag_active = false
+	commander_drag_id = &""
+	commander_intent_preview_cleared.emit()
+
+
+func _find_commander_task_handle_at(world_position: Vector2) -> StringName:
+	var snapshot := simulation_host.current_snapshot if simulation_host != null else null
+	if snapshot == null:
+		return &""
+	var hit_radius := COMMANDER_TASK_HANDLE_HIT_RADIUS_SCREEN / camera_controller.zoom.x if camera_controller != null else COMMANDER_TASK_HANDLE_HIT_RADIUS_SCREEN
+	if not selected_commander_id.is_empty():
+		var selected_commander := snapshot.get_commander(selected_commander_id)
+		if _is_draggable_commander_task(selected_commander) and _commander_task_hit_distance(selected_commander, world_position, snapshot) <= hit_radius:
+			return selected_commander_id
+	var closest_id: StringName
+	var closest_distance := INF
+	for commander in snapshot.commanders:
+		if not _is_draggable_commander_task(commander):
+			continue
+		var distance := _commander_task_hit_distance(commander, world_position, snapshot)
+		if distance <= hit_radius and distance < closest_distance:
+			closest_id = commander.definition_id
+			closest_distance = distance
+	return closest_id
+
+
+func _is_draggable_commander_task(commander: CommanderSnapshot) -> bool:
+	return commander != null \
+		and commander.faction_id == SimulationWorld.LOCAL_PLAYER_ID \
+		and not commander.current_task_ids.is_empty() \
+		and commander.target_position.is_finite()
+
+
+func _commander_task_hit_distance(commander: CommanderSnapshot, world_position: Vector2, snapshot: WorldSnapshot) -> float:
+	var target_distance := commander.target_position.distance_to(world_position)
+	var origin := _commander_task_origin(commander, snapshot)
+	if origin.distance_squared_to(commander.target_position) <= 1.0:
+		return target_distance
+	var closest_point := Geometry2D.get_closest_point_to_segment(world_position, origin, commander.target_position)
+	return minf(target_distance, closest_point.distance_to(world_position))
+
+
+func _commander_task_origin(commander: CommanderSnapshot, snapshot: WorldSnapshot) -> Vector2:
+	var origin := Vector2.ZERO
+	var formation_count := 0
+	for unit_card_id in commander.subordinate_unit_card_ids:
+		var unit_card := snapshot.get_unit_card(unit_card_id)
+		if unit_card == null or unit_card.formation_id == 0:
+			continue
+		var formation := snapshot.get_formation(unit_card.formation_id)
+		if formation != null:
+			origin += formation.anchor_position
+			formation_count += 1
+	if formation_count > 0:
+		return origin / float(formation_count)
+	var headquarters := snapshot.get_building(SimulationWorld.PLAYER_COMMAND_CENTER_ID)
+	return headquarters.position if headquarters != null else commander.target_position
+
+
 func context_command_selected_at(world_position: Vector2) -> CommandValidationResult:
+	if not selected_commander_id.is_empty() and selected_unit_card_id.is_empty():
+		return issue_commander_objective(world_position)
 	var enemy_id := _find_attack_target_at(world_position)
 	if enemy_id != 0:
 		return attack_selected_target(enemy_id)
@@ -199,6 +877,41 @@ func context_command_selected_at(world_position: Vector2) -> CommandValidationRe
 	if ore_field_id != 0 and _selected_harvester_id() != 0:
 		return _submit_harvest(_selected_harvester_id(), ore_field_id)
 	return move_selected_to(world_position)
+
+
+func issue_commander_objective(world_position: Vector2) -> CommandValidationResult:
+	if selected_commander_id.is_empty():
+		return null
+	var result := simulation_host.submit_command(
+		simulation_host.create_commander_objective_command(selected_commander_id, world_position)
+	)
+	last_command_status = GameText.t(&"STATUS_COMMANDER_OBJECTIVE") % GameText.command_result(result)
+	return result
+
+
+func set_commander_posture(commander_id: StringName, posture: CommanderState.Posture) -> CommandValidationResult:
+	var result := simulation_host.submit_command(
+		simulation_host.create_commander_posture_command(commander_id, posture)
+	)
+	last_command_status = GameText.t(&"STATUS_COMMANDER_POSTURE") % [
+		GameText.t(StringName("COMMANDER_POSTURE_%s" % CommanderState.Posture.keys()[posture])),
+		GameText.command_result(result),
+	]
+	return result
+
+
+func equip_commander_doctrine(commander_id: StringName, doctrine_id: StringName, slot_index: int = 0) -> CommandValidationResult:
+	var result := simulation_host.submit_command(
+		simulation_host.create_equip_doctrine_command(commander_id, doctrine_id, slot_index)
+	)
+	last_command_status = GameText.t(&"STATUS_COMMANDER_DOCTRINE") % [
+		GameText.t(_doctrine_display_key(doctrine_id)), GameText.command_result(result),
+	]
+	return result
+
+
+func _doctrine_display_key(doctrine_id: StringName) -> StringName:
+	return StringName("DOCTRINE_%s" % String(doctrine_id).to_upper())
 
 
 func attack_selected_target(attack_target_entity_id: int) -> CommandValidationResult:
@@ -464,6 +1177,8 @@ func _find_friendly_building_at(world_position: Vector2) -> int:
 
 
 func move_selected_to(world_position: Vector2) -> CommandValidationResult:
+	if not selected_commander_id.is_empty() and selected_unit_card_id.is_empty():
+		return issue_commander_objective(world_position)
 	intent_sequence += 1
 	if pending_move_active:
 		coalesced_count += 1
@@ -519,14 +1234,28 @@ func begin_attack_move_targeting() -> void:
 
 
 func cancel_command_mode() -> void:
+	var previous_mode := command_mode
 	var was_build_targeting := _is_build_targeting()
 	var was_attack_targeting := command_mode == CommandMode.ATTACK_MOVE_TARGETING
+	var was_formation_targeting := command_mode == CommandMode.FORMATION_ROUTE_TARGETING
+	var was_commander_route_targeting := command_mode == CommandMode.COMMANDER_ROUTE_TARGETING
 	command_mode = CommandMode.NORMAL
+	route_feedback_override = ""
+	if previous_mode != command_mode:
+		command_mode_changed.emit(command_mode)
 	last_command_status = GameText.t(&"STATUS_TARGETING_CANCELLED")
 	if was_build_targeting:
 		build_preview_cleared.emit()
 	if was_attack_targeting:
 		attack_preview_cleared.emit()
+	if was_formation_targeting:
+		formation_line_drawing = false
+		formation_dragged_handle = FORMATION_DRAG_NONE
+		formation_route_points = PackedVector2Array()
+		formation_plan_preview_cleared.emit()
+	if was_commander_route_targeting:
+		commander_route_points = PackedVector2Array()
+		commander_plan_preview_cleared.emit()
 
 
 func _is_build_targeting() -> bool:
@@ -552,11 +1281,32 @@ func _update_attack_preview(world_position: Vector2) -> void:
 
 func attack_or_move_selected_at(world_position: Vector2) -> CommandValidationResult:
 	var target_id := _find_attack_target_at(world_position)
-	var result := attack_selected_target(target_id) if target_id != 0 else attack_move_selected_to(world_position)
+	var last_seen_contact := _find_last_seen_contact_at(world_position) if target_id == 0 else null
+	var destination := last_seen_contact.position if last_seen_contact != null else world_position
+	var result := attack_selected_target(target_id) if target_id != 0 else attack_move_selected_to(destination)
+	if last_seen_contact != null and result != null:
+		last_command_status = GameText.t(&"STATUS_ATTACK_MOVE_LAST_SEEN") % GameText.command_result(result)
 	if result != null and result.is_accepted():
 		command_mode = CommandMode.NORMAL
 		attack_preview_cleared.emit()
 	return result
+
+
+func _find_last_seen_contact_at(world_position: Vector2) -> UnitSnapshot:
+	var snapshot := simulation_host.current_snapshot if simulation_host != null else null
+	if snapshot == null:
+		return null
+	var hit_radius := HIT_RADIUS_SCREEN / camera_controller.zoom.x if camera_controller != null else HIT_RADIUS_SCREEN
+	var nearest: UnitSnapshot
+	var nearest_distance := INF
+	for unit in snapshot.units:
+		if not unit.enabled or unit.faction_id == SimulationWorld.LOCAL_PLAYER_ID or unit.is_visible_to_local_player:
+			continue
+		var distance := unit.position.distance_to(world_position)
+		if distance <= hit_radius and distance < nearest_distance:
+			nearest = unit
+			nearest_distance = distance
+	return nearest
 
 
 func attack_move_selected_to(world_position: Vector2) -> CommandValidationResult:
@@ -738,6 +1488,8 @@ func recall_control_group(group_number: int, additive: bool = false) -> void:
 
 
 func set_selected_disposition(disposition: UnitDispositionCommand.Disposition, destination_formation_id: int = 0) -> CommandValidationResult:
+	if not selected_unit_card_id.is_empty() and disposition == UnitDispositionCommand.Disposition.RETURN:
+		return set_unit_card_control(selected_unit_card_id, UnitCardControlCommand.Action.RETURN_TO_COMMANDER)
 	if selected_entity_ids.size() != 1:
 		last_command_status = GameText.t(&"STATUS_ALT_SELECT")
 		return null
@@ -747,7 +1499,28 @@ func set_selected_disposition(disposition: UnitDispositionCommand.Disposition, d
 
 
 func _handle_key(event: InputEventKey) -> void:
-	if event.keycode == KEY_ESCAPE:
+	if command_mode == CommandMode.COMMANDER_ROUTE_TARGETING and event.keycode == KEY_BACKSPACE:
+		undo_commander_route_waypoint()
+		return
+	if command_mode == CommandMode.COMMANDER_ROUTE_TARGETING and event.keycode in [KEY_ENTER, KEY_KP_ENTER] and not commander_route_points.is_empty():
+		submit_selected_commander_route()
+		return
+	if command_mode == CommandMode.FORMATION_ROUTE_TARGETING:
+		if event.keycode == KEY_BACKSPACE:
+			undo_formation_route_waypoint()
+			return
+		if event.keycode == KEY_DELETE:
+			clear_selected_formation_route()
+			return
+		if event.keycode in [KEY_ENTER, KEY_KP_ENTER]:
+			_submit_formation_plan()
+			return
+	if event.keycode == KEY_F3 and not event.echo:
+		diagnostic_individual_selection_enabled = not diagnostic_individual_selection_enabled
+		if diagnostic_individual_selection_enabled and simulation_host != null:
+			simulation_host.record_playtest_ui_event("diagnostic_individual_mode_enabled")
+		return
+	if event.keycode == KEY_C:
 		cancel_command_mode()
 		return
 	if event.keycode == KEY_R and not event.ctrl_pressed and not event.alt_pressed:
@@ -853,6 +1626,29 @@ func prune_selection() -> void:
 		_set_selection(valid_ids)
 
 
+func reset_for_new_scenario() -> void:
+	if commander_drag_active:
+		_clear_commander_drag()
+	command_mode = CommandMode.NORMAL
+	route_feedback_override = ""
+	pending_move_active = false
+	left_dragging = false
+	formation_line_drawing = false
+	formation_route_points = PackedVector2Array()
+	control_groups.clear()
+	selected_entity_ids.clear()
+	selected_entity_id = 0
+	selected_building_id = 0
+	selected_unit_card_id = &""
+	selected_commander_id = &""
+	pending_intent_cleared.emit()
+	build_preview_cleared.emit()
+	attack_preview_cleared.emit()
+	formation_plan_preview_cleared.emit()
+	world_presentation.set_selected_entities([], 0, 0)
+	refresh_locale_status()
+
+
 func _set_selection(entity_ids: Array[int]) -> void:
 	var unique: Dictionary = {}
 	for entity_id in entity_ids:
@@ -861,6 +1657,7 @@ func _set_selection(entity_ids: Array[int]) -> void:
 	selected_entity_ids.sort()
 	selected_entity_id = selected_entity_ids[0] if not selected_entity_ids.is_empty() else 0
 	selected_building_id = 0
+	_sync_army_card_selection()
 	world_presentation.set_selected_entities(selected_entity_ids, selected_entity_id, selected_building_id)
 
 
@@ -868,11 +1665,30 @@ func _set_building_selection(building_id: int) -> void:
 	selected_entity_ids.clear()
 	selected_entity_id = 0
 	selected_building_id = building_id
+	selected_unit_card_id = &""
+	selected_commander_id = &""
 	world_presentation.set_selected_entities([], 0, selected_building_id)
+
+
+func _sync_army_card_selection() -> void:
+	selected_unit_card_id = &""
+	selected_commander_id = &""
+	var snapshot := simulation_host.current_snapshot if simulation_host != null else null
+	if snapshot == null or selected_entity_ids.is_empty():
+		return
+	for unit_card in snapshot.unit_cards:
+		if unit_card.active_member_entity_ids == selected_entity_ids:
+			selected_unit_card_id = unit_card.definition_id
+			selected_commander_id = unit_card.commander_definition_id
+			return
 
 
 func _is_selectable(unit: UnitSnapshot) -> bool:
 	return unit.enabled and unit.controller_id == SimulationWorld.LOCAL_PLAYER_ID
+
+
+func _formal_card_selection_enabled() -> bool:
+	return simulation_host != null and SimulationWorld.is_card_battle_kind(simulation_host.scenario_kind) and not diagnostic_individual_selection_enabled
 
 
 func _screen_to_world(screen_position: Vector2) -> Vector2:

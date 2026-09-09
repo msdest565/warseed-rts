@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="BattleObjectiveSetDefinition" load_steps=11 format=3]
+
+[ext_resource type="Script" path="res://src/objectives/battle_objective_set_definition.gd" id="1_set"]
+[ext_resource type="Script" path="res://src/objectives/battle_objective_definition.gd" id="2_objective"]
+[ext_resource type="Script" path="res://src/objectives/objective_group_definition.gd" id="3_group"]
+
+[sub_resource type="Resource" id="ObjectiveEnemyHeadquarters"]
+script = ExtResource("2_objective")
+objective_id = &"enemy_headquarters_destroyed"
+display_name_key = &"OBJECTIVE_DESTROY_ENEMY_HEADQUARTERS"
+kind = 0
+target_entity_id = 2101
+
+[sub_resource type="Resource" id="ObjectivePlayerHeadquarters"]
+script = ExtResource("2_objective")
+objective_id = &"player_headquarters_destroyed"
+display_name_key = &"OBJECTIVE_PROTECT_PLAYER_HEADQUARTERS"
+kind = 0
+target_entity_id = 2001
+
+[sub_resource type="Resource" id="ObjectiveTimeLimit"]
+script = ExtResource("2_objective")
+objective_id = &"time_limit_reached"
+display_name_key = &"OBJECTIVE_FINISH_BEFORE_TIME_LIMIT"
+kind = 1
+
+[sub_resource type="Resource" id="GroupVictory"]
+script = ExtResource("3_group")
+group_id = &"headquarters_victory"
+objective_ids = Array[StringName]([&"enemy_headquarters_destroyed"])
+outcome_result = 1
+outcome_grade = 1
+priority = 100
+
+[sub_resource type="Resource" id="GroupHeadquartersDefeat"]
+script = ExtResource("3_group")
+group_id = &"headquarters_defeat"
+objective_ids = Array[StringName]([&"player_headquarters_destroyed"])
+outcome_result = 2
+outcome_grade = 4
+priority = 200
+
+[sub_resource type="Resource" id="GroupTimeDefeat"]
+script = ExtResource("3_group")
+group_id = &"time_limit_defeat"
+objective_ids = Array[StringName]([&"time_limit_reached"])
+outcome_result = 2
+outcome_grade = 4
+priority = 150
+
+[resource]
+script = ExtResource("1_set")
+objective_set_id = &"standard_card_battle"
+objectives = Array[ExtResource("2_objective")]([SubResource("ObjectiveEnemyHeadquarters"), SubResource("ObjectivePlayerHeadquarters"), SubResource("ObjectiveTimeLimit")])
+conclusion_groups = Array[ExtResource("3_group")]([SubResource("GroupVictory"), SubResource("GroupHeadquartersDefeat"), SubResource("GroupTimeDefeat")])

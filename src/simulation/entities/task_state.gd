@@ -64,6 +64,7 @@ var formation_id: int = 0
 var participant_entity_ids: Array[int] = []
 var original_participant_entity_ids: Array[int] = []
 var route: PackedVector2Array = PackedVector2Array()
+var planned_route: PackedVector2Array = PackedVector2Array()
 var accepted_tick: int = -1
 var last_transition_tick: int = 0
 var progress_current: int = 0
@@ -77,6 +78,17 @@ var replan_attempts: int = 0
 var last_evasion_tick: int = -1000000
 var last_detail: String = ""
 var requires_proactive_authorization: bool = false
+var unit_card_id: StringName
+var persistent_order: bool = false
+var activation_tick: int = 0
+var final_target_position: Vector2
+var has_staged_target: bool = false
+var requires_observed_contact: bool = false
+var reported_visible_contact_ids: Array[int] = []
+var discovered_contact_ids: Array[int] = []
+var coordinated_target_entity_id: int = 0
+var coordinated_support_until_tick: int = -1
+var reinforcement_committed: bool = false
 
 func _init(new_task_id: int, new_agent_id: int, new_participants: Array[int] = []) -> void:
 	task_id = new_task_id

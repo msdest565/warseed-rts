@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CommanderDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/data/commander_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+definition_id = &"lu_zheng"
+display_name_key = &"COMMANDER_LU_ZHENG"
+capacity = 6
+personality_key = &"PERSONALITY_RESOLUTE"
+specialty_keys = Array[StringName]([&"SPECIALTY_REORGANIZATION", &"SPECIALTY_DEFENSE", &"SPECIALTY_LOGISTICS"])
+doctrine_keys = Array[StringName]([&"DOCTRINE_RALLY_REORGANIZATION"])
+available_doctrine_ids = Array[StringName]([&"rally_reorganization", &"elastic_defense", &"fighting_withdrawal"])

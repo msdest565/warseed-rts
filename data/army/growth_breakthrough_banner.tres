@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="GrowthDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://src/data/growth_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+definition_id = &"breakthrough_banner"
+display_name_key = &"GROWTH_BREAKTHROUGH_BANNER"
+benefit_key = &"GROWTH_BREAKTHROUGH_BANNER_BENEFIT"
+tradeoff_key = &"GROWTH_BREAKTHROUGH_BANNER_TRADEOFF"
+merit_cost = 4
+armor_bonus = -1.0
+move_speed_multiplier = 1.1

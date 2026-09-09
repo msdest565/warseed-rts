@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="GrowthDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://src/data/growth_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+definition_id = &"long_range_optics"
+kind = 1
+display_name_key = &"GROWTH_LONG_RANGE_OPTICS"
+benefit_key = &"GROWTH_LONG_RANGE_OPTICS_BENEFIT"
+tradeoff_key = &"GROWTH_LONG_RANGE_OPTICS_TRADEOFF"
+replacement_cost = 5
+refit_days = 1
+armor_bonus = -1.0
+sight_range_multiplier = 1.25
+attack_range_multiplier = 1.1

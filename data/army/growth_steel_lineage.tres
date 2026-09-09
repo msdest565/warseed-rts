@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="GrowthDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://src/data/growth_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+definition_id = &"steel_lineage"
+display_name_key = &"GROWTH_STEEL_LINEAGE"
+benefit_key = &"GROWTH_STEEL_LINEAGE_BENEFIT"
+tradeoff_key = &"GROWTH_STEEL_LINEAGE_TRADEOFF"
+merit_cost = 4
+armor_bonus = 1.0
+move_speed_multiplier = 0.95
+replacement_cost_modifier = 1

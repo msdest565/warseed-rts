@@ -14,6 +14,13 @@ var knowledge: FactionKnowledgeSnapshot
 var is_true_state: bool = false
 var tasks: Array[TaskSnapshot]
 var mission: MissionSnapshot
+var commanders: Array[CommanderSnapshot]
+var unit_cards: Array[UnitCardSnapshot]
+var strategic_regions: Array[StrategicRegionSnapshot]
+var intel_reports: Array[IntelReportSnapshot]
+var enemy_reactions: Array[EnemyReactionSnapshot]
+var objectives: Array[ObjectiveSnapshot]
+var outcome: BattleOutcome
 
 
 func _init(
@@ -29,7 +36,14 @@ func _init(
 	new_knowledge: FactionKnowledgeSnapshot = null,
 	new_is_true_state: bool = false,
 	new_tasks: Array[TaskSnapshot] = [],
-	new_mission: MissionSnapshot = null
+	new_mission: MissionSnapshot = null,
+	new_commanders: Array[CommanderSnapshot] = [],
+	new_unit_cards: Array[UnitCardSnapshot] = [],
+	new_strategic_regions: Array[StrategicRegionSnapshot] = [],
+	new_intel_reports: Array[IntelReportSnapshot] = [],
+	new_enemy_reactions: Array[EnemyReactionSnapshot] = [],
+	new_objectives: Array[ObjectiveSnapshot] = [],
+	new_outcome: BattleOutcome = null
 ) -> void:
 	tick = new_tick
 	units = new_units
@@ -44,6 +58,20 @@ func _init(
 	is_true_state = new_is_true_state
 	tasks = new_tasks
 	mission = new_mission
+	commanders = new_commanders
+	unit_cards = new_unit_cards
+	strategic_regions = new_strategic_regions
+	intel_reports = new_intel_reports
+	enemy_reactions = new_enemy_reactions
+	objectives = new_objectives
+	outcome = new_outcome.duplicate_value() if new_outcome != null else BattleOutcome.new()
+
+
+func get_objective(objective_id: StringName) -> ObjectiveSnapshot:
+	for objective in objectives:
+		if objective.objective_id == objective_id:
+			return objective
+	return null
 
 
 func get_task(task_id: int) -> TaskSnapshot:
@@ -71,6 +99,27 @@ func get_formation(formation_id: int) -> FormationSnapshot:
 	for formation in formations:
 		if formation.formation_id == formation_id:
 			return formation
+	return null
+
+
+func get_commander(definition_id: StringName) -> CommanderSnapshot:
+	for commander in commanders:
+		if commander.definition_id == definition_id:
+			return commander
+	return null
+
+
+func get_unit_card(definition_id: StringName) -> UnitCardSnapshot:
+	for unit_card in unit_cards:
+		if unit_card.definition_id == definition_id:
+			return unit_card
+	return null
+
+
+func get_strategic_region(region_id: StringName) -> StrategicRegionSnapshot:
+	for region in strategic_regions:
+		if region.region_id == region_id:
+			return region
 	return null
 
 

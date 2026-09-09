@@ -15,8 +15,23 @@ func validate(
 	building_catalog: BuildingDefinitionCatalog = null,
 	faction_knowledge: Dictionary = {},
 	logic_grid: LogicGrid = null,
-	tasks: Dictionary = {}
+	tasks: Dictionary = {},
+	unit_cards: Dictionary = {},
+	strategic_regions: Dictionary = {},
+	commanders: Dictionary = {},
+	doctrines: Dictionary = {},
+	battle_definition: BattleDefinition = null
 ) -> CommandValidationResult:
+	if command is EquipDoctrineCommand:
+		return _validate_equip_doctrine(command as EquipDoctrineCommand, commanders, doctrines)
+	if command is CommanderOrderCommand:
+		return _validate_commander_order(command as CommanderOrderCommand, commanders, unit_cards, formations, strategic_regions, battlefield_bounds, pathfinder)
+	if command is UnitCardControlCommand:
+		return _validate_unit_card_control(command as UnitCardControlCommand, unit_cards, units, formations)
+	if command is SupportOrderCommand:
+		return _validate_support_order(command as SupportOrderCommand, unit_cards, strategic_regions, factions, units, battle_definition)
+	if command is DeployUnitCardCommand:
+		return _validate_unit_card_deployment(command as DeployUnitCardCommand, unit_cards, factions, buildings, battlefield_bounds, battle_definition)
 	if command is StrategicOrderCommand:
 		return _validate_strategic_order(command as StrategicOrderCommand, units, formations, buildings, ore_fields, factions, faction_knowledge, logic_grid, battlefield_bounds, pathfinder, tasks)
 	if command is TaskControlCommand:
@@ -64,6 +79,231 @@ func validate(
 	return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 
 
+func _validate_equip_doctrine(
+	command: EquipDoctrineCommand,
+	commanders: Dictionary,
+	doctrines: Dictionary
+) -> CommandValidationResult:
+	var commander := commanders.get(command.commander_id) as CommanderState
+	if commander == null or not doctrines.has(command.doctrine_id):
+		return _rejected(CommandValidationResult.Reason.INVALID_DEFINITION)
+	if commander.faction_id != command.issuer_id:
+		return _rejected(CommandValidationResult.Reason.NOT_CONTROLLER)
+	if command.slot_index < 0 or command.slot_index >= commander.doctrine_slot_count or not commander.available_doctrine_ids.has(command.doctrine_id):
+		return _rejected(CommandValidationResult.Reason.INVALID_DISPOSITION)
+	return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
+
+
+func _validate_commander_order(
+	command: CommanderOrderCommand,
+	commanders: Dictionary,
+	unit_cards: Dictionary,
+	formations: Dictionary,
+	strategic_regions: Dictionary,
+	battlefield_bounds: Rect2,
+	pathfinder: GridPathfinder
+) -> CommandValidationResult:
+	const MAX_COMMANDER_ROUTE_POINTS := 8
+	var commander := commanders.get(command.commander_id) as CommanderState
+	if commander == null:
+		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+	if commander.faction_id != command.issuer_id:
+		return _rejected(CommandValidationResult.Reason.NOT_CONTROLLER)
+	if command.posture < CommanderState.Posture.CAUTIOUS or command.posture > CommanderState.Posture.DISENGAGE:
+		return _rejected(CommandValidationResult.Reason.INVALID_DISPOSITION)
+	if command.order_kind == CommanderOrderCommand.OrderKind.SET_POSTURE:
+		return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
+	if command.order_kind == CommanderOrderCommand.OrderKind.CANCEL_INTENT:
+		return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
+	if command.order_kind == CommanderOrderCommand.OrderKind.ASSIGN_INTENT:
+		if command.intent_id.is_empty() or command.target_region_id.is_empty() or command.main_axis_region_id.is_empty():
+			return _rejected(CommandValidationResult.Reason.INVALID_DEFINITION)
+		if not strategic_regions.has(command.target_region_id) or not strategic_regions.has(command.main_axis_region_id):
+			return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+		if command.reserve_policy < CommanderState.ReservePolicy.HOLD or command.reserve_policy > CommanderState.ReservePolicy.COMMIT_AVAILABLE:
+			return _rejected(CommandValidationResult.Reason.INVALID_DISPOSITION)
+	if not _is_valid_position(command.target_position, battlefield_bounds):
+		return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
+	if command.route_points.size() > MAX_COMMANDER_ROUTE_POINTS:
+		return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
+	for route_point in command.route_points:
+		if not _is_valid_position(route_point, battlefield_bounds):
+			return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
+	var available_cards := 0
+	for unit_card_id in commander.subordinate_unit_card_ids:
+		var unit_card := unit_cards.get(unit_card_id) as UnitCardState
+		if unit_card == null or unit_card.deployment_state != UnitCardState.DeploymentState.DEPLOYED:
+			continue
+		if not formations.has(unit_card.formation_id):
+			return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+		var formation := formations[unit_card.formation_id] as FormationState
+		if pathfinder != null:
+			var segment_start := formation.anchor_position
+			for route_point in command.route_points:
+				if pathfinder.find_path(segment_start, route_point).is_empty():
+					return _rejected(CommandValidationResult.Reason.PATH_UNAVAILABLE)
+				segment_start = route_point
+			if pathfinder.find_path(segment_start, command.target_position).is_empty():
+				return _rejected(CommandValidationResult.Reason.PATH_UNAVAILABLE)
+		available_cards += 1
+	if available_cards == 0:
+		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+	return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
+
+
+func _validate_unit_card_control(
+	command: UnitCardControlCommand,
+	unit_cards: Dictionary,
+	units: Dictionary,
+	formations: Dictionary
+) -> CommandValidationResult:
+	var unit_card := unit_cards.get(command.unit_card_id) as UnitCardState
+	if unit_card == null:
+		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+	if unit_card.faction_id != command.issuer_id:
+		return _rejected(CommandValidationResult.Reason.NOT_CONTROLLER)
+	if unit_card.deployment_state != UnitCardState.DeploymentState.DEPLOYED:
+		return _rejected(CommandValidationResult.Reason.INVALID_DEPLOYMENT_STATE)
+	var active_count := 0
+	for entity_id in unit_card.member_entity_ids:
+		var unit := units.get(entity_id) as UnitState
+		if unit == null or not unit.enabled:
+			continue
+		if unit.controller_id != command.issuer_id:
+			return _rejected(CommandValidationResult.Reason.NOT_CONTROLLER)
+		active_count += 1
+	if active_count == 0:
+		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+	match command.action:
+		UnitCardControlCommand.Action.TAKEOVER:
+			if unit_card.control_state == UnitCardState.ControlState.RETURNING:
+				return _rejected(CommandValidationResult.Reason.INVALID_DISPOSITION)
+		UnitCardControlCommand.Action.RETURN_TO_COMMANDER:
+			if unit_card.return_formation_id == 0 or not formations.has(unit_card.return_formation_id):
+				return _rejected(CommandValidationResult.Reason.INVALID_DISPOSITION)
+			if unit_card.control_state not in [UnitCardState.ControlState.PLAYER_OVERRIDDEN, UnitCardState.ControlState.RETURNING]:
+				return _rejected(CommandValidationResult.Reason.INVALID_DISPOSITION)
+		UnitCardControlCommand.Action.STAY_MANUAL:
+			if unit_card.control_state == UnitCardState.ControlState.RETURNING:
+				return _rejected(CommandValidationResult.Reason.INVALID_DISPOSITION)
+	return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
+
+
+func _validate_support_order(
+	command: SupportOrderCommand,
+	unit_cards: Dictionary,
+	strategic_regions: Dictionary,
+	factions: Dictionary,
+	units: Dictionary,
+	battle_definition: BattleDefinition = null
+) -> CommandValidationResult:
+	var faction := factions.get(command.issuer_id) as FactionState
+	if faction == null:
+		return _rejected(CommandValidationResult.Reason.NOT_CONTROLLER)
+	var support_definition := battle_definition.support_for_kind(command.support_kind) if battle_definition != null else null
+	if battle_definition != null and support_definition == null:
+		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+	var supply_cost := support_definition.supply_cost if support_definition != null else 2
+	if faction.supply < supply_cost:
+		return _rejected(CommandValidationResult.Reason.INSUFFICIENT_SUPPLY)
+	if command.support_kind == SupportOrderCommand.SupportKind.AIR_RECON:
+		if not strategic_regions.has(command.primary_region_id) or not strategic_regions.has(command.secondary_region_id):
+			return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+		var primary := strategic_regions[command.primary_region_id] as StrategicRegionState
+		var secondary := strategic_regions[command.secondary_region_id] as StrategicRegionState
+		var adjacent := primary.adjacent_region_ids.has(secondary.region_id) or secondary.adjacent_region_ids.has(primary.region_id)
+		if battle_definition == null and primary.adjacent_region_ids.is_empty() and secondary.adjacent_region_ids.is_empty():
+			var pair := [command.primary_region_id, command.secondary_region_id]
+			adjacent = pair.has(&"central_relay") and (pair.has(&"west_mine") or pair.has(&"east_supply"))
+		return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED) if adjacent else _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+	if command.support_kind == SupportOrderCommand.SupportKind.ENGINEERING_ROUTE:
+		if battle_definition == null or not battle_definition.engineering_route_dictionary().has(command.primary_region_id):
+			return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+		var engineering_card := unit_cards.get(command.unit_card_id) as UnitCardState
+		if engineering_card == null or engineering_card.faction_id != command.issuer_id:
+			return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+		if engineering_card.deployment_state != UnitCardState.DeploymentState.DEPLOYED or engineering_card.formation_id == 0:
+			return _rejected(CommandValidationResult.Reason.INVALID_DEPLOYMENT_STATE)
+		if engineering_card.definition.unit_definition_id != &"engineer_vehicle":
+			return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+		return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
+	if command.support_kind == SupportOrderCommand.SupportKind.FIRE_SUPPORT:
+		return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED) if strategic_regions.has(command.primary_region_id) else _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+	var unit_card := unit_cards.get(command.unit_card_id) as UnitCardState
+	if unit_card == null or unit_card.faction_id != command.issuer_id:
+		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+	if unit_card.deployment_state != UnitCardState.DeploymentState.DEPLOYED or unit_card.formation_id == 0:
+		return _rejected(CommandValidationResult.Reason.INVALID_DEPLOYMENT_STATE)
+	if command.support_kind == SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT:
+		var active_strength := _active_unit_card_strength(unit_card, units)
+		if active_strength >= unit_card.definition.authorized_strength:
+			return _rejected(CommandValidationResult.Reason.UNIT_CARD_FULL_STRENGTH)
+		var population_room := maxi(0, faction.population_capacity - faction.population)
+		var configured_strength := support_definition.strength if support_definition != null else 2
+		var restored_strength := mini(configured_strength, mini(unit_card.definition.authorized_strength - active_strength, population_room))
+		if restored_strength <= 0:
+			return _rejected(CommandValidationResult.Reason.POPULATION_FULL)
+		return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
+	if command.support_kind == SupportOrderCommand.SupportKind.RAPID_MOBILITY and unit_card.rapid_mobility_ticks_remaining > 0:
+		return _rejected(CommandValidationResult.Reason.INVALID_DEPLOYMENT_STATE)
+	if command.support_kind == SupportOrderCommand.SupportKind.FRONTLINE_LOGISTICS:
+		var needs_support := unit_card.organization_enabled and battle_definition != null and unit_card.organization < battle_definition.organization_max
+		for entity_id in unit_card.member_entity_ids:
+			var member := units.get(entity_id) as UnitState
+			needs_support = needs_support or (member != null and member.enabled and member.health < member.max_health)
+		if not needs_support:
+			return _rejected(CommandValidationResult.Reason.INVALID_DEPLOYMENT_STATE)
+		return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
+	if unit_card.fortified_ticks_remaining > 0:
+		return _rejected(CommandValidationResult.Reason.INVALID_DEPLOYMENT_STATE)
+	return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
+
+
+func _active_unit_card_strength(unit_card: UnitCardState, units: Dictionary) -> int:
+	var strength := 0
+	for entity_id in unit_card.member_entity_ids:
+		var unit := units.get(entity_id) as UnitState
+		if unit != null and unit.enabled:
+			strength += 1
+	return strength
+
+
+func _validate_unit_card_deployment(
+	command: DeployUnitCardCommand,
+	unit_cards: Dictionary,
+	factions: Dictionary,
+	buildings: Dictionary,
+	battlefield_bounds: Rect2,
+	battle_definition: BattleDefinition = null
+) -> CommandValidationResult:
+	var unit_card := unit_cards.get(command.unit_card_id) as UnitCardState
+	if unit_card == null or unit_card.faction_id != command.issuer_id:
+		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+	if not command.commander_id.is_empty() and command.commander_id != unit_card.commander_definition_id:
+		return _rejected(CommandValidationResult.Reason.COMMANDER_MISMATCH)
+	if unit_card.deployment_state != UnitCardState.DeploymentState.RESERVE:
+		return _rejected(CommandValidationResult.Reason.INVALID_DEPLOYMENT_STATE)
+	var faction := factions.get(unit_card.faction_id) as FactionState
+	if faction == null:
+		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+	if faction.supply < unit_card.effective_supply_cost():
+		return _rejected(CommandValidationResult.Reason.INSUFFICIENT_SUPPLY)
+	if faction.population + unit_card.available_strength > faction.population_capacity:
+		return _rejected(CommandValidationResult.Reason.POPULATION_FULL)
+	if not battlefield_bounds.has_point(command.deployment_position):
+		return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
+	var headquarters_position := Vector2(-INF, -INF)
+	for building_variant in buildings.values():
+		var building := building_variant as BuildingState
+		if building.enabled and building.faction_id == unit_card.faction_id and building.definition_id == &"command_center":
+			headquarters_position = building.position
+			break
+	var deployment_radius := battle_definition.deployment_radius if battle_definition != null else 384.0
+	if not is_finite(headquarters_position.x) or headquarters_position.distance_to(command.deployment_position) > deployment_radius:
+		return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
+	return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
+
+
 func _validate_attack(command: AttackCommand, units: Dictionary, formations: Dictionary, buildings: Dictionary, faction_knowledge: Dictionary, logic_grid: LogicGrid) -> CommandValidationResult:
 	var attacker_ids: Array[int] = []
 	if command.formation_id != 0:
@@ -80,7 +320,7 @@ func _validate_attack(command: AttackCommand, units: Dictionary, formations: Dic
 		if not units.has(entity_id):
 			return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 		var attacker := units[entity_id] as UnitState
-		if not attacker.can_attack or not attacker.can_accept_attack_orders:
+		if not attacker.enabled or not attacker.can_attack or not attacker.can_accept_attack_orders:
 			continue
 		combat_attacker_ids.append(entity_id)
 		var attacker_result := _validate_unit(attacker, command.issuer_id)
@@ -264,27 +504,59 @@ func _validate_formation_move(
 	battlefield_bounds: Rect2,
 	pathfinder: GridPathfinder
 ) -> CommandValidationResult:
+	const MAX_ROUTE_POINTS := 8
+	const MIN_DEPLOYMENT_LINE_LENGTH := 48.0
+	const MAX_DEPLOYMENT_LINE_LENGTH := 520.0
 	if not formations.has(command.formation_id):
 		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 	var formation := formations[command.formation_id] as FormationState
 	if formation.leader_entity_id != command.target_entity_id:
 		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
+	var active_member_count := 0
 	for entity_id in formation.member_entity_ids:
 		if not units.has(entity_id):
 			return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 		var member := units[entity_id] as UnitState
+		if not member.enabled:
+			continue
+		active_member_count += 1
 		var member_result := _validate_unit(member, command.issuer_id)
 		if not member_result.is_accepted():
 			return member_result
 		if command.issuer_kind == GameCommand.IssuerKind.AGENT and not _agent_can_control(member, command):
 			return _rejected(CommandValidationResult.Reason.AGENT_OVERRIDE_BLOCKED)
-	if not _is_valid_position(command.target_position, battlefield_bounds):
+	if active_member_count == 0:
+		return _rejected(CommandValidationResult.Reason.ENTITY_DISABLED)
+	if command.route_points.size() > MAX_ROUTE_POINTS or not _is_valid_position(command.target_position, battlefield_bounds):
 		return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
+	for waypoint in command.route_points:
+		if not _is_valid_position(waypoint, battlefield_bounds):
+			return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
+	if command.has_deployment_line:
+		var line_length := command.deployment_line_start.distance_to(command.deployment_line_end)
+		if line_length < MIN_DEPLOYMENT_LINE_LENGTH or line_length > MAX_DEPLOYMENT_LINE_LENGTH:
+			return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
+		if not _is_valid_position(command.deployment_line_start, battlefield_bounds) or not _is_valid_position(command.deployment_line_end, battlefield_bounds):
+			return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
 	if pathfinder == null:
 		return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
-	var path := pathfinder.find_path(formation.anchor_position, command.target_position)
-	if path.is_empty():
-		return _rejected(CommandValidationResult.Reason.PATH_UNAVAILABLE)
+	var destinations := command.route_points.duplicate()
+	if destinations.is_empty() or not destinations[-1].is_equal_approx(command.target_position):
+		destinations.append(command.target_position)
+	var segment_start := formation.anchor_position
+	var path := PackedVector2Array()
+	for destination in destinations:
+		path = pathfinder.find_path(segment_start, destination)
+		if path.is_empty():
+			return _rejected(CommandValidationResult.Reason.PATH_UNAVAILABLE)
+		segment_start = destination
+	if command.has_deployment_line:
+		for slot_id in range(formation.member_entity_ids.size()):
+			var ratio := 0.5 if formation.member_entity_ids.size() <= 1 else float(slot_id) / float(formation.member_entity_ids.size() - 1)
+			var slot_position := command.deployment_line_start.lerp(command.deployment_line_end, ratio)
+			if not _is_valid_position(slot_position, battlefield_bounds) or not pathfinder.logic_grid.is_world_position_walkable(slot_position):
+				return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
+		return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
 	var tangent := Vector2.RIGHT
 	if path.size() >= 2:
 		tangent = (path[-1] - path[-2]).normalized()
@@ -430,7 +702,7 @@ func _validate_strategic_order(
 			if command.target_radius <= 0.0 or not _is_valid_position(command.target_position, battlefield_bounds):
 				return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
 			if command.formation_id == 0:
-				return _validate_strategic_participants(command, units, battlefield_bounds, pathfinder, false)
+				return _validate_strategic_participants(command, units, formations, battlefield_bounds, pathfinder, false)
 			if not formations.has(command.formation_id):
 				return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 			var formation := formations[command.formation_id] as FormationState
@@ -440,7 +712,7 @@ func _validate_strategic_order(
 			return _validate_formation_move(probe, units, formations, battlefield_bounds, pathfinder)
 		StrategicOrderCommand.OrderKind.ATTACK_TARGET:
 			if command.formation_id == 0:
-				var participant_result := _validate_strategic_participants(command, units, battlefield_bounds, pathfinder, false)
+				var participant_result := _validate_strategic_participants(command, units, formations, battlefield_bounds, pathfinder, false)
 				if not participant_result.is_accepted():
 					return participant_result
 				for entity_id in command.participant_entity_ids:
@@ -457,7 +729,7 @@ func _validate_strategic_order(
 		StrategicOrderCommand.OrderKind.SCOUT_AREA:
 			if command.target_radius <= 0.0 or not _is_valid_position(command.target_position, battlefield_bounds):
 				return _rejected(CommandValidationResult.Reason.INVALID_POSITION)
-			return _validate_strategic_participants(command, units, battlefield_bounds, pathfinder, true)
+			return _validate_strategic_participants(command, units, formations, battlefield_bounds, pathfinder, true)
 	return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 
 
@@ -493,13 +765,15 @@ func _participant_sets_overlap(first: Array[int], second: Array[int]) -> bool:
 func _validate_strategic_participants(
 	command: StrategicOrderCommand,
 	units: Dictionary,
+	formations: Dictionary,
 	battlefield_bounds: Rect2,
 	pathfinder: GridPathfinder,
 	require_scout: bool
 ) -> CommandValidationResult:
-	if command.participant_entity_ids.is_empty():
+	var participant_entity_ids := _strategic_participant_ids(command, units, formations)
+	if participant_entity_ids.is_empty():
 		return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
-	for entity_id in command.participant_entity_ids:
+	for entity_id in participant_entity_ids:
 		if not units.has(entity_id):
 			return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 		var unit := units[entity_id] as UnitState

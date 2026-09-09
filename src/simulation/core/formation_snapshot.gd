@@ -13,6 +13,10 @@ var order_kind: FormationState.OrderKind
 var engagement_state: FormationState.EngagementState
 var order_destination: Vector2
 var order_target_entity_id: int
+var planned_route: PackedVector2Array
+var has_deployment_line: bool
+var deployment_line_start: Vector2
+var deployment_line_end: Vector2
 
 
 func _init(formation: FormationState) -> void:
@@ -31,3 +35,7 @@ func _init(formation: FormationState) -> void:
 	engagement_state = formation.engagement_state
 	order_destination = formation.order_destination
 	order_target_entity_id = formation.order_target_entity_id
+	planned_route = formation.planned_route.duplicate()
+	has_deployment_line = formation.has_deployment_line
+	deployment_line_start = formation.deployment_line_start
+	deployment_line_end = formation.deployment_line_end

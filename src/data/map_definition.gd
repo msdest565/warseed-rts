@@ -3,7 +3,7 @@ extends Resource
 
 @export var definition_id: StringName = &"test_arena"
 @export var cell_size: float = 32.0
-@export var grid_size: Vector2i = Vector2i(96, 64)
+@export var grid_size: Vector2i = Vector2i(192, 128)
 @export var world_origin: Vector2 = Vector2.ZERO
 @export var player_spawn_cell: Vector2i = Vector2i(15, 10)
 @export var enemy_spawn_cell: Vector2i = Vector2i(86, 54)

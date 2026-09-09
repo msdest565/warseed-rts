@@ -2,9 +2,9 @@
 
 ## 文档状态与适用范围
 
-本方案是 WARSEED 首个 5—8 分钟垂直切片及后续 15—20 分钟完整 MVP 的已接受实现基线。产品范围以 [MVP 范围](MVP_SCOPE.md) 为准，通用职责和控制权原则以 [系统设计](SYSTEM_DESIGN.md) 为准。
+本方案保留 WARSEED 已验证的 Godot 权威模拟基线，并按 D-017 支撑《灰脊矿区》新切片。产品范围以 [MVP 范围](MVP_SCOPE.md) 为准，军团卡牌、职责和控制权原则以 [系统设计](SYSTEM_DESIGN.md) 为准。
 
-本方案不包含完整数值平衡、美术生产规范、多人同步、自然语言命令或最终发布流程。仓库当前仍是文档阶段；Godot 工程将在下一项独立任务中建立。
+本方案不包含完整数值平衡、美术生产规范、多人同步、自然语言命令或最终发布流程。Godot 工程和旧基地 RTS 技术切片已经建立；当前技术工作是新增军团领域层、会战规则层和 40/80/120 实体性能基线，而不是重新 bootstrap。
 
 ## 技术栈基线
 
@@ -15,8 +15,8 @@
 | Target platform | Windows 10/11 x86-64 first |
 | Game form | 2D top-down RTS，键鼠输入 |
 | Map | `TileMapLayer` + 独立逻辑格 |
-| Initial pathfinding | `AStarGrid2D` |
-| Formation | 项目自定义 formation slots |
+| Initial pathfinding | `AStarGrid2D`，部队卡/formation 共享全局路径 |
+| Formation | 项目自定义 formation slots、路线与阵线 |
 | Authoritative simulation | 固定 10 Hz `SimulationTick` |
 | Data | typed custom `Resource` + 文本 `.tres` |
 | Tests | 纯模拟测试 + Godot headless 集成/场景测试 |
@@ -39,7 +39,7 @@ Godot 的原生 2D、`Camera2D`、`Control`、`TileMapLayer`、`AStarGrid2D` 和
 - Godot 不直接提供完整 RTS 编队、拥挤处理和战略任务系统；
 - 局部 separation、卡住恢复、狭窄通道退化和 formation slots 由项目实现；
 - typed GDScript、静态检查和测试是强制工程约束，不能用无结构字典和字符串事件替代稳定类型；
-- 若单位规模、寻路负载或平台范围显著超过 MVP，必须重新测量，而不是假定当前方案无限扩展。
+- 旧切片只验证 10—15 个主要单位；新目标为 40—80、长期约百实体，必须通过三档压测后再决定导航与快照优化。
 
 ## 架构与依赖方向
 
@@ -115,7 +115,7 @@ addons/
 tools/
 ```
 
-`simulation` 不依赖 `presentation`、`ui` 或具体场景；`commands` 是输入、Agent 和模拟共享的边界；测试可以直接构造 `SimulationWorld`，不要求加载主游戏场景。
+`simulation` 不依赖 `presentation`、`ui` 或具体场景；`commands` 是输入、Agent 和模拟共享的边界；测试可以直接构造 `SimulationWorld`。新增 `CommanderState`、`UnitCardState` 和后续 `BattleRegionState` 必须遵守同一依赖方向。
 
 ## 场景组合根
 
@@ -235,7 +235,7 @@ GameRoot
 - 狭窄通道允许压缩间距或退化为纵队，通过后重新形成队形。
 - 玩家接管单位时释放或标记其 slot 为空；归队时选择安全 rejoin point 并重新分配，禁止瞬移。
 
-仅在 10—15 个单位下仍出现长期拥堵、频繁重算超预算或动态障碍导致大量错误路径时，才评估 `NavigationServer2D`、流场或更复杂局部避障。
+先在 40、80、120 实体下记录权威 tick、路径请求、拥堵和快照成本。优先采用编队共享路径、分层决策频率和空间索引；只有测量仍超预算时，才评估 `NavigationServer2D`、流场或更复杂局部避障。
 
 ## 数据驱动配置
 
@@ -358,7 +358,7 @@ GUT 是优先评估的社区测试框架，但不是当前已采用依赖。工�
 - 首发开发目标为 Windows 10/11 x86-64，键鼠是 MVP 输入基线。
 - 工程、headless 测试和 export templates 使用相同精确 Godot 版本。
 - 工程 bootstrap 创建 Windows debug export preset。
-- 后续 CI 至少执行 headless tests 和 Windows export smoke test。
+- Windows CI 已接入 `.github/workflows/grey-ridge-ci.yml`：在锁定的 Godot 4.6.3 Mono 与同版 export templates 上调用 `tools/verify_grey_ridge_release.ps1`，串行执行 headless 回归、四场会战 smoke/确定性矩阵、工具烟测、Windows export 和导出包启动检查，并生成可下载的试玩 ZIP。
 - 其他平台不是 MVP 验收条件，但代码不得硬编码开发机绝对路径或 Windows 路径分隔符。
 
 ## Git 与资产策略
@@ -420,10 +420,11 @@ Godot 专用 `.gitignore` 随真实工程一起加入，避免文档目录与实
 
 ### Gate G：切片交付
 
-1. 完成 5—8 分钟成功路径；
-2. 玩家能接管导弹车并稳定归队；
+1. 从合法 tick 0 军团计划进入并完成 5—8 分钟成功路径；
+2. 玩家能接管完整部队卡、绘制路线/阵线并稳定归还原将领；
 3. 离线、无 LLM 环境可完整运行；
-4. headless 回归和 Windows 导出冒烟测试通过。
+4. headless 回归、6×3 敌方计划黄金矩阵、性能基线和 Windows 导出冒烟测试通过；
+5. 陌生玩家达到 `MVP_SCOPE.md` 与 `PLAYTEST_PROTOCOL.md` 的理解、情报响应、整卡接管/归还和第二局意愿标准。
 
 Gate G 通过后，才扩展到 15—20 分钟完整 MVP。
 

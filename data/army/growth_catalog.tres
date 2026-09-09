@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="GrowthCatalog" load_steps=14 format=3]
+
+[ext_resource type="Script" path="res://src/data/growth_catalog.gd" id="1"]
+[ext_resource type="Resource" path="res://data/army/growth_collective_commendation.tres" id="2"]
+[ext_resource type="Resource" path="res://data/army/growth_steel_lineage.tres" id="3"]
+[ext_resource type="Resource" path="res://data/army/growth_eyes_of_advance.tres" id="4"]
+[ext_resource type="Resource" path="res://data/army/growth_holding_the_line.tres" id="5"]
+[ext_resource type="Resource" path="res://data/army/growth_rescue_citation.tres" id="6"]
+[ext_resource type="Resource" path="res://data/army/growth_breakthrough_banner.tres" id="7"]
+[ext_resource type="Resource" path="res://data/army/growth_reinforced_side_skirts.tres" id="8"]
+[ext_resource type="Resource" path="res://data/army/growth_long_range_optics.tres" id="9"]
+[ext_resource type="Resource" path="res://data/army/growth_field_repair_kit.tres" id="10"]
+[ext_resource type="Resource" path="res://data/army/growth_high_velocity_loader.tres" id="11"]
+[ext_resource type="Resource" path="res://data/army/growth_auxiliary_fuel_tanks.tres" id="12"]
+[ext_resource type="Resource" path="res://data/army/growth_dispersion_radio_suite.tres" id="13"]
+
+[resource]
+script = ExtResource("1")
+definitions = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4"), ExtResource("5"), ExtResource("6"), ExtResource("7"), ExtResource("8"), ExtResource("9"), ExtResource("10"), ExtResource("11"), ExtResource("12"), ExtResource("13")])

@@ -1,0 +1,54 @@
+name: Playable Battles CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: grey-ridge-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Godot
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789 # v2
+        with:
+          version: 4.6.3
+          use-dotnet: true
+          include-templates: true
+
+      - name: Verify playable battles release
+        shell: powershell
+        run: >-
+          powershell.exe -NoProfile -ExecutionPolicy Bypass
+          -File .\tools\verify_grey_ridge_release.ps1
+          -GodotConsolePath "$env:GODOT"
+          -SessionId "ci-${env:GITHUB_RUN_ID}-${env:GITHUB_RUN_ATTEMPT}"
+
+      - name: Build playtest kit
+        shell: powershell
+        run: >-
+          powershell.exe -NoProfile -ExecutionPolicy Bypass
+          -File .\tools\build_playtest_kit.ps1
+          -PackageName "WARSEED-Grey-Ridge-CI-${env:GITHUB_RUN_ID}-${env:GITHUB_RUN_ATTEMPT}"
+
+      - name: Upload playtest kit
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: grey-ridge-playtest-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/playtest-kits/*.zip
+          if-no-files-found: error
+          retention-days: 14

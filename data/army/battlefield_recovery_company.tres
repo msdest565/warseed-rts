@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="UnitCardDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/data/unit_card_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+definition_id = &"battlefield_recovery_company"
+display_name_key = &"UNIT_CARD_BATTLEFIELD_RECOVERY"
+role_key = &"UNIT_CARD_ROLE_ENGINEERING"
+commander_definition_id = &"lu_zheng"
+command_cost = 2
+authorized_strength = 6
+unit_definition_id = &"engineer_vehicle"
+supply_cost = 2
+deployment_ticks = 80
+starts_in_reserve = true

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="GrowthDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://src/data/growth_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+definition_id = &"field_repair_kit"
+kind = 1
+display_name_key = &"GROWTH_FIELD_REPAIR_KIT"
+benefit_key = &"GROWTH_FIELD_REPAIR_KIT_BENEFIT"
+tradeoff_key = &"GROWTH_FIELD_REPAIR_KIT_TRADEOFF"
+replacement_cost = 5
+refit_days = 2
+move_speed_multiplier = 0.9
+organization_recovery_multiplier = 1.35

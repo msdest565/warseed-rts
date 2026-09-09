@@ -12,9 +12,14 @@ func _initialize() -> void:
 		TestPlayerInput.new(),
 		TestCombatSystem.new(),
 		TestEconomyAndVictory.new(),
+		TestObjectiveSystem.new(),
 		TestFactionKnowledge.new(),
 		TestAiPolicyAndDifficulty.new(),
 		TestStrategicTasks.new(),
+		TestGameplayObservability.new(),
+		TestBattlefieldSituation.new(),
+		TestCommandSituation.new(),
+		TestAfterActionReview.new(),
 		TestGameIntegration.new(),
 	]
 	var failures: Array[String] = []

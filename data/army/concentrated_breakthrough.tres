@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="DoctrineDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/data/doctrine_definition.gd" id="1_doctrine"]
+
+[resource]
+script = ExtResource("1_doctrine")
+definition_id = &"concentrated_breakthrough"
+display_name_key = &"DOCTRINE_CONCENTRATED_BREAKTHROUGH"
+behavior_key = &"DOCTRINE_CONCENTRATED_BREAKTHROUGH_BEHAVIOR"
+tradeoff_key = &"DOCTRINE_CONCENTRATED_BREAKTHROUGH_TRADEOFF"

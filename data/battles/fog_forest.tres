@@ -1,0 +1,280 @@
+[gd_resource type="Resource" script_class="BattleDefinition" load_steps=30 format=3]
+
+[ext_resource type="Script" path="res://src/data/battle_definition.gd" id="1_battle"]
+[ext_resource type="Resource" path="res://data/objectives/standard_card_battle_objectives.tres" id="objectives"]
+[ext_resource type="Script" path="res://src/data/battle_region_definition.gd" id="2_region"]
+[ext_resource type="Script" path="res://src/data/battle_intel_definition.gd" id="3_intel"]
+[ext_resource type="Script" path="res://src/data/battle_formation_definition.gd" id="4_formation"]
+[ext_resource type="Script" path="res://src/data/battle_support_definition.gd" id="5_support"]
+[ext_resource type="Script" path="res://src/data/battle_enemy_plan_definition.gd" id="6_plan"]
+[ext_resource type="Script" path="res://src/data/battle_reaction_rule_definition.gd" id="7_reaction"]
+[ext_resource type="Resource" path="res://data/army/bai_jiuyang.tres" id="8_bai"]
+[ext_resource type="Resource" path="res://data/army/di_tian_fog_forest.tres" id="9_di"]
+[ext_resource type="Resource" path="res://data/army/lin_mo.tres" id="10_lin"]
+[ext_resource type="Resource" path="res://data/army/falcon_recon_group.tres" id="11_falcon"]
+[ext_resource type="Resource" path="res://data/army/ironwall_assault_group.tres" id="12_ironwall"]
+[ext_resource type="Resource" path="res://data/army/armored_spearhead.tres" id="13_armor"]
+[ext_resource type="Resource" path="res://data/army/thunder_fire_group.tres" id="14_thunder"]
+[ext_resource type="Resource" path="res://data/army/pathfinder_recon_group.tres" id="15_pathfinder"]
+[ext_resource type="Resource" path="res://data/army/frontline_logistics_column.tres" id="16_logistics"]
+[ext_resource type="Resource" path="res://data/army/covert_search.tres" id="17_covert"]
+[ext_resource type="Resource" path="res://data/army/alternating_cover.tres" id="18_cover"]
+[ext_resource type="Resource" path="res://data/army/fire_preparation.tres" id="19_fire"]
+[ext_resource type="Resource" path="res://data/army/concentrated_breakthrough.tres" id="20_breakthrough"]
+
+[sub_resource type="Resource" id="RegionSouth"]
+script = ExtResource("2_region")
+region_id = &"south_woods"
+display_name_key = &"FOG_FOREST_SOUTH_WOODS"
+terrain_key = &"TERRAIN_FOREST"
+position = Vector2(1536, 2528)
+radius = 430.0
+supply_per_settlement = 1
+adjacent_region_ids = Array[StringName]([&"forward_supply_node"])
+support_cooldown_ticks = 260
+
+[sub_resource type="Resource" id="RegionNode"]
+script = ExtResource("2_region")
+region_id = &"forward_supply_node"
+display_name_key = &"FOG_FOREST_FORWARD_NODE"
+terrain_key = &"TERRAIN_FOREST"
+position = Vector2(3072, 1856)
+radius = 380.0
+supply_per_settlement = 0
+adjacent_region_ids = Array[StringName]([&"south_woods", &"east_logging_road"])
+support_cooldown_ticks = 150
+
+[sub_resource type="Resource" id="RegionRoad"]
+script = ExtResource("2_region")
+region_id = &"east_logging_road"
+display_name_key = &"FOG_FOREST_LOGGING_ROAD"
+terrain_key = &"TERRAIN_FOREST"
+position = Vector2(4704, 2464)
+radius = 420.0
+supply_per_settlement = 2
+adjacent_region_ids = Array[StringName]([&"forward_supply_node"])
+support_cooldown_ticks = 260
+
+[sub_resource type="Resource" id="IntelNode"]
+script = ExtResource("3_intel")
+source_key = &"INTEL_SOURCE_OPTICAL"
+target_category_key = &"INTEL_SCOUT_SCREEN"
+estimated_min = 4
+estimated_max = 8
+region_id = &"forward_supply_node"
+direction_key = &"INTEL_DIRECTION_NORTH"
+confidence_key = &"INTEL_CONFIDENCE_MEDIUM"
+eta_min_ticks = 160
+eta_max_ticks = 260
+
+[sub_resource type="Resource" id="IntelSouth"]
+script = ExtResource("3_intel")
+source_key = &"INTEL_SOURCE_ACOUSTIC"
+target_category_key = &"INTEL_TRACKED_VEHICLE"
+estimated_min = 6
+estimated_max = 12
+region_id = &"south_woods"
+direction_key = &"INTEL_DIRECTION_EAST"
+confidence_key = &"INTEL_CONFIDENCE_LOW"
+eta_min_ticks = 260
+eta_max_ticks = 420
+
+[sub_resource type="Resource" id="IntelRoad"]
+script = ExtResource("3_intel")
+source_key = &"INTEL_SOURCE_NONE"
+target_category_key = &"INTEL_UNKNOWN"
+region_id = &"east_logging_road"
+direction_key = &"INTEL_DIRECTION_UNKNOWN"
+confidence_key = &"INTEL_CONFIDENCE_NONE"
+has_estimate = false
+
+[sub_resource type="Resource" id="EnemyAssault"]
+script = ExtResource("4_formation")
+formation_id = 4
+role_id = &"assault"
+faction_id = 2
+unit_definition_id = &"assault_vehicle"
+strength = 12
+spawn_position = Vector2(3072, 704)
+first_entity_id = 1001
+facing = Vector2(0, 1)
+agent_id = 303
+task_id = 9201
+tactical_role = 2
+
+[sub_resource type="Resource" id="EnemyProbe"]
+script = ExtResource("4_formation")
+formation_id = 5
+role_id = &"probe"
+faction_id = 2
+unit_definition_id = &"scout_vehicle"
+strength = 6
+spawn_position = Vector2(4432, 1120)
+first_entity_id = 1013
+facing = Vector2(0, 1)
+agent_id = 303
+task_id = 9201
+tactical_role = 1
+
+[sub_resource type="Resource" id="EnemyScreen"]
+script = ExtResource("4_formation")
+formation_id = 6
+role_id = &"screen"
+faction_id = 2
+unit_definition_id = &"scout_vehicle"
+strength = 5
+spawn_position = Vector2(1792, 1200)
+first_entity_id = 1019
+facing = Vector2(0, 1)
+agent_id = 303
+task_id = 9201
+tactical_role = 1
+
+[sub_resource type="Resource" id="SupportRecon"]
+script = ExtResource("5_support")
+support_id = &"air_recon"
+support_kind = 0
+supply_cost = 2
+duration_ticks = 160
+cooldown_ticks = 300
+
+[sub_resource type="Resource" id="SupportFortify"]
+script = ExtResource("5_support")
+support_id = &"emergency_fortify"
+support_kind = 1
+supply_cost = 2
+duration_ticks = 220
+cooldown_ticks = 320
+armor_bonus = 4.0
+
+[sub_resource type="Resource" id="SupportReinforcement"]
+script = ExtResource("5_support")
+support_id = &"field_reinforcement"
+support_kind = 2
+supply_cost = 2
+cooldown_ticks = 320
+strength = 2
+
+[sub_resource type="Resource" id="PlanAmbush"]
+script = ExtResource("6_plan")
+plan_id = &"road_ambush"
+action_key = &"FOG_FOREST_PLAN_ROAD_AMBUSH"
+assault_target_region_id = &"forward_supply_node"
+assault_target_position = Vector2(3072, 1856)
+probe_target_region_id = &"east_logging_road"
+probe_target_position = Vector2(4704, 2464)
+commitment_ticks = 220
+
+[sub_resource type="Resource" id="PlanScreen"]
+script = ExtResource("6_plan")
+plan_id = &"counter_recon_screen"
+action_key = &"FOG_FOREST_PLAN_COUNTER_RECON"
+assault_target_region_id = &"east_logging_road"
+assault_target_position = Vector2(4704, 2464)
+assault_route_region_ids = Array[StringName]([&"forward_supply_node"])
+probe_target_region_id = &"forward_supply_node"
+probe_target_position = Vector2(3072, 1856)
+commitment_ticks = 260
+
+[sub_resource type="Resource" id="PlanFeint"]
+script = ExtResource("6_plan")
+plan_id = &"convoy_hunt_feint"
+action_key = &"FOG_FOREST_PLAN_CONVOY_FEINT"
+assault_target_region_id = &"south_woods"
+assault_target_position = Vector2(1536, 2528)
+probe_target_region_id = &"east_logging_road"
+probe_target_position = Vector2(4704, 2464)
+commitment_ticks = 300
+followup_tick = 280
+followup_formation_role_id = &"probe"
+followup_target_region_id = &"forward_supply_node"
+followup_target_position = Vector2(3328, 1984)
+
+[sub_resource type="Resource" id="ReactionHq"]
+script = ExtResource("7_reaction")
+rule_id = &"hq_defense"
+priority = 100
+trigger_kind = 0
+action_kind = 0
+delay_ticks = 10
+commitment_ticks = 100
+
+[sub_resource type="Resource" id="ReactionWithdraw"]
+script = ExtResource("7_reaction")
+rule_id = &"depleted_withdrawal"
+priority = 90
+trigger_kind = 3
+action_kind = 3
+delay_ticks = 5
+commitment_ticks = 120
+
+[sub_resource type="Resource" id="ReactionFlank"]
+script = ExtResource("7_reaction")
+rule_id = &"forest_flank_intercept"
+priority = 70
+trigger_kind = 2
+action_kind = 2
+delay_ticks = 45
+commitment_ticks = 120
+
+[sub_resource type="Resource" id="ReactionNode"]
+script = ExtResource("7_reaction")
+rule_id = &"supply_node_counterattack"
+priority = 60
+trigger_kind = 1
+action_kind = 1
+delay_ticks = 30
+commitment_ticks = 100
+
+[resource]
+script = ExtResource("1_battle")
+scenario_id = &"fog_forest"
+display_name_key = &"FOG_FOREST_TITLE"
+operation_number = 3
+scene_path = "res://scenes/game/fog_forest.tscn"
+selector_briefing_key = &"BATTLE_SELECT_FOG_FOREST_BRIEFING"
+selector_mechanics_key = &"BATTLE_SELECT_FOG_FOREST_MECHANICS"
+available_in_selector = true
+battlefield_bounds = Rect2(0, 0, 6144, 4096)
+time_limit_ticks = 5600
+base_supply_interval_ticks = 220
+region_settlement_interval_ticks = 300
+starting_supply = 6
+supply_capacity = 10
+population_capacity = 52
+deployment_radius = 420.0
+player_headquarters_position = Vector2(3072, 3648)
+enemy_headquarters_position = Vector2(3072, 384)
+friendly_formation_ids = Array[int]([1, 2, 3])
+friendly_spawn_positions = Array[Vector2]([Vector2(2480, 3152), Vector2(3072, 3200), Vector2(3632, 3200)])
+next_dynamic_unit_id = 1100
+next_dynamic_formation_id = 7
+enemy_offensive_followup_tick = 2000
+enemy_agent_id = 303
+enemy_task_id = 9201
+commander_definitions = Array[ExtResource("8_bai")]([ExtResource("8_bai"), ExtResource("9_di"), ExtResource("10_lin")])
+unit_card_definitions = Array[ExtResource("11_falcon")]([ExtResource("11_falcon"), ExtResource("12_ironwall"), ExtResource("13_armor"), ExtResource("14_thunder"), ExtResource("15_pathfinder"), ExtResource("16_logistics")])
+doctrine_definitions = Array[ExtResource("17_covert")]([ExtResource("17_covert"), ExtResource("18_cover"), ExtResource("19_fire"), ExtResource("20_breakthrough")])
+starting_card_count = 3
+commander_agent_ids = {&"bai_jiuyang": 201, &"di_tian": 202, &"lin_mo": 203}
+default_commander_by_unit_card = {&"armored_spearhead": &"di_tian", &"falcon_recon_group": &"bai_jiuyang", &"frontline_logistics_column": &"di_tian", &"ironwall_assault_group": &"di_tian", &"pathfinder_recon_group": &"bai_jiuyang", &"thunder_fire_group": &"lin_mo"}
+default_doctrine_by_commander = {&"bai_jiuyang": &"covert_search", &"di_tian": &"alternating_cover", &"lin_mo": &"fire_preparation"}
+default_posture_by_commander = {&"bai_jiuyang": 0, &"di_tian": 1, &"lin_mo": 1}
+default_starting_unit_card_ids = Array[StringName]([&"falcon_recon_group", &"ironwall_assault_group", &"frontline_logistics_column"])
+strategic_regions = Array[SubResource("RegionSouth")]([SubResource("RegionSouth"), SubResource("RegionNode"), SubResource("RegionRoad")])
+initial_intel = Array[SubResource("IntelNode")]([SubResource("IntelNode"), SubResource("IntelSouth"), SubResource("IntelRoad")])
+enemy_formations = Array[SubResource("EnemyAssault")]([SubResource("EnemyAssault"), SubResource("EnemyProbe"), SubResource("EnemyScreen")])
+support_abilities = Array[SubResource("SupportRecon")]([SubResource("SupportRecon"), SubResource("SupportFortify"), SubResource("SupportReinforcement")])
+enemy_plans = Array[SubResource("PlanAmbush")]([SubResource("PlanAmbush"), SubResource("PlanScreen"), SubResource("PlanFeint")])
+enemy_reaction_rules = Array[SubResource("ReactionHq")]([SubResource("ReactionHq"), SubResource("ReactionWithdraw"), SubResource("ReactionFlank"), SubResource("ReactionNode")])
+contact_fade_after_ticks = 90
+contact_expire_after_ticks = 360
+escort_unit_card_id = &"frontline_logistics_column"
+escort_destination_region_id = &"forward_supply_node"
+escort_arrival_radius = 210.0
+escort_supply_capacity_bonus = 4
+escort_supply_reward = 3
+escort_region_supply_bonus = 2
+enemy_intercepts_escort = true
+escort_intercept_delay_ticks = 20
+objective_set = ExtResource("objectives")

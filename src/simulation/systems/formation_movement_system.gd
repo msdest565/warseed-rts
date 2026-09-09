@@ -2,6 +2,7 @@ class_name FormationMovementSystem
 extends RefCounted
 
 const ARRIVAL_TOLERANCE := 6.0
+const ANCHOR_MOVE_SPEED := 180.0
 const ANCHOR_LAG_LIMIT := 120.0
 const COLUMN_SPACING := 42.0
 const PREFERRED_SEPARATION := 34.0
@@ -39,7 +40,8 @@ func _advance_formation(
 ) -> void:
 	_update_mode(formation)
 	var tangent := _get_tangent(formation)
-	var desired_positions := _create_desired_positions(formation, tangent)
+	var recon_spread := _is_recon_formation(formation, units)
+	var desired_positions := _create_desired_positions(formation, tangent, recon_spread)
 	var all_close := true
 	for entity_id in formation.member_entity_ids:
 		var unit := units[entity_id] as UnitState
@@ -51,7 +53,7 @@ func _advance_formation(
 	var speed_scale := 1.0 if all_close else LAGGED_ANCHOR_SPEED_SCALE
 	_advance_anchor(formation, speed_scale)
 	tangent = _get_tangent(formation)
-	desired_positions = _create_desired_positions(formation, tangent)
+	desired_positions = _create_desired_positions(formation, tangent, recon_spread)
 
 	var start_positions: Dictionary = {}
 	for entity_id in formation.member_entity_ids:
@@ -84,6 +86,7 @@ func _advance_formation(
 	if members_arrived:
 		formation.is_moving = false
 		formation.path = PackedVector2Array()
+		formation.planned_route = PackedVector2Array()
 		for entity_id in formation.member_entity_ids:
 			var unit := units[entity_id] as UnitState
 			if unit.enabled and unit.following_formation:
@@ -95,7 +98,7 @@ func _advance_formation(
 func _advance_anchor(formation: FormationState, speed_scale: float = 1.0) -> void:
 	if formation.path_index >= formation.path.size():
 		return
-	var travel_remaining := 180.0 * SimulationWorld.TICK_SECONDS * speed_scale
+	var travel_remaining := ANCHOR_MOVE_SPEED * SimulationWorld.TICK_SECONDS * speed_scale
 	var retained_distance := COLUMN_SPACING * (formation.member_entity_ids.size() - 1) + HISTORY_MARGIN
 	while travel_remaining > 0.0 and formation.path_index < formation.path.size():
 		var waypoint := formation.path[formation.path_index]
@@ -145,18 +148,29 @@ func _get_tangent(formation: FormationState) -> Vector2:
 	return Vector2.RIGHT
 
 
-func _create_desired_positions(formation: FormationState, tangent: Vector2) -> Dictionary:
+func _create_desired_positions(formation: FormationState, tangent: Vector2, recon_spread: bool = false) -> Dictionary:
 	var desired: Dictionary = {}
 	var lateral := Vector2(-tangent.y, tangent.x)
+	var deploying_on_line := formation.has_deployment_line and formation.path_index >= formation.path.size()
 	for entity_id in formation.member_entity_ids:
 		var slot_id := formation.get_slot_id(entity_id)
-		if formation.mode == FormationState.MovementMode.COLUMN:
+		if deploying_on_line:
+			desired[entity_id] = formation.get_deployment_position(slot_id)
+		elif formation.mode == FormationState.MovementMode.COLUMN:
 			var history_position := formation.sample_anchor_history(COLUMN_SPACING * slot_id)
 			desired[entity_id] = _get_walkable_history_position(formation, history_position, slot_id)
 		else:
-			var offset := formation.get_wide_offset(slot_id)
+			var offset := formation.get_recon_offset(slot_id) if recon_spread else formation.get_wide_offset(slot_id)
 			desired[entity_id] = formation.anchor_position + tangent * offset.x + lateral * offset.y
 	return desired
+
+
+func _is_recon_formation(formation: FormationState, units: Dictionary) -> bool:
+	for entity_id in formation.member_entity_ids:
+		var unit := units.get(entity_id) as UnitState
+		if unit != null and unit.enabled and unit.following_formation:
+			return unit.definition_id == &"scout_vehicle"
+	return false
 
 
 func _get_walkable_history_position(

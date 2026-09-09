@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="UnitDefinitionCatalog" load_steps=7 format=3]
+[gd_resource type="Resource" script_class="UnitDefinitionCatalog" load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://src/data/unit_definition_catalog.gd" id="1"]
 [ext_resource type="Resource" path="res://data/units/harvester.tres" id="2"]
@@ -6,7 +6,8 @@
 [ext_resource type="Resource" path="res://data/units/scout_vehicle.tres" id="4"]
 [ext_resource type="Resource" path="res://data/units/assault_vehicle.tres" id="5"]
 [ext_resource type="Resource" path="res://data/units/missile_vehicle.tres" id="6"]
+[ext_resource type="Resource" path="res://data/units/supply_truck.tres" id="7"]
 
 [resource]
 script = ExtResource("1")
-units = Array[ExtResource("2")]([ExtResource("2"), ExtResource("3"), ExtResource("4"), ExtResource("5"), ExtResource("6")])
+units = Array[ExtResource("2")]([ExtResource("2"), ExtResource("3"), ExtResource("4"), ExtResource("5"), ExtResource("6"), ExtResource("7")])

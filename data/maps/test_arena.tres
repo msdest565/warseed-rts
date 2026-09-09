@@ -6,7 +6,7 @@
 script = ExtResource("1_map")
 definition_id = &"test_arena"
 cell_size = 32.0
-grid_size = Vector2i(96, 64)
+grid_size = Vector2i(192, 128)
 world_origin = Vector2(0, 0)
 player_spawn_cell = Vector2i(15, 10)
 enemy_spawn_cell = Vector2i(86, 54)

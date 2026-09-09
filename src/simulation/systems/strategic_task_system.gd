@@ -8,6 +8,7 @@ const DEFEND_HOLD_TICKS := 60
 const SCOUT_OBSERVE_TICKS := 30
 const SCOUT_STALLED_REPLAN_TICKS := 30
 const SCOUT_PROGRESS_DISTANCE := 8.0
+const SCOUT_OBSERVATION_POSITION_RADIUS := 64.0
 const SCOUT_MAX_REPLAN_ATTEMPTS := 3
 const SCOUT_DANGER_RADIUS := 384.0
 const SCOUT_EVADE_DISTANCE := 448.0
@@ -16,6 +17,8 @@ const SCOUT_THREAT_BUFFER := 96.0
 const RETREAT_SURVIVOR_RATIO := 0.5
 const ATTACK_SEARCH_TICKS := 30
 const ATTACK_SEARCH_RADIUS := 96.0
+const BLOCKED_REPLAN_INTERVAL_TICKS := 30
+const BLOCKED_REPLAN_RADIUS := 384.0
 
 
 func advance(world: SimulationWorld) -> void:
@@ -30,8 +33,15 @@ func advance(world: SimulationWorld) -> void:
 				task.set_phase(TaskState.Phase.PREPARING, world.current_tick, "Reinforcements assigned; task resumed")
 				_emit_task_event(task, world)
 		if task.lifecycle == TaskState.Lifecycle.BLOCKED:
+			_try_resume_blocked_movement(task, world)
 			_try_resume_blocked_development(task, world)
 		if task.lifecycle != TaskState.Lifecycle.EXECUTING:
+			continue
+		if world.current_tick < task.activation_tick:
+			task.set_phase(TaskState.Phase.PREPARING, world.current_tick, "Doctrine timing: waiting until tick %d" % task.activation_tick)
+			continue
+		if task.requires_observed_contact and not _has_visible_hostile(task.faction_id, world):
+			task.set_phase(TaskState.Phase.PREPARING, world.current_tick, "Fire preparation: waiting for confirmed hostile vision")
 			continue
 		match task.kind:
 			TaskState.Kind.DEVELOP_RESOURCE:
@@ -105,6 +115,22 @@ func _advance_defend_area(task: TaskState, world: SimulationWorld) -> void:
 	if survivor_count == 0:
 		_block(task, world, TaskState.BlockedReason.INSUFFICIENT_PARTICIPANTS, "No defending units remain")
 		return
+	if task.coordinated_target_entity_id != 0:
+		var coordinated_target_id := task.coordinated_target_entity_id
+		var target_is_valid := world.is_entity_enabled(coordinated_target_id) \
+			and world.get_entity_faction_id(coordinated_target_id) != task.faction_id \
+			and world.is_entity_visible_to_faction(coordinated_target_id, task.faction_id) \
+			and world.current_tick <= task.coordinated_support_until_tick
+		if target_is_valid:
+			task.set_phase(TaskState.Phase.ENGAGING, world.current_tick, "Commander-coordinated counterattack")
+			return
+		task.coordinated_target_entity_id = 0
+		task.coordinated_support_until_tick = -1
+		task.reinforcement_committed = false
+		if formation.order_target_entity_id == coordinated_target_id:
+			_submit_formation_move(task, formation, task.target_position, world)
+			task.set_phase(TaskState.Phase.RETURNING, world.current_tick, "Coordinated contact ended; resuming objective")
+			return
 	if formation.anchor_position.distance_to(task.target_position) > task.target_radius:
 		if task.phase != TaskState.Phase.MUSTERING or not formation.is_moving:
 			if not _submit_formation_move(task, formation, task.target_position, world):
@@ -138,7 +164,11 @@ func _advance_defend_area(task: TaskState, world: SimulationWorld) -> void:
 	task.progress_current += 1
 	task.progress_target = DEFEND_HOLD_TICKS
 	if task.progress_current >= DEFEND_HOLD_TICKS:
-		_complete(task, world, "Defense interval completed without crossing leash")
+		if task.persistent_order:
+			task.progress_current = 0
+			task.set_phase(TaskState.Phase.HOLDING, world.current_tick, "Continuing commander-assigned defense")
+		else:
+			_complete(task, world, "Defense interval completed without crossing leash")
 
 
 func _advance_attack_target(task: TaskState, world: SimulationWorld) -> void:
@@ -165,18 +195,17 @@ func _advance_attack_target(task: TaskState, world: SimulationWorld) -> void:
 		if not formation.is_moving:
 			_fail(task, world, "Formation withdrew after reaching the loss threshold")
 		return
-	var faction_snapshot := world.create_faction_snapshot(task.faction_id)
-	var known_unit := faction_snapshot.get_unit(task.target_entity_id)
-	var known_building := faction_snapshot.get_building(task.target_entity_id)
-	if known_unit == null and known_building == null:
+	var knowledge := world.faction_knowledge.get(task.faction_id) as FactionKnowledge
+	var known_contact := knowledge.hostile_contacts.get(task.target_entity_id) as KnowledgeContact if knowledge != null else null
+	if known_contact == null:
 		_block(task, world, TaskState.BlockedReason.INVALID_TARGET, "Target is not present in faction knowledge")
 		return
-	var target_enabled := known_unit.enabled if known_unit != null else known_building.enabled
-	if not target_enabled:
+	if not known_contact.enabled:
 		_complete(task, world, "Assigned hostile target destroyed")
 		return
-	var target_visible := known_unit.is_visible_to_local_player if known_unit != null else known_building.is_visible
-	task.target_position = known_unit.position if known_unit != null else known_building.position
+	var visible_ids := knowledge.visible_hostile_building_ids if known_contact.is_building else knowledge.visible_hostile_unit_ids
+	var target_visible := visible_ids.has(task.target_entity_id)
+	task.target_position = known_contact.position
 	if not target_visible:
 		if formation.anchor_position.distance_to(task.target_position) > ATTACK_SEARCH_RADIUS:
 			task.ticks_without_progress = 0
@@ -227,11 +256,13 @@ func _advance_scout_area(task: TaskState, world: SimulationWorld) -> void:
 		_block(task, world, TaskState.BlockedReason.INSUFFICIENT_PARTICIPANTS, "No scout units remain")
 		return
 	_update_scout_intelligence(task, world)
-	var threat := _nearest_visible_hostile_contact(scout.position, world, task.faction_id)
-	if task.requires_proactive_authorization and threat != null and scout.position.distance_to(threat.position) <= maxf(SCOUT_DANGER_RADIUS, threat.attack_range + SCOUT_THREAT_BUFFER):
+	var threat_context := _nearest_visible_threat_to_scouts(task, world)
+	if not threat_context.is_empty():
+		var threat := threat_context["contact"] as KnowledgeContact
 		if task.phase != TaskState.Phase.EVADING or not formation.is_moving or world.current_tick - task.last_evasion_tick >= SCOUT_EVADE_REPLAN_TICKS:
-			var safe_target := _find_scout_evasion_target(scout.position, threat.position, task.faction_id, world)
-			if not safe_target.is_equal_approx(scout.position):
+			var safe_target := _find_scout_evasion_target(formation.anchor_position, threat.position, task.faction_id, world)
+			safe_target = _resolve_scout_formation_target(task, formation, safe_target, world)
+			if not safe_target.is_equal_approx(formation.anchor_position):
 				_submit_scout_evasion(task, formation, safe_target, world)
 				task.last_evasion_tick = world.current_tick
 				task.set_phase(TaskState.Phase.EVADING, world.current_tick, "Enemy contact detected; evading toward a reachable safe area")
@@ -241,6 +272,7 @@ func _advance_scout_area(task: TaskState, world: SimulationWorld) -> void:
 		if formation.is_moving:
 			return
 		var resumed_target := world.find_reachable_scout_target(task.faction_id, scout.position, task.target_position)
+		resumed_target = _resolve_scout_formation_target(task, formation, resumed_target, world)
 		if resumed_target.is_equal_approx(scout.position):
 			_complete(task, world, "Reconnaissance ended after safely withdrawing from enemy contact")
 			return
@@ -249,7 +281,8 @@ func _advance_scout_area(task: TaskState, world: SimulationWorld) -> void:
 		task.ticks_without_progress = 0
 		task.replan_attempts = 0
 		task.set_phase(TaskState.Phase.PREPARING, world.current_tick, "Threat cleared; resuming reconnaissance on a new frontier")
-	if formation.anchor_position.distance_to(task.target_position) > task.target_radius:
+	var observation_position_radius := minf(task.target_radius, SCOUT_OBSERVATION_POSITION_RADIUS)
+	if formation.anchor_position.distance_to(task.target_position) > observation_position_radius:
 		if formation.is_moving:
 			if scout.position.distance_to(task.last_progress_position) >= SCOUT_PROGRESS_DISTANCE:
 				task.last_progress_position = scout.position
@@ -260,6 +293,7 @@ func _advance_scout_area(task: TaskState, world: SimulationWorld) -> void:
 			task.replan_attempts += 1
 			task.ticks_without_progress = 0
 			var replacement := world.find_reachable_scout_target(task.faction_id, scout.position, task.target_position)
+			replacement = _resolve_scout_formation_target(task, formation, replacement, world)
 			if replacement.is_equal_approx(scout.position) or task.replan_attempts > SCOUT_MAX_REPLAN_ATTEMPTS:
 				_block(task, world, TaskState.BlockedReason.PATH_UNAVAILABLE, "Scout could not make progress toward a reachable observation area")
 				return
@@ -278,32 +312,128 @@ func _advance_scout_area(task: TaskState, world: SimulationWorld) -> void:
 	task.progress_current += 1
 	task.progress_target = SCOUT_OBSERVE_TICKS
 	if task.progress_current >= SCOUT_OBSERVE_TICKS:
-		_complete(task, world, "Reconnaissance complete; %d hostile contacts identified" % task.discovered_contact_count)
+		if task.has_staged_target:
+			task.target_position = task.final_target_position
+			task.has_staged_target = false
+			task.progress_current = 0
+			task.set_phase(TaskState.Phase.PREPARING, world.current_tick, "Covert search: observation point complete; advancing to final sector")
+		elif task.persistent_order:
+			task.progress_current = 0
+			var next_frontier := world.find_reachable_scout_target(task.faction_id, scout.position, task.target_position)
+			next_frontier = _resolve_scout_formation_target(task, formation, next_frontier, world)
+			if next_frontier.is_equal_approx(scout.position):
+				task.set_phase(TaskState.Phase.SCOUTING, world.current_tick, "Reconnaissance frontier exhausted; continuing observation and contact reporting")
+			else:
+				task.target_position = next_frontier
+				task.planned_route = PackedVector2Array()
+				task.last_progress_position = scout.position
+				task.ticks_without_progress = 0
+				task.replan_attempts = 0
+				task.set_phase(TaskState.Phase.PREPARING, world.current_tick, "Observation sweep complete; dispersing toward a new reconnaissance frontier")
+		else:
+			_complete(task, world, "Reconnaissance complete; %d hostile contacts identified" % task.discovered_contact_count)
+
+
+func _has_visible_hostile(faction_id: int, world: SimulationWorld) -> bool:
+	var knowledge := world.faction_knowledge.get(faction_id) as FactionKnowledge
+	if knowledge == null:
+		return false
+	for entity_id in knowledge.visible_hostile_unit_ids:
+		var contact := knowledge.hostile_contacts.get(entity_id) as KnowledgeContact
+		if contact != null and contact.enabled:
+			return true
+	for entity_id in knowledge.visible_hostile_building_ids:
+		var contact := knowledge.hostile_contacts.get(entity_id) as KnowledgeContact
+		if contact != null and contact.enabled:
+			return true
+	return false
 
 
 func _update_scout_intelligence(task: TaskState, world: SimulationWorld) -> void:
-	var snapshot := world.create_faction_snapshot(task.faction_id)
-	var contacts := 0
-	for unit in snapshot.units:
-		if unit.enabled and unit.faction_id != task.faction_id and unit.is_visible_to_local_player:
-			contacts += 1
-	for building in snapshot.buildings:
-		if building.enabled and building.faction_id != task.faction_id and building.is_visible:
-			contacts += 1
-	task.discovered_contact_count = maxi(task.discovered_contact_count, contacts)
-
-
-func _nearest_visible_hostile_contact(origin: Vector2, world: SimulationWorld, faction_id: int) -> UnitSnapshot:
-	var best: UnitSnapshot
-	var best_distance := INF
-	for contact in world.create_faction_snapshot(faction_id).units:
-		if contact.faction_id == faction_id or not contact.enabled or not contact.is_visible_to_local_player:
+	var knowledge := world.faction_knowledge.get(task.faction_id) as FactionKnowledge
+	if knowledge == null:
+		return
+	var visible_contact_ids: Array[int] = []
+	for entity_id in knowledge.visible_hostile_unit_ids:
+		var contact := knowledge.hostile_contacts.get(entity_id) as KnowledgeContact
+		if contact != null and contact.enabled:
+			visible_contact_ids.append(entity_id)
+	for entity_id in knowledge.visible_hostile_building_ids:
+		var contact := knowledge.hostile_contacts.get(entity_id) as KnowledgeContact
+		if contact != null and contact.enabled:
+			visible_contact_ids.append(entity_id)
+	visible_contact_ids.sort()
+	var scout_visible_contact_ids: Array[int] = []
+	for entity_id in visible_contact_ids:
+		var contact := knowledge.hostile_contacts.get(entity_id) as KnowledgeContact
+		if contact == null or not _contact_is_inside_scout_coverage(task, contact, world):
 			continue
-		var distance := origin.distance_squared_to(contact.position)
-		if distance < best_distance or is_equal_approx(distance, best_distance) and (best == null or contact.entity_id < best.entity_id):
-			best = contact
-			best_distance = distance
-	return best
+		scout_visible_contact_ids.append(entity_id)
+		if not task.reported_visible_contact_ids.has(entity_id):
+			world.events.append(SimulationEvent.new(
+				world.current_tick, SimulationEvent.Kind.SCOUT_CONTACT_REPORTED, task.task_id,
+				"contact=%d;formation=%d;faction=%d" % [entity_id, task.formation_id, task.faction_id]
+			))
+		if not task.discovered_contact_ids.has(entity_id):
+			task.discovered_contact_ids.append(entity_id)
+	task.reported_visible_contact_ids.assign(scout_visible_contact_ids)
+	task.discovered_contact_ids.sort()
+	task.discovered_contact_count = task.discovered_contact_ids.size()
+
+
+func _nearest_visible_threat_to_scouts(task: TaskState, world: SimulationWorld) -> Dictionary:
+	var knowledge := world.faction_knowledge.get(task.faction_id) as FactionKnowledge
+	if knowledge == null:
+		return {}
+	var best: KnowledgeContact
+	var best_scout: UnitState
+	var best_distance := INF
+	var visible_ids: Array[int] = []
+	visible_ids.append_array(knowledge.visible_hostile_unit_ids)
+	visible_ids.append_array(knowledge.visible_hostile_building_ids)
+	visible_ids.sort()
+	for entity_id in visible_ids:
+		var contact := knowledge.hostile_contacts.get(entity_id) as KnowledgeContact
+		if contact == null or not contact.enabled or not contact.can_attack:
+			continue
+		for scout_id in task.participant_entity_ids:
+			var scout := world.units.get(scout_id) as UnitState
+			if scout == null or not scout.enabled or scout.definition_id != &"scout_vehicle":
+				continue
+			var distance := scout.position.distance_to(contact.position)
+			var doctrine_multiplier := 1.35 if world.commander_agent_has_doctrine(task.agent_id, &"encounter_disengagement") else 1.0
+			var danger_radius := maxf(SCOUT_DANGER_RADIUS * doctrine_multiplier, contact.attack_range + SCOUT_THREAT_BUFFER * doctrine_multiplier)
+			if distance > danger_radius:
+				continue
+			if distance < best_distance or is_equal_approx(distance, best_distance) and (best == null or contact.entity_id < best.entity_id):
+				best = contact
+				best_scout = scout
+				best_distance = distance
+	return {} if best == null else {"contact": best, "scout": best_scout, "distance": best_distance}
+
+
+func _contact_is_inside_scout_coverage(task: TaskState, contact: KnowledgeContact, world: SimulationWorld) -> bool:
+	for scout_id in task.participant_entity_ids:
+		var scout := world.units.get(scout_id) as UnitState
+		if scout != null and scout.enabled and scout.definition_id == &"scout_vehicle" and scout.position.distance_to(contact.position) <= scout.sight_range:
+			return true
+	return false
+
+
+func _resolve_scout_formation_target(
+	task: TaskState,
+	formation: FormationState,
+	desired_target: Vector2,
+	world: SimulationWorld
+) -> Vector2:
+	if desired_target.is_equal_approx(formation.anchor_position):
+		return formation.anchor_position
+	var resolved := world.find_formation_deployment_position(
+		formation,
+		desired_target,
+		maxf(BLOCKED_REPLAN_RADIUS, task.target_radius)
+	)
+	return resolved if resolved.is_finite() else formation.anchor_position
 
 
 func _find_scout_evasion_target(scout_position: Vector2, threat_position: Vector2, faction_id: int, world: SimulationWorld) -> Vector2:
@@ -312,7 +442,7 @@ func _find_scout_evasion_target(scout_position: Vector2, threat_position: Vector
 	if away.is_zero_approx():
 		away = toward_base if not toward_base.is_zero_approx() else Vector2.LEFT
 	var headings: Array[Vector2] = [away, (away + toward_base).normalized(), away.rotated(PI * 0.25), away.rotated(-PI * 0.25), toward_base]
-	var bounds := SimulationWorld.BATTLEFIELD_BOUNDS.grow(-LogicGrid.CELL_SIZE)
+	var bounds := world._battlefield_bounds().grow(-LogicGrid.CELL_SIZE)
 	var best_target := scout_position
 	var best_score := -INF
 	for heading in headings:
@@ -332,6 +462,7 @@ func _find_scout_evasion_target(scout_position: Vector2, threat_position: Vector
 
 
 func _submit_scout_evasion(task: TaskState, formation: FormationState, destination: Vector2, world: SimulationWorld) -> void:
+	task.planned_route = PackedVector2Array()
 	var stop := StopCommand.new(
 		world.allocate_command_id(), task.faction_id, GameCommand.IssuerKind.AGENT,
 		world.current_tick, formation.leader_entity_id, formation.formation_id
@@ -342,15 +473,20 @@ func _submit_scout_evasion(task: TaskState, formation: FormationState, destinati
 
 
 func _submit_formation_move(task: TaskState, formation: FormationState, destination: Vector2, world: SimulationWorld) -> bool:
-	var move := FormationMoveCommand.new(
-		world.allocate_command_id(),
-		task.faction_id,
-		GameCommand.IssuerKind.AGENT,
-		world.current_tick,
-		formation.leader_entity_id,
-		formation.formation_id,
-		destination
-	)
+	var move: FormationMoveCommand
+	var executes_attack_route := task.kind != TaskState.Kind.SCOUT_AREA and not task.planned_route.is_empty()
+	if executes_attack_route:
+		move = AttackMoveCommand.new(
+			world.allocate_command_id(), task.faction_id, GameCommand.IssuerKind.AGENT,
+			world.current_tick, formation.leader_entity_id, formation.formation_id,
+			destination, task.planned_route
+		)
+	else:
+		move = FormationMoveCommand.new(
+			world.allocate_command_id(), task.faction_id, GameCommand.IssuerKind.AGENT,
+			world.current_tick, formation.leader_entity_id, formation.formation_id,
+			destination, task.planned_route
+		)
 	_set_agent_context(move, task)
 	var result := world.submit_command(move)
 	if not result.is_accepted():
@@ -360,11 +496,14 @@ func _submit_formation_move(task: TaskState, formation: FormationState, destinat
 
 
 func _nearest_visible_hostile(origin: Vector2, radius: float, world: SimulationWorld, faction_id: int = SimulationWorld.LOCAL_PLAYER_ID) -> int:
-	var snapshot := world.create_faction_snapshot(faction_id)
+	var knowledge := world.faction_knowledge.get(faction_id) as FactionKnowledge
+	if knowledge == null:
+		return 0
 	var best_id := 0
 	var best_distance := INF
-	for contact in snapshot.units:
-		if contact.faction_id == faction_id or not contact.enabled or not contact.is_visible_to_local_player:
+	for entity_id in knowledge.visible_hostile_unit_ids:
+		var contact := knowledge.hostile_contacts.get(entity_id) as KnowledgeContact
+		if contact == null or not contact.enabled:
 			continue
 		var distance := contact.position.distance_squared_to(origin)
 		if distance <= radius * radius and (distance < best_distance or (is_equal_approx(distance, best_distance) and contact.entity_id < best_id)):
@@ -435,6 +574,36 @@ func _try_resume_blocked_development(task: TaskState, world: SimulationWorld) ->
 			return
 	task.set_lifecycle(TaskState.Lifecycle.EXECUTING, world.current_tick)
 	task.set_phase(TaskState.Phase.PREPARING, world.current_tick, "Development prerequisites recovered; task resumed")
+	_emit_task_event(task, world)
+
+
+func _try_resume_blocked_movement(task: TaskState, world: SimulationWorld) -> void:
+	if task.blocked_reason != TaskState.BlockedReason.PATH_UNAVAILABLE or world.current_tick - task.last_transition_tick < BLOCKED_REPLAN_INTERVAL_TICKS:
+		return
+	var formation := world.formations.get(task.formation_id) as FormationState
+	if formation == null or _enabled_participant_count(task, world) == 0:
+		return
+	var replacement := Vector2(INF, INF)
+	if task.kind == TaskState.Kind.SCOUT_AREA:
+		replacement = world.find_reachable_scout_target(task.faction_id, formation.anchor_position, task.target_position)
+		replacement = _resolve_scout_formation_target(task, formation, replacement, world)
+	elif task.kind == TaskState.Kind.DEFEND_AREA:
+		var desired := task.final_target_position if not task.unit_card_id.is_empty() else task.target_position
+		replacement = world.find_formation_deployment_position(
+			formation, desired, maxf(BLOCKED_REPLAN_RADIUS, task.target_radius)
+		)
+	if not replacement.is_finite() or replacement.is_equal_approx(formation.anchor_position):
+		task.replan_attempts += 1
+		task.last_transition_tick = world.current_tick
+		task.last_detail = "Route remains blocked after autonomous replan attempt %d" % task.replan_attempts
+		return
+	task.target_position = replacement
+	task.planned_route = PackedVector2Array()
+	task.route = PackedVector2Array()
+	task.ticks_without_progress = 0
+	task.replan_attempts += 1
+	task.set_lifecycle(TaskState.Lifecycle.EXECUTING, world.current_tick)
+	task.set_phase(TaskState.Phase.PREPARING, world.current_tick, "Blocked route cleared; moving toward a reachable replacement position")
 	_emit_task_event(task, world)
 
 

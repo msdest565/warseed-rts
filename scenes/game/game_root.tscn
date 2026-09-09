@@ -1,4 +1,4 @@
-[gd_scene load_steps=26 format=3]
+[gd_scene load_steps=40 format=3]
 
 [ext_resource type="Script" path="res://src/app/game_root.gd" id="1_game_root"]
 [ext_resource type="Script" path="res://src/app/simulation_host.gd" id="2_simulation_host"]
@@ -15,6 +15,18 @@
 [ext_resource type="Script" path="res://src/ui/workflow_panel.gd" id="13_workflow_panel"]
 [ext_resource type="Script" path="res://src/ui/hover_tooltip.gd" id="14_hover_tooltip"]
 [ext_resource type="Script" path="res://src/ui/contact_alert.gd" id="15_contact_alert"]
+[ext_resource type="Script" path="res://src/ui/army_board.gd" id="16_army_board"]
+[ext_resource type="Script" path="res://src/ui/scenario_status.gd" id="17_scenario_status"]
+[ext_resource type="Script" path="res://src/ui/support_panel.gd" id="18_support_panel"]
+[ext_resource type="Script" path="res://src/ui/battle_debrief.gd" id="19_battle_debrief"]
+[ext_resource type="Script" path="res://src/ui/command_feedback.gd" id="20_command_feedback"]
+[ext_resource type="Script" path="res://src/ui/prebattle_planner.gd" id="21_prebattle_planner"]
+[ext_resource type="Script" path="res://src/ui/tutorial_panel.gd" id="22_tutorial_panel"]
+[ext_resource type="Script" path="res://src/presentation/battlefield_overlay.gd" id="24_battlefield_overlay"]
+[ext_resource type="Script" path="res://src/ui/battlefield_overlay_controls.gd" id="25_overlay_controls"]
+[ext_resource type="Script" path="res://src/presentation/battle_feedback_director.gd" id="23_battle_feedback"]
+[ext_resource type="Script" path="res://src/ui/playtest_feedback_dialog.gd" id="24_playtest_feedback"]
+[ext_resource type="Script" path="res://src/ui/command_desk.gd" id="26_command_desk"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_panel"]
 bg_color = Color(0.025, 0.032, 0.033, 0.97)
@@ -23,6 +35,30 @@ border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
 border_color = Color(0.31, 0.39, 0.39, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_map_frame"]
+bg_color = Color(0.01, 0.018, 0.018, 0.035)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.24, 0.56, 0.52, 0.9)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_route_hint"]
+bg_color = Color(0.025, 0.032, 0.033, 0.96)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.96, 0.78, 0.28, 0.95)
 corner_radius_top_left = 3
 corner_radius_top_right = 3
 corner_radius_bottom_right = 3
@@ -143,8 +179,17 @@ script = ExtResource("3_battlefield")
 
 [node name="Terrain" type="TileMapLayer" parent="Battlefield"]
 
+[node name="BattlefieldOverlay" type="Node2D" parent="."]
+script = ExtResource("24_battlefield_overlay")
+
 [node name="SimulationHost" type="Node" parent="."]
 script = ExtResource("2_simulation_host")
+
+[node name="CommandFeedback" type="AudioStreamPlayer" parent="."]
+script = ExtResource("20_command_feedback")
+
+[node name="BattleFeedbackDirector" type="Node" parent="."]
+script = ExtResource("23_battle_feedback")
 
 [node name="WorldPresentation" type="Node2D" parent="."]
 script = ExtResource("4_presentation")
@@ -175,6 +220,206 @@ mouse_filter = 2
 script = ExtResource("8_selection")
 
 [node name="HUDLayer" type="CanvasLayer" parent="."]
+
+[node name="MapMaskTop" type="ColorRect" parent="HUDLayer"]
+offset_right = 1280.0
+offset_bottom = 86.0
+color = Color(0.016, 0.022, 0.023, 1)
+
+[node name="MapMaskLeft" type="ColorRect" parent="HUDLayer"]
+offset_top = 86.0
+offset_right = 300.0
+offset_bottom = 544.0
+color = Color(0.016, 0.022, 0.023, 1)
+
+[node name="MapMaskRight" type="ColorRect" parent="HUDLayer"]
+offset_left = 980.0
+offset_top = 86.0
+offset_right = 1280.0
+offset_bottom = 544.0
+color = Color(0.016, 0.022, 0.023, 1)
+
+[node name="MapMaskBottom" type="ColorRect" parent="HUDLayer"]
+offset_top = 544.0
+offset_right = 1280.0
+offset_bottom = 720.0
+color = Color(0.016, 0.022, 0.023, 1)
+
+[node name="MapFrame" type="PanelContainer" parent="HUDLayer"]
+offset_left = 300.0
+offset_top = 86.0
+offset_right = 980.0
+offset_bottom = 544.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBox_map_frame")
+
+[node name="PauseButton" type="Button" parent="HUDLayer"]
+z_index = 25
+offset_left = 922.0
+offset_top = 18.0
+offset_right = 970.0
+offset_bottom = 58.0
+custom_minimum_size = Vector2(48, 40)
+theme = SubResource("Theme_command")
+text = "||"
+
+[node name="BattlefieldOverlayControls" type="PanelContainer" parent="HUDLayer"]
+visible = false
+z_index = 12
+offset_left = 310.0
+offset_top = 96.0
+offset_right = 850.0
+offset_bottom = 170.0
+theme = SubResource("Theme_command")
+theme_override_styles/panel = SubResource("StyleBox_panel")
+script = ExtResource("25_overlay_controls")
+
+[node name="Margin" type="MarginContainer" parent="HUDLayer/BattlefieldOverlayControls"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 5
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 5
+
+[node name="Layout" type="VBoxContainer" parent="HUDLayer/BattlefieldOverlayControls/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="Header" type="HBoxContainer" parent="HUDLayer/BattlefieldOverlayControls/Margin/Layout"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="HUDLayer/BattlefieldOverlayControls/Margin/Layout/Header"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.78, 0.28, 1)
+theme_override_font_sizes/font_size = 11
+text = "SITUATION"
+
+[node name="Summary" type="Label" parent="HUDLayer/BattlefieldOverlayControls/Margin/Layout/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.72, 0.82, 0.79, 1)
+theme_override_font_sizes/font_size = 10
+text = "0 AXES / 0 THREATS"
+horizontal_alignment = 2
+text_overrun_behavior = 3
+
+[node name="Toggles" type="GridContainer" parent="HUDLayer/BattlefieldOverlayControls/Margin/Layout"]
+layout_mode = 2
+theme_override_constants/h_separation = 4
+columns = 4
+
+[node name="Frontline" type="Button" parent="HUDLayer/BattlefieldOverlayControls/Margin/Layout/Toggles"]
+custom_minimum_size = Vector2(72, 34)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+button_pressed = true
+text = "FRONT"
+
+[node name="Tasks" type="Button" parent="HUDLayer/BattlefieldOverlayControls/Margin/Layout/Toggles"]
+custom_minimum_size = Vector2(72, 34)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+button_pressed = true
+text = "TASKS"
+
+[node name="Threats" type="Button" parent="HUDLayer/BattlefieldOverlayControls/Margin/Layout/Toggles"]
+custom_minimum_size = Vector2(72, 34)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+button_pressed = true
+text = "THREAT"
+
+[node name="Intelligence" type="Button" parent="HUDLayer/BattlefieldOverlayControls/Margin/Layout/Toggles"]
+custom_minimum_size = Vector2(72, 34)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+button_pressed = true
+text = "INTEL"
+
+[node name="Legend" type="Label" parent="HUDLayer/BattlefieldOverlayControls/Margin/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.63, 0.71, 0.69, 1)
+theme_override_font_sizes/font_size = 9
+text = "GOLD FRONT | TEAL TASK | RED THREAT | SHADE UNKNOWN"
+text_overrun_behavior = 3
+
+[node name="RouteModeHint" type="PanelContainer" parent="HUDLayer"]
+visible = false
+z_index = 20
+offset_left = 390.0
+offset_top = 96.0
+offset_right = 890.0
+offset_bottom = 138.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBox_route_hint")
+
+[node name="Label" type="Label" parent="HUDLayer/RouteModeHint"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.91, 0.58, 1)
+theme_override_font_sizes/font_size = 12
+text = "ROUTE PLANNING | ENTER SAVE | C EXIT | BACKSPACE UNDO"
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 2
+
+[node name="ArmyBoard" type="PanelContainer" parent="HUDLayer"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 300.0
+offset_top = -404.0
+offset_right = -16.0
+offset_bottom = -240.0
+grow_horizontal = 2
+grow_vertical = 0
+theme = SubResource("Theme_command")
+theme_override_styles/panel = SubResource("StyleBox_panel")
+script = ExtResource("16_army_board")
+
+[node name="Margin" type="MarginContainer" parent="HUDLayer/ArmyBoard"]
+layout_mode = 2
+theme_override_constants/margin_left = 7
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 7
+theme_override_constants/margin_bottom = 6
+
+[node name="Layout" type="VBoxContainer" parent="HUDLayer/ArmyBoard/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Header" type="VBoxContainer" parent="HUDLayer/ArmyBoard/Margin/Layout"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="HUDLayer/ArmyBoard/Margin/Layout/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.96, 0.78, 0.28, 1)
+theme_override_font_sizes/font_size = 13
+text = "ARMY BOARD"
+
+[node name="Hint" type="Label" parent="HUDLayer/ArmyBoard/Margin/Layout/Header"]
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.58, 0.68, 0.66, 1)
+theme_override_font_sizes/font_size = 9
+text = "Select a persistent unit card to command its formation"
+
+[node name="Scroll" type="ScrollContainer" parent="HUDLayer/ArmyBoard/Margin/Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="CommanderRow" type="VBoxContainer" parent="HUDLayer/ArmyBoard/Margin/Layout/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
 
 [node name="TaskPanel" type="PanelContainer" parent="HUDLayer"]
 layout_mode = 1
@@ -237,8 +482,16 @@ theme_override_font_sizes/font_size = 11
 text = "No unit or structure selected"
 autowrap_mode = 2
 
+[node name="Instruction" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/Intel"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.78, 0.28, 1)
+theme_override_font_sizes/font_size = 10
+text = "CURRENT ACTION | Select a card or unit; C cancels temporary modes; Esc pauses"
+autowrap_mode = 2
+
 [node name="TaskStatus" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/Intel"]
-custom_minimum_size = Vector2(0, 30)
+custom_minimum_size = Vector2(0, 24)
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_colors/font_color = Color(0.66, 0.72, 0.7, 1)
@@ -249,6 +502,277 @@ vertical_alignment = 2
 
 [node name="IntelSeparator" type="VSeparator" parent="HUDLayer/TaskPanel/Margin/Layout"]
 layout_mode = 2
+
+[node name="Tutorial" type="VBoxContainer" parent="HUDLayer/TaskPanel/Margin/Layout"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 2
+script = ExtResource("22_tutorial_panel")
+
+[node name="Header" type="HBoxContainer" parent="HUDLayer/TaskPanel/Margin/Layout/Tutorial"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Title" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/Tutorial/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.96, 0.78, 0.28, 1)
+theme_override_font_sizes/font_size = 11
+text = "FIELD TRAINING 1/6"
+text_overrun_behavior = 3
+
+[node name="Skip" type="Button" parent="HUDLayer/TaskPanel/Margin/Layout/Tutorial/Header"]
+custom_minimum_size = Vector2(58, 24)
+layout_mode = 2
+theme_override_font_sizes/font_size = 9
+text = "Skip"
+
+[node name="Progress" type="ProgressBar" parent="HUDLayer/TaskPanel/Margin/Layout/Tutorial"]
+custom_minimum_size = Vector2(0, 6)
+layout_mode = 2
+max_value = 6.0
+step = 1.0
+show_percentage = false
+
+[node name="StepTitle" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/Tutorial"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.48, 0.84, 0.75, 1)
+theme_override_font_sizes/font_size = 10
+text = "Issue a commander objective"
+autowrap_mode = 2
+
+[node name="StepBody" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/Tutorial"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.82, 0.87, 0.84, 1)
+theme_override_font_sizes/font_size = 9
+text = "Drag a commander card onto a battlefield region."
+autowrap_mode = 2
+
+[node name="Condition" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/Tutorial"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.7, 0.67, 1)
+theme_override_font_sizes/font_size = 8
+text = "Complete when the order is accepted."
+autowrap_mode = 2
+
+[node name="Separator" type="HSeparator" parent="HUDLayer/TaskPanel/Margin/Layout/Tutorial"]
+layout_mode = 2
+
+[node name="CommandDesk" type="HBoxContainer" parent="HUDLayer/TaskPanel/Margin/Layout"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+script = ExtResource("26_command_desk")
+
+[node name="Intent" type="VBoxContainer" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk"]
+custom_minimum_size = Vector2(330, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 3
+
+[node name="Title" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.78, 0.28, 1)
+theme_override_font_sizes/font_size = 11
+text = "HIGH-LEVEL INTENT"
+
+[node name="ApprovalHint" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.64, 0.72, 0.7, 1)
+theme_override_font_sizes/font_size = 9
+text = "AI waits for approval. Issuing the intent starts execution now."
+autowrap_mode = 2
+max_lines_visible = 2
+text_overrun_behavior = 3
+
+[node name="Selectors" type="GridContainer" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/h_separation = 4
+theme_override_constants/v_separation = 2
+columns = 5
+
+[node name="CommanderLabel" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent/Selectors"]
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.7, 0.67, 1)
+theme_override_font_sizes/font_size = 9
+text = "COMMANDER"
+
+[node name="Commander" type="OptionButton" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent/Selectors"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ObjectiveLabel" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent/Selectors"]
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.7, 0.67, 1)
+theme_override_font_sizes/font_size = 9
+text = "OBJECTIVE"
+
+[node name="Objective" type="OptionButton" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent/Selectors"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="AxisLabel" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent/Selectors"]
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.7, 0.67, 1)
+theme_override_font_sizes/font_size = 9
+text = "MAIN AXIS"
+
+[node name="Axis" type="OptionButton" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent/Selectors"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RiskLabel" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent/Selectors"]
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.7, 0.67, 1)
+theme_override_font_sizes/font_size = 9
+text = "RISK"
+
+[node name="Risk" type="OptionButton" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent/Selectors"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ReserveLabel" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent/Selectors"]
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.7, 0.67, 1)
+theme_override_font_sizes/font_size = 9
+text = "RESERVE"
+
+[node name="Reserve" type="OptionButton" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent/Selectors"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Actions" type="HBoxContainer" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Apply" type="Button" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent/Actions"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "ISSUE INTENT"
+
+[node name="Cancel" type="Button" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent/Actions"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "CANCEL"
+
+[node name="Status" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Intent"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.73, 0.69, 1)
+theme_override_font_sizes/font_size = 9
+text = "No active intent"
+autowrap_mode = 2
+max_lines_visible = 2
+text_overrun_behavior = 3
+
+[node name="Separator" type="VSeparator" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk"]
+layout_mode = 2
+
+[node name="Exceptions" type="VBoxContainer" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 3
+
+[node name="Header" type="HBoxContainer" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Exceptions"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Exceptions/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.35, 0.78, 0.72, 1)
+theme_override_font_sizes/font_size = 11
+text = "DECISIONS REQUIRED"
+
+[node name="Count" type="Label" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Exceptions/Header"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.78, 0.28, 1)
+theme_override_font_sizes/font_size = 11
+text = "0"
+
+[node name="Guide" type="Button" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Exceptions/Header"]
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+text = "?"
+
+[node name="Scroll" type="ScrollContainer" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Exceptions"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Rows" type="VBoxContainer" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Exceptions/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 2
+
+[node name="Footer" type="HBoxContainer" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Exceptions"]
+layout_mode = 2
+
+[node name="Spacer" type="Control" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Exceptions/Footer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="History" type="Button" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Exceptions/Footer"]
+custom_minimum_size = Vector2(116, 32)
+layout_mode = 2
+text = "HISTORY 0"
+
+[node name="GuidePopup" type="PopupPanel" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk"]
+
+[node name="Margin" type="MarginContainer" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/GuidePopup"]
+offset_right = 500.0
+offset_bottom = 420.0
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 16
+
+[node name="Text" type="RichTextLabel" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/GuidePopup/Margin"]
+layout_mode = 2
+bbcode_enabled = true
+fit_content = false
+scroll_active = true
+text = "COMMAND GUIDE"
+
+[node name="HistoryPopup" type="PopupPanel" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk"]
+
+[node name="Margin" type="MarginContainer" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/HistoryPopup"]
+offset_right = 560.0
+offset_bottom = 440.0
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 16
+
+[node name="Text" type="RichTextLabel" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/HistoryPopup/Margin"]
+layout_mode = 2
+bbcode_enabled = true
+fit_content = false
+scroll_active = true
+text = "NO DECISIONS RECORDED"
+
+[node name="DecisionFailureDialog" type="AcceptDialog" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk"]
+process_mode = 3
+title = "NO RESPONSE"
+initial_position = 1
+size = Vector2i(520, 230)
+dialog_text = "The decision could not be executed."
+ok_button_text = "OK"
 
 [node name="Strategic" type="VBoxContainer" parent="HUDLayer/TaskPanel/Margin/Layout"]
 custom_minimum_size = Vector2(145, 0)
@@ -468,7 +992,7 @@ text = "Set Rally"
 [node name="ResourceBar" type="PanelContainer" parent="HUDLayer"]
 offset_left = 16.0
 offset_top = 16.0
-offset_right = 212.0
+offset_right = 288.0
 offset_bottom = 60.0
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBox_panel")
@@ -477,10 +1001,47 @@ script = ExtResource("12_resource_bar")
 [node name="Label" type="Label" parent="HUDLayer/ResourceBar"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.95, 0.78, 0.28, 1)
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 16
 text = "Gold: 0"
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="ScenarioStatus" type="PanelContainer" parent="HUDLayer"]
+visible = false
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 300.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = 78.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBox_panel")
+script = ExtResource("17_scenario_status")
+
+[node name="Margin" type="MarginContainer" parent="HUDLayer/ScenarioStatus"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 6
+
+[node name="Layout" type="VBoxContainer" parent="HUDLayer/ScenarioStatus/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="Title" type="Label" parent="HUDLayer/ScenarioStatus/Margin/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.78, 0.28, 1)
+theme_override_font_sizes/font_size = 15
+text = "GREY RIDGE / ACTIVE / 08:00"
+
+[node name="Objective" type="Label" parent="HUDLayer/ScenarioStatus/Margin/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.78, 0.84, 0.81, 1)
+theme_override_font_sizes/font_size = 11
+text = "Destroy the hostile headquarters before the time limit"
 
 [node name="WorkflowPanel" type="PanelContainer" parent="HUDLayer"]
 offset_left = 16.0
@@ -491,6 +1052,108 @@ mouse_filter = 2
 theme = SubResource("Theme_command")
 theme_override_styles/panel = SubResource("StyleBox_panel")
 script = ExtResource("13_workflow_panel")
+
+[node name="SupportPanel" type="PanelContainer" parent="HUDLayer"]
+visible = false
+offset_left = 16.0
+offset_top = 76.0
+offset_right = 288.0
+offset_bottom = 520.0
+theme = SubResource("Theme_command")
+theme_override_styles/panel = SubResource("StyleBox_panel")
+script = ExtResource("18_support_panel")
+
+[node name="Margin" type="MarginContainer" parent="HUDLayer/SupportPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="Scroll" type="ScrollContainer" parent="HUDLayer/SupportPanel/Margin"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="Layout" type="VBoxContainer" parent="HUDLayer/SupportPanel/Margin/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="Title" type="Label" parent="HUDLayer/SupportPanel/Margin/Scroll/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.78, 0.28, 1)
+theme_override_font_sizes/font_size = 13
+text = "THEATER SUPPORT"
+
+[node name="Pair" type="OptionButton" parent="HUDLayer/SupportPanel/Margin/Scroll/Layout"]
+layout_mode = 2
+item_count = 2
+selected = 0
+popup/item_0/text = "West + Central"
+popup/item_0/id = 0
+popup/item_1/text = "Central + East"
+popup/item_1/id = 1
+
+[node name="Recon" type="Button" parent="HUDLayer/SupportPanel/Margin/Scroll/Layout"]
+custom_minimum_size = Vector2(0, 34)
+layout_mode = 2
+text = "Air Recon | 2 supply"
+
+[node name="Fortify" type="Button" parent="HUDLayer/SupportPanel/Margin/Scroll/Layout"]
+custom_minimum_size = Vector2(0, 34)
+layout_mode = 2
+text = "Fortify Selected Card | 2 supply"
+
+[node name="Reinforcement" type="Button" parent="HUDLayer/SupportPanel/Margin/Scroll/Layout"]
+custom_minimum_size = Vector2(0, 34)
+layout_mode = 2
+text = "Field Reinforcement | 2 supply | +2"
+
+[node name="Engineering" type="Button" parent="HUDLayer/SupportPanel/Margin/Scroll/Layout"]
+visible = false
+custom_minimum_size = Vector2(0, 34)
+layout_mode = 2
+text = "Open Engineering Route | 2 supply"
+
+[node name="FireSupport" type="Button" parent="HUDLayer/SupportPanel/Margin/Scroll/Layout"]
+visible = false
+custom_minimum_size = Vector2(0, 34)
+layout_mode = 2
+text = "Fire Support"
+
+[node name="RapidMobility" type="Button" parent="HUDLayer/SupportPanel/Margin/Scroll/Layout"]
+visible = false
+custom_minimum_size = Vector2(0, 34)
+layout_mode = 2
+text = "Rapid Mobility"
+
+[node name="FrontlineLogistics" type="Button" parent="HUDLayer/SupportPanel/Margin/Scroll/Layout"]
+visible = false
+custom_minimum_size = Vector2(0, 34)
+layout_mode = 2
+text = "Frontline Logistics"
+
+[node name="Status" type="Label" parent="HUDLayer/SupportPanel/Margin/Scroll/Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.68, 0.74, 0.72, 1)
+theme_override_font_sizes/font_size = 10
+text = "Support ready"
+autowrap_mode = 2
+
+[node name="IntelTitle" type="Label" parent="HUDLayer/SupportPanel/Margin/Scroll/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.35, 0.78, 0.72, 1)
+theme_override_font_sizes/font_size = 11
+text = "CARDINAL / INTELLIGENCE"
+
+[node name="Intel" type="Label" parent="HUDLayer/SupportPanel/Margin/Scroll/Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.78, 0.84, 0.81, 1)
+theme_override_font_sizes/font_size = 9
+text = "Awaiting reports"
+autowrap_mode = 2
 
 [node name="Margin" type="MarginContainer" parent="HUDLayer/WorkflowPanel"]
 layout_mode = 2
@@ -530,7 +1193,7 @@ text = "No delegated task"
 text_overrun_behavior = 3
 
 [node name="Minimap" type="Control" parent="HUDLayer"]
-custom_minimum_size = Vector2(272, 188)
+custom_minimum_size = Vector2(232, 188)
 layout_mode = 3
 anchors_preset = 2
 anchor_top = 1.0
@@ -546,12 +1209,13 @@ script = ExtResource("9_minimap")
 [node name="ContactAlert" type="PanelContainer" parent="HUDLayer"]
 visible = false
 layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 420.0
-offset_top = 18.0
-offset_right = -420.0
-offset_bottom = 58.0
+anchors_preset = 1
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -220.0
+offset_top = 168.0
+offset_right = 220.0
+offset_bottom = 208.0
 grow_horizontal = 2
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBox_attack")
@@ -564,6 +1228,171 @@ theme_override_font_sizes/font_size = 15
 text = "Enemy contact detected"
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="AlertAudio" type="AudioStreamPlayer" parent="HUDLayer/ContactAlert"]
+
+[node name="PrebattlePlanner" type="CanvasLayer" parent="."]
+visible = false
+script = ExtResource("21_prebattle_planner")
+
+[node name="BattleDebrief" type="CanvasLayer" parent="."]
+visible = false
+layer = 80
+script = ExtResource("19_battle_debrief")
+
+[node name="Backdrop" type="ColorRect" parent="BattleDebrief"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+color = Color(0.008, 0.012, 0.013, 1)
+
+[node name="Panel" type="PanelContainer" parent="BattleDebrief/Backdrop"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 24.0
+offset_right = -24.0
+offset_bottom = -24.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_command")
+theme_override_styles/panel = SubResource("StyleBox_panel")
+
+[node name="Margin" type="MarginContainer" parent="BattleDebrief/Backdrop/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 28
+theme_override_constants/margin_top = 22
+theme_override_constants/margin_right = 28
+theme_override_constants/margin_bottom = 22
+
+[node name="Layout" type="VBoxContainer" parent="BattleDebrief/Backdrop/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="BattleDebrief/Backdrop/Panel/Margin/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.78, 0.28, 1)
+theme_override_font_sizes/font_size = 14
+text = "AFTER ACTION REPORT"
+horizontal_alignment = 1
+
+[node name="Result" type="Label" parent="BattleDebrief/Backdrop/Panel/Margin/Layout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 30
+text = "VICTORY"
+horizontal_alignment = 1
+
+[node name="Summary" type="Label" parent="BattleDebrief/Backdrop/Panel/Margin/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.74, 0.81, 0.78, 1)
+theme_override_font_sizes/font_size = 12
+text = "Replacement and merit summary"
+horizontal_alignment = 1
+
+[node name="PlaytestSummary" type="Label" parent="BattleDebrief/Backdrop/Panel/Margin/Layout"]
+custom_minimum_size = Vector2(0, 54)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.76, 0.72, 1)
+theme_override_font_sizes/font_size = 10
+text = "PLAYTEST | first command / replans / intelligence response / direct control"
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 2
+
+[node name="Separator" type="HSeparator" parent="BattleDebrief/Backdrop/Panel/Margin/Layout"]
+layout_mode = 2
+
+[node name="ViewTabs" type="HBoxContainer" parent="BattleDebrief/Backdrop/Panel/Margin/Layout"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Timeline" type="Button" parent="BattleDebrief/Backdrop/Panel/Margin/Layout/ViewTabs"]
+custom_minimum_size = Vector2(0, 34)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+button_pressed = true
+text = "TURNING POINTS"
+
+[node name="Cards" type="Button" parent="BattleDebrief/Backdrop/Panel/Margin/Layout/ViewTabs"]
+custom_minimum_size = Vector2(0, 34)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "UNIT CARDS"
+
+[node name="Causes" type="Button" parent="BattleDebrief/Backdrop/Panel/Margin/Layout/ViewTabs"]
+custom_minimum_size = Vector2(0, 34)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "CAUSES"
+
+[node name="Columns" type="HBoxContainer" parent="BattleDebrief/Backdrop/Panel/Margin/Layout"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Card" type="Label" parent="BattleDebrief/Backdrop/Panel/Margin/Layout/Columns"]
+custom_minimum_size = Vector2(210, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.35, 0.78, 0.72, 1)
+text = "UNIT CARD"
+
+[node name="Strength" type="Label" parent="BattleDebrief/Backdrop/Panel/Margin/Layout/Columns"]
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.35, 0.78, 0.72, 1)
+text = "STRENGTH"
+
+[node name="Actions" type="Label" parent="BattleDebrief/Backdrop/Panel/Margin/Layout/Columns"]
+custom_minimum_size = Vector2(520, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.35, 0.78, 0.72, 1)
+text = "REFIT AND HONORS"
+
+[node name="RowsScroll" type="ScrollContainer" parent="BattleDebrief/Backdrop/Panel/Margin/Layout"]
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Rows" type="VBoxContainer" parent="BattleDebrief/Backdrop/Panel/Margin/Layout/RowsScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 3
+
+[node name="Footer" type="HBoxContainer" parent="BattleDebrief/Backdrop/Panel/Margin/Layout"]
+layout_mode = 2
+
+[node name="FightAgain" type="Button" parent="BattleDebrief/Backdrop/Panel/Margin/Layout/Footer"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Fight Again"
+
+[node name="ReturnToOperations" type="Button" parent="BattleDebrief/Backdrop/Panel/Margin/Layout/Footer"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Operations"
+
+[node name="Feedback" type="Button" parent="BattleDebrief/Backdrop/Panel/Margin/Layout/Footer"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Feedback"
+
+[node name="PlaytestFeedbackDialog" type="CanvasLayer" parent="."]
+visible = false
+layer = 95
+script = ExtResource("24_playtest_feedback")
 
 [node name="DebugLayer" type="CanvasLayer" parent="."]
 visible = false
@@ -638,16 +1467,16 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -170.0
-offset_top = -310.0
+offset_top = -330.0
 offset_right = 170.0
-offset_bottom = 310.0
+offset_bottom = 330.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBox_panel")
 
 [node name="Content" type="VBoxContainer" parent="PauseMenu/Backdrop/Menu"]
 layout_mode = 2
-theme_override_constants/separation = 12
+theme_override_constants/separation = 8
 alignment = 1
 
 [node name="Title" type="Label" parent="PauseMenu/Backdrop/Menu/Content"]
@@ -658,7 +1487,7 @@ text = "PAUSED"
 horizontal_alignment = 1
 
 [node name="Continue" type="Button" parent="PauseMenu/Backdrop/Menu/Content"]
-custom_minimum_size = Vector2(280, 44)
+custom_minimum_size = Vector2(280, 40)
 layout_mode = 2
 text = "Continue"
 
@@ -668,7 +1497,7 @@ text = "Language"
 horizontal_alignment = 1
 
 [node name="LanguageSelector" type="OptionButton" parent="PauseMenu/Backdrop/Menu/Content"]
-custom_minimum_size = Vector2(280, 40)
+custom_minimum_size = Vector2(280, 36)
 layout_mode = 2
 
 [node name="DifficultyLabel" type="Label" parent="PauseMenu/Backdrop/Menu/Content"]
@@ -677,7 +1506,7 @@ text = "Enemy Difficulty"
 horizontal_alignment = 1
 
 [node name="DifficultySelector" type="OptionButton" parent="PauseMenu/Backdrop/Menu/Content"]
-custom_minimum_size = Vector2(280, 40)
+custom_minimum_size = Vector2(280, 36)
 layout_mode = 2
 
 [node name="IndustrialAILabel" type="Label" parent="PauseMenu/Backdrop/Menu/Content"]
@@ -686,7 +1515,7 @@ text = "Industrial AI Authority"
 horizontal_alignment = 1
 
 [node name="IndustrialAISelector" type="OptionButton" parent="PauseMenu/Backdrop/Menu/Content"]
-custom_minimum_size = Vector2(280, 40)
+custom_minimum_size = Vector2(280, 36)
 layout_mode = 2
 
 [node name="BattlefieldAILabel" type="Label" parent="PauseMenu/Backdrop/Menu/Content"]
@@ -695,11 +1524,11 @@ text = "Battlefield AI Authority"
 horizontal_alignment = 1
 
 [node name="BattlefieldAISelector" type="OptionButton" parent="PauseMenu/Backdrop/Menu/Content"]
-custom_minimum_size = Vector2(280, 40)
+custom_minimum_size = Vector2(280, 36)
 layout_mode = 2
 
 [node name="AuthorizationHelp" type="Label" parent="PauseMenu/Backdrop/Menu/Content"]
-custom_minimum_size = Vector2(300, 72)
+custom_minimum_size = Vector2(300, 60)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.68, 0.74, 0.72, 1)
 theme_override_font_sizes/font_size = 11
@@ -707,7 +1536,25 @@ text = "Advisory: suggestions only\nAssisted: explicit assignments\nDelegated: a
 horizontal_alignment = 1
 autowrap_mode = 2
 
+[node name="BattleAudio" type="CheckButton" parent="PauseMenu/Backdrop/Menu/Content"]
+custom_minimum_size = Vector2(280, 36)
+layout_mode = 2
+button_pressed = true
+text = "Battle audio enabled"
+
+[node name="Operations" type="Button" parent="PauseMenu/Backdrop/Menu/Content"]
+custom_minimum_size = Vector2(280, 40)
+layout_mode = 2
+text = "Operations"
+
 [node name="Exit" type="Button" parent="PauseMenu/Backdrop/Menu/Content"]
-custom_minimum_size = Vector2(280, 44)
+custom_minimum_size = Vector2(280, 40)
 layout_mode = 2
 text = "Exit Game"
+
+[node name="ReturnConfirmation" type="ConfirmationDialog" parent="PauseMenu"]
+process_mode = 3
+title = "Return to Operations"
+initial_position = 1
+size = Vector2i(480, 190)
+dialog_text = "The current battle will end without a debrief. Return to operations?"

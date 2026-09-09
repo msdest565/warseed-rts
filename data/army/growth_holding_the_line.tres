@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="GrowthDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://src/data/growth_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+definition_id = &"holding_the_line"
+display_name_key = &"GROWTH_HOLDING_THE_LINE"
+benefit_key = &"GROWTH_HOLDING_THE_LINE_BENEFIT"
+tradeoff_key = &"GROWTH_HOLDING_THE_LINE_TRADEOFF"
+merit_cost = 3
+armor_bonus = 1.5
+move_speed_multiplier = 0.9

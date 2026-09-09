@@ -22,6 +22,8 @@ func _test_projectile_delays_and_applies_armored_damage(failures: Array[String])
 	attacker.projectile_speed = 100.0
 	var target := UnitState.new(2, Vector2(120.0, 100.0), 0.0, 2)
 	target.armor = 5.0
+	target.can_attack = false
+	target.can_accept_attack_orders = false
 	world.units[1] = attacker
 	world.units[2] = target
 	world.submit_command(AttackCommand.new(1, 1, GameCommand.IssuerKind.PLAYER, 0, 1, 2))

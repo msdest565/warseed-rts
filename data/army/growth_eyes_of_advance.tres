@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="GrowthDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://src/data/growth_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+definition_id = &"eyes_of_advance"
+display_name_key = &"GROWTH_EYES_OF_ADVANCE"
+benefit_key = &"GROWTH_EYES_OF_ADVANCE_BENEFIT"
+tradeoff_key = &"GROWTH_EYES_OF_ADVANCE_TRADEOFF"
+merit_cost = 3
+attack_multiplier = 0.95
+sight_range_multiplier = 1.2

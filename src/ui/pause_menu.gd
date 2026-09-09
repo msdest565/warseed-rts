@@ -4,6 +4,7 @@ extends CanvasLayer
 signal language_changed(locale: String)
 signal enemy_difficulty_changed(difficulty: EnemyDifficultyProfile.Difficulty)
 signal agent_authorization_changed(agent_id: int, authorization: AgentPolicy.Authorization)
+signal battle_audio_enabled_changed(enabled: bool)
 
 @onready var backdrop: ColorRect = $Backdrop
 @onready var title_label: Label = $Backdrop/Menu/Content/Title
@@ -17,11 +18,15 @@ signal agent_authorization_changed(agent_id: int, authorization: AgentPolicy.Aut
 @onready var battlefield_ai_label: Label = $Backdrop/Menu/Content/BattlefieldAILabel
 @onready var battlefield_ai_selector: OptionButton = $Backdrop/Menu/Content/BattlefieldAISelector
 @onready var authorization_help: Label = $Backdrop/Menu/Content/AuthorizationHelp
+@onready var battle_audio_toggle: CheckButton = $Backdrop/Menu/Content/BattleAudio
+@onready var operations_button: Button = $Backdrop/Menu/Content/Operations
 @onready var exit_button: Button = $Backdrop/Menu/Content/Exit
+@onready var return_confirmation: ConfirmationDialog = $ReturnConfirmation
 
 var _enemy_difficulty: EnemyDifficultyProfile.Difficulty = EnemyDifficultyProfile.Difficulty.NORMAL
 var _industrial_authorization: AgentPolicy.Authorization = AgentPolicy.Authorization.ASSISTED
 var _battlefield_authorization: AgentPolicy.Authorization = AgentPolicy.Authorization.ASSISTED
+var _battle_audio_enabled: bool = true
 
 
 func _ready() -> void:
@@ -31,7 +36,10 @@ func _ready() -> void:
 	difficulty_selector.item_selected.connect(_select_difficulty)
 	industrial_ai_selector.item_selected.connect(_select_agent_authorization.bind(StrategicTaskSystem.INDUSTRIAL_AGENT_ID))
 	battlefield_ai_selector.item_selected.connect(_select_agent_authorization.bind(StrategicTaskSystem.BATTLEFIELD_AGENT_ID))
+	battle_audio_toggle.toggled.connect(_select_battle_audio)
+	operations_button.pressed.connect(_confirm_return_to_operations)
 	exit_button.pressed.connect(_exit_game)
+	return_confirmation.confirmed.connect(_return_to_operations)
 	var initial_locale := "zh_CN" if TranslationServer.get_locale().begins_with("zh") else "en"
 	TranslationServer.set_locale(initial_locale)
 	_refresh_locale()
@@ -39,7 +47,7 @@ func _ready() -> void:
 
 
 func _refresh_locale() -> void:
-	for control in [title_label, continue_button, language_label, language_selector, difficulty_label, difficulty_selector, industrial_ai_label, industrial_ai_selector, battlefield_ai_label, battlefield_ai_selector, authorization_help, exit_button]:
+	for control in [title_label, continue_button, language_label, language_selector, difficulty_label, difficulty_selector, industrial_ai_label, industrial_ai_selector, battlefield_ai_label, battlefield_ai_selector, authorization_help, battle_audio_toggle, operations_button, exit_button]:
 		(control as Control).auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	title_label.text = GameText.t(&"PAUSED_TITLE")
 	continue_button.text = GameText.t(&"CONTINUE_GAME")
@@ -48,7 +56,16 @@ func _refresh_locale() -> void:
 	industrial_ai_label.text = GameText.t(&"INDUSTRIAL_AI_LABEL")
 	battlefield_ai_label.text = GameText.t(&"BATTLEFIELD_AI_LABEL")
 	authorization_help.text = GameText.t(&"AI_AUTH_HELP")
+	battle_audio_toggle.text = GameText.t(&"BATTLE_AUDIO_ENABLED")
+	battle_audio_toggle.tooltip_text = GameText.t(&"BATTLE_AUDIO_ENABLED_TOOLTIP")
+	battle_audio_toggle.set_pressed_no_signal(_battle_audio_enabled)
+	operations_button.text = GameText.t(&"RETURN_TO_OPERATIONS")
+	operations_button.tooltip_text = GameText.t(&"RETURN_TO_OPERATIONS_TOOLTIP")
 	exit_button.text = GameText.t(&"EXIT_GAME")
+	return_confirmation.title = GameText.t(&"RETURN_TO_OPERATIONS_CONFIRM_TITLE")
+	return_confirmation.dialog_text = GameText.t(&"RETURN_TO_OPERATIONS_CONFIRM_BODY")
+	return_confirmation.ok_button_text = GameText.t(&"RETURN_TO_OPERATIONS_CONFIRM")
+	return_confirmation.cancel_button_text = GameText.t(&"CANCEL")
 	language_selector.clear()
 	language_selector.add_item(GameText.t(&"LANGUAGE_CHINESE"))
 	language_selector.set_item_metadata(0, "zh_CN")
@@ -83,6 +100,11 @@ func _select_agent_authorization(index: int, agent_id: int) -> void:
 		_battlefield_authorization = authorization
 	selector.tooltip_text = GameText.t(StringName("AI_AUTH_DESCRIPTION_%s" % AgentPolicy.Authorization.keys()[authorization]))
 	agent_authorization_changed.emit(agent_id, authorization)
+
+
+func _select_battle_audio(enabled: bool) -> void:
+	_battle_audio_enabled = enabled
+	battle_audio_enabled_changed.emit(enabled)
 
 
 func set_ai_settings(
@@ -129,3 +151,13 @@ func _exit_game() -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	tree.paused = false
 	tree.quit()
+
+
+func _confirm_return_to_operations() -> void:
+	return_confirmation.popup_centered(Vector2i(480, 190))
+
+
+func _return_to_operations() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	tree.paused = false
+	tree.change_scene_to_file("res://scenes/game/battle_selector.tscn")

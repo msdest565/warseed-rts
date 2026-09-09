@@ -1,0 +1,223 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://src/ui/battle_selector.gd" id="1_selector"]
+
+[sub_resource type="StyleBoxFlat" id="Style_panel"]
+bg_color = Color(0.025, 0.035, 0.035, 0.97)
+content_margin_left = 24.0
+content_margin_top = 22.0
+content_margin_right = 24.0
+content_margin_bottom = 22.0
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.25, 0.38, 0.37, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="Style_button"]
+bg_color = Color(0.045, 0.06, 0.06, 0.98)
+border_width_left = 2
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.2, 0.31, 0.3, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[sub_resource type="StyleBoxFlat" id="Style_button_hover"]
+bg_color = Color(0.06, 0.12, 0.115, 1)
+border_width_left = 3
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.28, 0.68, 0.62, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[sub_resource type="StyleBoxFlat" id="Style_button_pressed"]
+bg_color = Color(0.045, 0.19, 0.17, 1)
+border_width_left = 4
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.4, 0.9, 0.76, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[sub_resource type="StyleBoxFlat" id="Style_deploy"]
+bg_color = Color(0.16, 0.38, 0.29, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.48, 0.9, 0.66, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[sub_resource type="Theme" id="Theme_selector"]
+default_font_size = 14
+Button/colors/font_color = Color(0.86, 0.91, 0.89, 1)
+Button/colors/font_hover_color = Color(1, 1, 1, 1)
+Button/colors/font_pressed_color = Color(1, 1, 1, 1)
+Button/styles/normal = SubResource("Style_button")
+Button/styles/hover = SubResource("Style_button_hover")
+Button/styles/focus = SubResource("Style_button_hover")
+Button/styles/pressed = SubResource("Style_button_pressed")
+PanelContainer/styles/panel = SubResource("Style_panel")
+
+[node name="BattleSelector" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_selector")
+script = ExtResource("1_selector")
+
+[node name="SafeArea" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 20.0
+offset_right = -24.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Layout" type="VBoxContainer" parent="SafeArea"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Header" type="VBoxContainer" parent="SafeArea/Layout"]
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="Title" type="Label" parent="SafeArea/Layout/Header"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.79, 0.3, 1)
+theme_override_font_sizes/font_size = 28
+text = "OPERATIONS"
+
+[node name="Subtitle" type="Label" parent="SafeArea/Layout/Header"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.73, 0.7, 1)
+theme_override_font_sizes/font_size = 13
+text = "Select an operation and enter army composition."
+
+[node name="HeaderRule" type="HSeparator" parent="SafeArea/Layout"]
+layout_mode = 2
+
+[node name="Body" type="GridContainer" parent="SafeArea/Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+columns = 2
+theme_override_constants/h_separation = 22
+theme_override_constants/v_separation = 12
+
+[node name="BattleList" type="VBoxContainer" parent="SafeArea/Layout/Body"]
+custom_minimum_size = Vector2(310, 156)
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Dossier" type="PanelContainer" parent="SafeArea/Layout/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Content" type="VBoxContainer" parent="SafeArea/Layout/Body/Dossier"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Operation" type="Label" parent="SafeArea/Layout/Body/Dossier/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.35, 0.78, 0.7, 1)
+theme_override_font_sizes/font_size = 12
+text = "OPERATION 01"
+
+[node name="BattleTitle" type="Label" parent="SafeArea/Layout/Body/Dossier/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.96, 0.92, 1)
+theme_override_font_sizes/font_size = 25
+text = "GREY RIDGE"
+
+[node name="Briefing" type="Label" parent="SafeArea/Layout/Body/Dossier/Content"]
+custom_minimum_size = Vector2(0, 92)
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.78, 0.83, 0.8, 1)
+theme_override_font_sizes/font_size = 15
+text = "Mission briefing"
+autowrap_mode = 2
+
+[node name="Mechanics" type="Label" parent="SafeArea/Layout/Body/Dossier/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.78, 0.32, 1)
+theme_override_font_sizes/font_size = 13
+text = "FOCUS | intelligence, terrain"
+autowrap_mode = 2
+
+[node name="Persistence" type="Label" parent="SafeArea/Layout/Body/Dossier/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.67, 0.63, 1)
+theme_override_font_sizes/font_size = 12
+text = "All operations share one persistent army roster."
+autowrap_mode = 2
+
+[node name="Training" type="HBoxContainer" parent="SafeArea/Layout/Body/Dossier/Content"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Status" type="Label" parent="SafeArea/Layout/Body/Dossier/Content/Training"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.48, 0.82, 0.7, 1)
+theme_override_font_sizes/font_size = 12
+text = "TRAINING: NOT STARTED"
+vertical_alignment = 1
+autowrap_mode = 2
+
+[node name="Replay" type="Button" parent="SafeArea/Layout/Body/Dossier/Content/Training"]
+custom_minimum_size = Vector2(142, 36)
+layout_mode = 2
+text = "REPLAY TRAINING"
+
+[node name="Deploy" type="Button" parent="SafeArea/Layout/Body/Dossier/Content"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_override_styles/normal = SubResource("Style_deploy")
+theme_override_styles/hover = SubResource("Style_button_hover")
+theme_override_styles/focus = SubResource("Style_button_hover")
+text = "OPEN ARMY COMPOSITION"
+
+[node name="Footer" type="HBoxContainer" parent="SafeArea/Layout"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Language" type="Button" parent="SafeArea/Layout/Footer"]
+custom_minimum_size = Vector2(150, 38)
+layout_mode = 2
+text = "中文 / EN"
+
+[node name="Spacer" type="Control" parent="SafeArea/Layout/Footer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Exit" type="Button" parent="SafeArea/Layout/Footer"]
+custom_minimum_size = Vector2(150, 38)
+layout_mode = 2
+text = "EXIT"

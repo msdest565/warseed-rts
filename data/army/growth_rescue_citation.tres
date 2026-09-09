@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="GrowthDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://src/data/growth_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+definition_id = &"rescue_citation"
+display_name_key = &"GROWTH_RESCUE_CITATION"
+benefit_key = &"GROWTH_RESCUE_CITATION_BENEFIT"
+tradeoff_key = &"GROWTH_RESCUE_CITATION_TRADEOFF"
+merit_cost = 2
+attack_multiplier = 0.95
+organization_recovery_multiplier = 1.25

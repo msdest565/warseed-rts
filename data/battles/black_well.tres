@@ -1,0 +1,360 @@
+[gd_resource type="Resource" script_class="BattleDefinition" load_steps=45 format=3]
+
+[ext_resource type="Script" path="res://src/data/battle_definition.gd" id="1_battle"]
+[ext_resource type="Resource" path="res://data/objectives/standard_card_battle_objectives.tres" id="objectives"]
+[ext_resource type="Script" path="res://src/data/battle_region_definition.gd" id="2_region"]
+[ext_resource type="Script" path="res://src/data/battle_intel_definition.gd" id="3_intel"]
+[ext_resource type="Script" path="res://src/data/battle_formation_definition.gd" id="4_formation"]
+[ext_resource type="Script" path="res://src/data/battle_support_definition.gd" id="5_support"]
+[ext_resource type="Script" path="res://src/data/battle_enemy_plan_definition.gd" id="6_plan"]
+[ext_resource type="Script" path="res://src/data/battle_reaction_rule_definition.gd" id="7_reaction"]
+[ext_resource type="Resource" path="res://data/army/bai_jiuyang_black_well.tres" id="8_bai"]
+[ext_resource type="Resource" path="res://data/army/di_tian_black_well.tres" id="9_di"]
+[ext_resource type="Resource" path="res://data/army/lin_mo_black_well.tres" id="10_lin"]
+[ext_resource type="Resource" path="res://data/army/lu_zheng.tres" id="11_lu"]
+[ext_resource type="Resource" path="res://data/army/gu_hanxing.tres" id="12_gu"]
+[ext_resource type="Resource" path="res://data/army/falcon_recon_group.tres" id="13_falcon"]
+[ext_resource type="Resource" path="res://data/army/ironwall_assault_group.tres" id="14_ironwall"]
+[ext_resource type="Resource" path="res://data/army/armored_spearhead.tres" id="15_armor"]
+[ext_resource type="Resource" path="res://data/army/thunder_fire_group.tres" id="16_thunder"]
+[ext_resource type="Resource" path="res://data/army/bridge_engineer_group.tres" id="17_bridge"]
+[ext_resource type="Resource" path="res://data/army/highland_fire_group.tres" id="18_highland"]
+[ext_resource type="Resource" path="res://data/army/pathfinder_recon_group.tres" id="19_pathfinder"]
+[ext_resource type="Resource" path="res://data/army/frontline_logistics_column.tres" id="20_logistics"]
+[ext_resource type="Resource" path="res://data/army/blackwell_guard_battalion.tres" id="21_guard"]
+[ext_resource type="Resource" path="res://data/army/battlefield_recovery_company.tres" id="22_recovery"]
+[ext_resource type="Resource" path="res://data/army/mobile_counterattack_group.tres" id="23_mobile"]
+[ext_resource type="Resource" path="res://data/army/air_defense_fire_detachment.tres" id="24_air_defense"]
+[ext_resource type="Resource" path="res://data/army/covert_search.tres" id="25_covert"]
+[ext_resource type="Resource" path="res://data/army/alternating_cover.tres" id="26_cover"]
+[ext_resource type="Resource" path="res://data/army/fire_preparation.tres" id="27_fire"]
+[ext_resource type="Resource" path="res://data/army/concentrated_breakthrough.tres" id="28_breakthrough"]
+[ext_resource type="Resource" path="res://data/army/rapid_bridging.tres" id="29_bridging"]
+[ext_resource type="Resource" path="res://data/army/overwatch_lattice.tres" id="30_overwatch"]
+[ext_resource type="Resource" path="res://data/army/elastic_defense.tres" id="31_elastic"]
+[ext_resource type="Resource" path="res://data/army/encounter_disengagement.tres" id="32_disengage"]
+[ext_resource type="Resource" path="res://data/army/fighting_withdrawal.tres" id="33_withdrawal"]
+[ext_resource type="Resource" path="res://data/army/reserve_commitment.tres" id="34_reserve"]
+[ext_resource type="Resource" path="res://data/army/mutual_support.tres" id="35_mutual"]
+[ext_resource type="Resource" path="res://data/army/rally_reorganization.tres" id="36_rally"]
+
+[sub_resource type="Resource" id="RegionRail"]
+script = ExtResource("2_region")
+region_id = &"slag_rail"
+display_name_key = &"BLACK_WELL_SLAG_RAIL"
+terrain_key = &"TERRAIN_OPEN"
+position = Vector2(1536, 2304)
+radius = 460.0
+supply_per_settlement = 2
+adjacent_region_ids = Array[StringName]([&"black_well_core", &"withdrawal_corridor"])
+support_cooldown_ticks = 240
+
+[sub_resource type="Resource" id="RegionCore"]
+script = ExtResource("2_region")
+region_id = &"black_well_core"
+display_name_key = &"BLACK_WELL_CORE"
+terrain_key = &"TERRAIN_RUINS"
+position = Vector2(3584, 2208)
+radius = 500.0
+supply_per_settlement = 1
+adjacent_region_ids = Array[StringName]([&"slag_rail", &"pump_heights", &"withdrawal_corridor"])
+support_cooldown_ticks = 140
+
+[sub_resource type="Resource" id="RegionPump"]
+script = ExtResource("2_region")
+region_id = &"pump_heights"
+display_name_key = &"BLACK_WELL_PUMP_HEIGHTS"
+terrain_key = &"TERRAIN_HIGH_GROUND"
+position = Vector2(5632, 2112)
+radius = 460.0
+supply_per_settlement = 2
+adjacent_region_ids = Array[StringName]([&"black_well_core", &"withdrawal_corridor"])
+support_cooldown_ticks = 240
+
+[sub_resource type="Resource" id="RegionWithdrawal"]
+script = ExtResource("2_region")
+region_id = &"withdrawal_corridor"
+display_name_key = &"BLACK_WELL_WITHDRAWAL"
+terrain_key = &"TERRAIN_OPEN"
+position = Vector2(3584, 4020)
+radius = 520.0
+supply_per_settlement = 0
+adjacent_region_ids = Array[StringName]([&"slag_rail", &"black_well_core", &"pump_heights"])
+support_cooldown_ticks = 300
+capturable = false
+
+[sub_resource type="Resource" id="IntelCore"]
+script = ExtResource("3_intel")
+source_key = &"INTEL_SOURCE_OPTICAL"
+target_category_key = &"INTEL_ASSAULT_FORCE"
+estimated_min = 14
+estimated_max = 22
+region_id = &"black_well_core"
+direction_key = &"INTEL_DIRECTION_NORTH"
+confidence_key = &"INTEL_CONFIDENCE_HIGH"
+eta_min_ticks = 120
+eta_max_ticks = 200
+
+[sub_resource type="Resource" id="IntelRail"]
+script = ExtResource("3_intel")
+source_key = &"INTEL_SOURCE_ACOUSTIC"
+target_category_key = &"INTEL_TRACKED_VEHICLE"
+estimated_min = 6
+estimated_max = 12
+region_id = &"slag_rail"
+direction_key = &"INTEL_DIRECTION_NORTH"
+confidence_key = &"INTEL_CONFIDENCE_MEDIUM"
+eta_min_ticks = 220
+eta_max_ticks = 360
+
+[sub_resource type="Resource" id="IntelPump"]
+script = ExtResource("3_intel")
+source_key = &"INTEL_SOURCE_NONE"
+target_category_key = &"INTEL_UNKNOWN"
+region_id = &"pump_heights"
+direction_key = &"INTEL_DIRECTION_UNKNOWN"
+confidence_key = &"INTEL_CONFIDENCE_NONE"
+has_estimate = false
+
+[sub_resource type="Resource" id="EnemyAssault"]
+script = ExtResource("4_formation")
+formation_id = 7
+role_id = &"assault"
+faction_id = 2
+unit_definition_id = &"assault_vehicle"
+strength = 18
+spawn_position = Vector2(3584, 704)
+first_entity_id = 1001
+facing = Vector2(0, 1)
+agent_id = 304
+task_id = 9301
+tactical_role = 2
+
+[sub_resource type="Resource" id="EnemyProbe"]
+script = ExtResource("4_formation")
+formation_id = 8
+role_id = &"probe"
+faction_id = 2
+unit_definition_id = &"scout_vehicle"
+strength = 8
+spawn_position = Vector2(1536, 960)
+first_entity_id = 1019
+facing = Vector2(0, 1)
+agent_id = 304
+task_id = 9301
+tactical_role = 1
+
+[sub_resource type="Resource" id="EnemyScreen"]
+script = ExtResource("4_formation")
+formation_id = 9
+role_id = &"screen"
+faction_id = 2
+unit_definition_id = &"missile_vehicle"
+strength = 8
+spawn_position = Vector2(5632, 896)
+first_entity_id = 1027
+facing = Vector2(0, 1)
+agent_id = 304
+task_id = 9301
+tactical_role = 4
+
+[sub_resource type="Resource" id="EnemyReserve"]
+script = ExtResource("4_formation")
+formation_id = 10
+role_id = &"reserve"
+faction_id = 2
+unit_definition_id = &"assault_vehicle"
+strength = 10
+spawn_position = Vector2(4480, 640)
+first_entity_id = 1035
+facing = Vector2(0, 1)
+agent_id = 304
+task_id = 9301
+tactical_role = 3
+
+[sub_resource type="Resource" id="SupportRecon"]
+script = ExtResource("5_support")
+support_id = &"air_recon"
+support_kind = 0
+supply_cost = 2
+duration_ticks = 180
+cooldown_ticks = 300
+
+[sub_resource type="Resource" id="SupportFortify"]
+script = ExtResource("5_support")
+support_id = &"emergency_fortify"
+support_kind = 1
+supply_cost = 2
+duration_ticks = 240
+cooldown_ticks = 320
+armor_bonus = 4.0
+
+[sub_resource type="Resource" id="SupportReinforcement"]
+script = ExtResource("5_support")
+support_id = &"field_reinforcement"
+support_kind = 2
+supply_cost = 2
+cooldown_ticks = 300
+strength = 2
+
+[sub_resource type="Resource" id="SupportFire"]
+script = ExtResource("5_support")
+support_id = &"fire_support"
+support_kind = 4
+supply_cost = 3
+duration_ticks = 0
+cooldown_ticks = 350
+damage = 26.0
+
+[sub_resource type="Resource" id="SupportMobility"]
+script = ExtResource("5_support")
+support_id = &"rapid_mobility"
+support_kind = 5
+supply_cost = 2
+duration_ticks = 220
+cooldown_ticks = 280
+move_speed_multiplier = 1.35
+
+[sub_resource type="Resource" id="SupportLogistics"]
+script = ExtResource("5_support")
+support_id = &"frontline_logistics"
+support_kind = 6
+supply_cost = 3
+duration_ticks = 0
+cooldown_ticks = 320
+health_restore = 20.0
+organization_restore = 18.0
+
+[sub_resource type="Resource" id="PlanCenter"]
+script = ExtResource("6_plan")
+plan_id = &"center_crush"
+action_key = &"BLACK_WELL_PLAN_CENTER_CRUSH"
+assault_target_region_id = &"black_well_core"
+assault_target_position = Vector2(3584, 2208)
+probe_target_region_id = &"slag_rail"
+probe_target_position = Vector2(1536, 2304)
+commitment_ticks = 240
+followup_tick = 260
+followup_formation_role_id = &"reserve"
+followup_target_region_id = &"black_well_core"
+followup_target_position = Vector2(3840, 2440)
+
+[sub_resource type="Resource" id="PlanRail"]
+script = ExtResource("6_plan")
+plan_id = &"rail_envelopment"
+action_key = &"BLACK_WELL_PLAN_RAIL_ENVELOPMENT"
+assault_target_region_id = &"slag_rail"
+assault_target_position = Vector2(1536, 2304)
+assault_route_region_ids = Array[StringName]([&"black_well_core"])
+probe_target_region_id = &"black_well_core"
+probe_target_position = Vector2(3584, 2208)
+commitment_ticks = 280
+followup_tick = 300
+followup_formation_role_id = &"reserve"
+followup_target_region_id = &"withdrawal_corridor"
+followup_target_position = Vector2(2944, 3552)
+
+[sub_resource type="Resource" id="PlanPump"]
+script = ExtResource("6_plan")
+plan_id = &"pump_pincer"
+action_key = &"BLACK_WELL_PLAN_PUMP_PINCER"
+assault_target_region_id = &"black_well_core"
+assault_target_position = Vector2(3584, 2208)
+probe_formation_role_id = &"screen"
+probe_target_region_id = &"pump_heights"
+probe_target_position = Vector2(5632, 2112)
+commitment_ticks = 300
+followup_tick = 320
+followup_formation_role_id = &"reserve"
+followup_target_region_id = &"pump_heights"
+followup_target_position = Vector2(5216, 2380)
+
+[sub_resource type="Resource" id="ReactionHq"]
+script = ExtResource("7_reaction")
+rule_id = &"hq_defense"
+priority = 100
+trigger_kind = 0
+action_kind = 0
+delay_ticks = 10
+commitment_ticks = 100
+
+[sub_resource type="Resource" id="ReactionWithdraw"]
+script = ExtResource("7_reaction")
+rule_id = &"depleted_withdrawal"
+priority = 90
+trigger_kind = 3
+action_kind = 3
+delay_ticks = 5
+commitment_ticks = 120
+
+[sub_resource type="Resource" id="ReactionFlank"]
+script = ExtResource("7_reaction")
+rule_id = &"industrial_flank_intercept"
+priority = 70
+trigger_kind = 2
+action_kind = 2
+delay_ticks = 35
+commitment_ticks = 120
+
+[sub_resource type="Resource" id="ReactionCore"]
+script = ExtResource("7_reaction")
+rule_id = &"black_well_counterattack"
+priority = 60
+trigger_kind = 1
+action_kind = 1
+delay_ticks = 25
+commitment_ticks = 100
+
+[resource]
+script = ExtResource("1_battle")
+scenario_id = &"black_well"
+display_name_key = &"BLACK_WELL_TITLE"
+operation_number = 4
+scene_path = "res://scenes/game/black_well.tscn"
+selector_briefing_key = &"BATTLE_SELECT_BLACK_WELL_BRIEFING"
+selector_mechanics_key = &"BATTLE_SELECT_BLACK_WELL_MECHANICS"
+available_in_selector = true
+battlefield_bounds = Rect2(0, 0, 7168, 4608)
+time_limit_ticks = 5200
+base_supply_interval_ticks = 200
+region_settlement_interval_ticks = 300
+starting_supply = 8
+supply_capacity = 14
+population_capacity = 100
+deployment_radius = 460.0
+player_headquarters_position = Vector2(3584, 4352)
+enemy_headquarters_position = Vector2(3584, 384)
+friendly_formation_ids = Array[int]([1, 2, 3, 4, 5, 6])
+friendly_spawn_positions = Array[Vector2]([Vector2(2368, 3776), Vector2(2920, 3712), Vector2(3376, 3648), Vector2(3840, 3648), Vector2(4320, 3712), Vector2(4864, 3776)])
+next_dynamic_unit_id = 1200
+next_dynamic_formation_id = 11
+enemy_offensive_followup_tick = 1800
+enemy_agent_id = 304
+enemy_task_id = 9301
+commander_definitions = Array[ExtResource("8_bai")]([ExtResource("8_bai"), ExtResource("9_di"), ExtResource("10_lin"), ExtResource("11_lu"), ExtResource("12_gu")])
+unit_card_definitions = Array[ExtResource("13_falcon")]([ExtResource("13_falcon"), ExtResource("14_ironwall"), ExtResource("15_armor"), ExtResource("16_thunder"), ExtResource("17_bridge"), ExtResource("18_highland"), ExtResource("19_pathfinder"), ExtResource("20_logistics"), ExtResource("21_guard"), ExtResource("22_recovery"), ExtResource("23_mobile"), ExtResource("24_air_defense")])
+doctrine_definitions = Array[ExtResource("25_covert")]([ExtResource("25_covert"), ExtResource("26_cover"), ExtResource("27_fire"), ExtResource("28_breakthrough"), ExtResource("29_bridging"), ExtResource("30_overwatch"), ExtResource("31_elastic"), ExtResource("32_disengage"), ExtResource("33_withdrawal"), ExtResource("34_reserve"), ExtResource("35_mutual"), ExtResource("36_rally")])
+starting_card_count = 6
+commander_agent_ids = {&"bai_jiuyang": 201, &"di_tian": 202, &"gu_hanxing": 205, &"lin_mo": 203, &"lu_zheng": 204}
+default_commander_by_unit_card = {&"air_defense_fire_detachment": &"lin_mo", &"armored_spearhead": &"gu_hanxing", &"battlefield_recovery_company": &"lu_zheng", &"blackwell_guard_battalion": &"lu_zheng", &"bridge_engineer_group": &"di_tian", &"falcon_recon_group": &"bai_jiuyang", &"frontline_logistics_column": &"lu_zheng", &"highland_fire_group": &"lin_mo", &"ironwall_assault_group": &"di_tian", &"mobile_counterattack_group": &"gu_hanxing", &"pathfinder_recon_group": &"bai_jiuyang", &"thunder_fire_group": &"lin_mo"}
+default_doctrine_by_commander = {&"bai_jiuyang": &"encounter_disengagement", &"di_tian": &"mutual_support", &"gu_hanxing": &"reserve_commitment", &"lin_mo": &"elastic_defense", &"lu_zheng": &"rally_reorganization"}
+default_posture_by_commander = {&"bai_jiuyang": 0, &"di_tian": 1, &"gu_hanxing": 2, &"lin_mo": 3, &"lu_zheng": 1}
+default_starting_unit_card_ids = Array[StringName]([&"falcon_recon_group", &"ironwall_assault_group", &"armored_spearhead", &"thunder_fire_group", &"blackwell_guard_battalion", &"mobile_counterattack_group"])
+strategic_regions = Array[SubResource("RegionRail")]([SubResource("RegionRail"), SubResource("RegionCore"), SubResource("RegionPump"), SubResource("RegionWithdrawal")])
+initial_intel = Array[SubResource("IntelCore")]([SubResource("IntelCore"), SubResource("IntelRail"), SubResource("IntelPump")])
+enemy_formations = Array[SubResource("EnemyAssault")]([SubResource("EnemyAssault"), SubResource("EnemyProbe"), SubResource("EnemyScreen"), SubResource("EnemyReserve")])
+support_abilities = Array[SubResource("SupportRecon")]([SubResource("SupportRecon"), SubResource("SupportFortify"), SubResource("SupportReinforcement"), SubResource("SupportFire"), SubResource("SupportMobility"), SubResource("SupportLogistics")])
+enemy_plans = Array[SubResource("PlanCenter")]([SubResource("PlanCenter"), SubResource("PlanRail"), SubResource("PlanPump")])
+enemy_reaction_rules = Array[SubResource("ReactionHq")]([SubResource("ReactionHq"), SubResource("ReactionWithdraw"), SubResource("ReactionFlank"), SubResource("ReactionCore")])
+withdrawal_region_id = &"withdrawal_corridor"
+withdrawal_arrival_radius = 300.0
+organization_max = 100.0
+organization_damage_factor = 0.08
+organization_member_loss = 8.0
+organization_recovery_per_tick = 0.12
+organization_recovery_delay_ticks = 30
+organization_recovery_region_id = &"black_well_core"
+organization_recovery_radius = 560.0
+organization_recovery_region_bonus = 0.38
+organization_low_threshold = 30.0
+objective_set = ExtResource("objectives")

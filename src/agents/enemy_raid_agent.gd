@@ -529,7 +529,7 @@ func _best_stale_position(snapshot: WorldSnapshot, origin: Vector2) -> Vector2:
 		var confidence := pow(0.5, float(age) / difficulty_profile.memory_half_life_ticks)
 		if confidence < 0.15:
 			continue
-		var score := confidence * _definition_strategic_value(contact.definition_id) - clampf(origin.distance_to(contact.last_seen_position) / 3072.0, 0.0, 1.0) * 0.35
+		var score := confidence * _definition_strategic_value(contact.definition_id) - clampf(origin.distance_to(contact.last_seen_position) / SimulationWorld.BATTLEFIELD_BOUNDS.size.x, 0.0, 1.0) * 0.35
 		if score > best_score or (is_equal_approx(score, best_score) and (best_id == 0 or contact.entity_id < best_id)):
 			best_score = score
 			best_id = contact.entity_id
@@ -583,7 +583,7 @@ func _unit_target_score(contact: UnitSnapshot, snapshot: WorldSnapshot, origin: 
 		threat_reduction += clampf(contact.attack_damage / 100.0, 0.0, 0.35)
 	var economic_damage := 0.45 if contact.definition_id == &"harvester" else (0.28 if contact.definition_id == &"engineer_vehicle" else 0.0)
 	var opportunity := (1.0 - health_ratio) * 0.45
-	var travel_cost := clampf(origin.distance_to(contact.position) / 2048.0, 0.0, 1.0) * 0.55
+	var travel_cost := clampf(origin.distance_to(contact.position) / SimulationWorld.BATTLEFIELD_BOUNDS.size.y, 0.0, 1.0) * 0.55
 	var route_risk := _route_risk_score(snapshot, origin, contact.position, world, contact.entity_id)
 	var focus_bonus := _focus_fire_bonus(contact.entity_id, snapshot) * difficulty_profile.focus_fire_quality
 	return strategic_value + threat_reduction + economic_damage + opportunity + focus_bonus - travel_cost - route_risk * difficulty_profile.route_threat_weight + _deterministic_noise(contact.entity_id, snapshot.tick)
@@ -600,7 +600,7 @@ func _building_target_score(building: BuildingSnapshot, snapshot: WorldSnapshot,
 			strategic_value = 0.85
 	var health_ratio := building.health / building.max_health if building.max_health > 0.0 else 0.0
 	var opportunity := (1.0 - health_ratio) * 0.55
-	var travel_cost := clampf(origin.distance_to(building.position) / 2048.0, 0.0, 1.0) * 0.55
+	var travel_cost := clampf(origin.distance_to(building.position) / SimulationWorld.BATTLEFIELD_BOUNDS.size.y, 0.0, 1.0) * 0.55
 	var route_risk := _route_risk_score(snapshot, origin, building.position, world, building.entity_id)
 	return strategic_value + opportunity - travel_cost - route_risk * difficulty_profile.route_threat_weight + _deterministic_noise(building.entity_id, snapshot.tick)
 

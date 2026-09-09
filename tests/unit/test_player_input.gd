@@ -4,6 +4,20 @@ extends RefCounted
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_army_card_selects_bound_entities(failures)
+	_test_reserve_card_enters_deployment_targeting(failures)
+	_test_reserve_card_drag_commits_to_assigned_commander(failures)
+	_test_commander_objective_does_not_take_over_cards(failures)
+	_test_commander_card_drag_submits_intent(failures)
+	_test_commander_task_arrow_drag_retargets(failures)
+	_test_commander_attack_route_planning(failures)
+	_test_rejected_commander_route_exposes_reason(failures)
+	_test_all_rejections_offer_recovery(failures)
+	_test_targeting_modes_keep_controls_visible(failures)
+	_test_last_seen_contact_becomes_attack_move(failures)
+	_test_agent_assigned_route_can_cancel_and_execute(failures)
+	_test_grey_ridge_hides_individual_selection(failures)
+	_test_grey_ridge_route_editing(failures)
 	_test_formation_selection_and_groups(failures)
 	_test_box_selection_and_command_deduplication(failures)
 	_test_drag_input_event_sequence(failures)
@@ -16,6 +30,397 @@ func run() -> Array[String]:
 	_test_harvester_attack_input_is_rejected(failures)
 	_test_engineering_and_building_attack_input(failures)
 	return failures
+
+
+func _test_agent_assigned_route_can_cancel_and_execute(failures: Array[String]) -> void:
+	var fixture := _create_fixture(SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var input := fixture["input"] as InputController
+	var host := fixture["host"] as SimulationHost
+	var card := host.world.unit_cards[&"ironwall_assault_group"] as UnitCardState
+	_expect(card.control_state == UnitCardState.ControlState.AGENT_ASSIGNED, "route fixture should begin under commander Agent control", failures)
+	input.begin_unit_card_route(&"ironwall_assault_group")
+	_expect(input.command_mode == InputController.CommandMode.FORMATION_ROUTE_TARGETING, "a deployed Agent-assigned card should enter route mode without a separate takeover step", failures)
+	var queue_before_cancel := host.get_queue_size()
+	var escape := InputEventKey.new()
+	escape.keycode = KEY_ESCAPE
+	escape.pressed = true
+	input._input(escape)
+	_expect(input.command_mode == InputController.CommandMode.FORMATION_ROUTE_TARGETING and host.get_queue_size() == queue_before_cancel, "Esc must remain reserved for pause and must not cancel formation route planning", failures)
+	var cancel := InputEventKey.new()
+	cancel.keycode = KEY_C
+	cancel.pressed = true
+	input._input(cancel)
+	_expect(input.command_mode == InputController.CommandMode.NORMAL and input.formation_route_points.is_empty() and host.get_queue_size() == queue_before_cancel, "C should leave formation route mode, clear its preview, and submit no command", failures)
+
+	input.begin_unit_card_route(&"ironwall_assault_group")
+	var formation := host.world.formations.get(card.formation_id) as FormationState
+	var route_target := formation.anchor_position + Vector2(64.0, -192.0)
+	input.formation_route_points = PackedVector2Array([route_target])
+	var result := input.submit_selected_formation_route()
+	_expect(result != null and result.is_accepted() and input.command_mode == InputController.CommandMode.NORMAL, "Execute should submit a waypoint-only formation route and exit planning (reason=%s)" % (result.reason if result != null else -1), failures)
+	_expect(card.control_state == UnitCardState.ControlState.PLAYER_OVERRIDDEN, "an accepted direct route should atomically take over the whole card", failures)
+	host.advance_tick()
+	_expect(formation != null and formation.planned_route == PackedVector2Array([route_target]) and formation.is_moving, "the authoritative tick should commit and start the submitted route", failures)
+	_free_fixture(fixture)
+
+
+func _test_commander_attack_route_planning(failures: Array[String]) -> void:
+	var fixture := _create_fixture(SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var input := fixture["input"] as InputController
+	var host := fixture["host"] as SimulationHost
+	input.begin_commander_route(&"di_tian")
+	_expect(input.command_mode == InputController.CommandMode.COMMANDER_ROUTE_TARGETING, "commander route action should enter a dedicated high-level planning mode", failures)
+	var waypoint := Vector2(1824.0, 1424.0)
+	input.commander_route_points = PackedVector2Array([waypoint])
+	var queue_before_cancel := host.get_queue_size()
+	input.begin_commander_route(&"di_tian")
+	_expect(input.command_mode == InputController.CommandMode.NORMAL and input.commander_route_points.is_empty(), "pressing the active commander route action again should cancel local planning", failures)
+	_expect(host.get_queue_size() == queue_before_cancel, "cancelling commander route planning must not submit or replace an authoritative order", failures)
+	input.begin_commander_route(&"di_tian")
+	input.commander_route_points = PackedVector2Array([waypoint])
+	var result := input.submit_commander_route(SimulationWorld.GREY_RIDGE_CENTRAL_POSITION)
+	_expect(result != null and result.is_accepted(), "commander route planning should submit through the authoritative command pipeline", failures)
+	host.advance_tick()
+	var commander := host.world.commanders[&"di_tian"] as CommanderState
+	_expect(commander.planned_route == PackedVector2Array([waypoint]), "accepted commander intent should retain its explicit attack axis", failures)
+	var ironwall := host.world.unit_cards[&"ironwall_assault_group"] as UnitCardState
+	var task := host.world.tasks.get(ironwall.assigned_task_id) as TaskState
+	_expect(task != null and task.planned_route == commander.planned_route, "the commander should distribute one shared route plan to subordinate unit-card Agents", failures)
+	_expect(task != null and task.lifecycle == TaskState.Lifecycle.EXECUTING, "an accepted commander route must remain executable after its subordinate card target is resolved", failures)
+	_free_fixture(fixture)
+
+
+func _test_rejected_commander_route_exposes_reason(failures: Array[String]) -> void:
+	var fixture := _create_fixture(SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var input := fixture["input"] as InputController
+	var host := fixture["host"] as SimulationHost
+	input.begin_commander_route(&"di_tian")
+	var blocked_cells := host.world.logic_grid.get_blocked_cells()
+	var blocked_cell: Vector2i = blocked_cells[0]
+	var blocked_target := host.world.logic_grid.cell_to_world(blocked_cell)
+	input.commander_route_points = PackedVector2Array([blocked_target])
+	var result := input.submit_selected_commander_route()
+	_expect(result != null and not result.is_accepted() and input.command_mode == InputController.CommandMode.COMMANDER_ROUTE_TARGETING, "an invalid commander route should be rejected without silently leaving planning", failures)
+	var guidance := input.get_operation_guidance()
+	_expect(guidance.begins_with(input.last_command_status) and guidance.contains(GameText.t(&"REASON_PATH_UNAVAILABLE")), "route guidance must expose the authoritative rejection reason instead of replacing it with generic instructions", failures)
+	_expect(guidance.contains(GameText.command_recovery(CommandValidationResult.Reason.PATH_UNAVAILABLE)) and guidance.contains(GameText.t(&"STATUS_COMMANDER_ROUTE_TARGETING")), "a rejected route should retain both a legal next step and the active-mode controls", failures)
+	_free_fixture(fixture)
+
+
+func _test_all_rejections_offer_recovery(failures: Array[String]) -> void:
+	var original_locale := TranslationServer.get_locale()
+	for locale in [&"zh_CN", &"en"]:
+		TranslationServer.set_locale(locale)
+		for reason_index in range(1, CommandValidationResult.Reason.size()):
+			var reason := reason_index as CommandValidationResult.Reason
+			var result := CommandValidationResult.new(CommandValidationResult.Status.REJECTED, reason)
+			var receipt := GameText.command_result(result)
+			var recovery := GameText.command_recovery(reason)
+			var reason_text := GameText.t(StringName("REASON_%s" % CommandValidationResult.Reason.keys()[reason]))
+			_expect(not recovery.is_empty() and receipt.contains(reason_text) and receipt.contains(recovery), "every rejection reason should include its localized cause and a legal next step in %s: %s" % [locale, CommandValidationResult.Reason.keys()[reason]], failures)
+	TranslationServer.set_locale(original_locale)
+
+
+func _test_targeting_modes_keep_controls_visible(failures: Array[String]) -> void:
+	var fixture := _create_fixture()
+	var input := fixture["input"] as InputController
+	var guidance_keys := {
+		InputController.CommandMode.ATTACK_MOVE_TARGETING: &"STATUS_ATTACK_MOVE_TARGET",
+		InputController.CommandMode.BUILD_FACTORY_TARGETING: &"STATUS_BUILD_TARGET",
+		InputController.CommandMode.BUILD_SUPPORT_TARGETING: &"STATUS_BUILD_TARGET",
+		InputController.CommandMode.REPAIR_TARGETING: &"STATUS_REPAIR_TARGET",
+		InputController.CommandMode.HARVEST_TARGETING: &"STATUS_HARVEST_TARGET",
+		InputController.CommandMode.DEFEND_TARGETING: &"STATUS_DEFEND_TARGET",
+		InputController.CommandMode.SCOUT_TARGETING: &"STATUS_SCOUT_TARGET",
+		InputController.CommandMode.RALLY_TARGETING: &"STATUS_RALLY_TARGET",
+		InputController.CommandMode.DEPLOY_UNIT_CARD_TARGETING: &"GUIDANCE_DEPLOY_UNIT_CARD_TARGET",
+		InputController.CommandMode.FORMATION_ROUTE_TARGETING: &"STATUS_ROUTE_TARGETING",
+		InputController.CommandMode.COMMANDER_ROUTE_TARGETING: &"STATUS_COMMANDER_ROUTE_TARGETING",
+	}
+	for mode_variant in guidance_keys:
+		input.command_mode = mode_variant as InputController.CommandMode
+		input.route_feedback_override = ""
+		input.last_command_status = "REJECTED RECEIPT"
+		var guidance := input.get_operation_guidance()
+		_expect(guidance.begins_with(input.last_command_status) and guidance.contains(GameText.t(guidance_keys[mode_variant] as StringName)), "targeting mode should retain its controls after status changes: %s" % InputController.CommandMode.keys()[int(mode_variant)], failures)
+	input.command_mode = InputController.CommandMode.NORMAL
+	_expect(input.get_operation_guidance() == input.last_command_status, "normal mode should not display stale targeting controls", failures)
+	_free_fixture(fixture)
+
+
+func _test_last_seen_contact_becomes_attack_move(failures: Array[String]) -> void:
+	var fixture := _create_fixture(SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var input := fixture["input"] as InputController
+	var host := fixture["host"] as SimulationHost
+	var scout := host.world.units[(host.world.unit_cards[&"falcon_recon_group"] as UnitCardState).member_entity_ids[0]] as UnitState
+	var hostile := host.world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	var scout_origin := scout.position
+	scout.position = hostile.position
+	host.world._update_faction_knowledge()
+	scout.position = scout_origin
+	host.world._update_faction_knowledge()
+	host.current_snapshot = host.world.create_snapshot()
+	var hidden_contact: UnitSnapshot
+	for unit in host.current_snapshot.units:
+		if unit.enabled and unit.faction_id != SimulationWorld.LOCAL_PLAYER_ID and not unit.is_visible_to_local_player:
+			hidden_contact = unit
+			break
+	if hidden_contact == null:
+		_expect(false, "last-seen contact fixture requires a hidden hostile intelligence snapshot", failures)
+		_free_fixture(fixture)
+		return
+	input.select_unit_card(&"ironwall_assault_group")
+	var result := input.attack_or_move_selected_at(hidden_contact.position)
+	var queued := host.world.command_queue.snapshot()
+	var attack_move: AttackMoveCommand
+	if not queued.is_empty() and queued[-1] is AttackMoveCommand:
+		attack_move = queued[-1] as AttackMoveCommand
+	_expect(hidden_contact != null and result != null and result.is_accepted(), "clicking a last-seen contact should issue a valid investigation order", failures)
+	_expect(attack_move != null and attack_move.target_position.is_equal_approx(hidden_contact.position), "last-seen intelligence should convert to attack-move at the recorded position rather than a hidden-target attack", failures)
+	_expect(input.last_command_status == GameText.t(&"STATUS_ATTACK_MOVE_LAST_SEEN") % GameText.command_result(result), "the operation receipt should identify the order as investigation of a last-seen position", failures)
+	_free_fixture(fixture)
+
+
+func _test_commander_objective_does_not_take_over_cards(failures: Array[String]) -> void:
+	var fixture := _create_fixture(SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var input := fixture["input"] as InputController
+	var host := fixture["host"] as SimulationHost
+	input.select_commander_card(&"di_tian")
+	var result := input.context_command_selected_at(SimulationWorld.GREY_RIDGE_CENTRAL_POSITION)
+	_expect(result != null and result.is_accepted(), "commander-card context input should submit a high-level commander objective", failures)
+	_expect(host.get_queue_size() == 1, "commander intent should enqueue one authoritative high-level command", failures)
+	host.advance_tick()
+	var ironwall := host.world.unit_cards[&"ironwall_assault_group"] as UnitCardState
+	var commander := host.world.commanders[&"di_tian"] as CommanderState
+	_expect(ironwall.control_state == UnitCardState.ControlState.AGENT_ASSIGNED, "commander-level map intent must not trigger player takeover", failures)
+	_expect(commander.target_position == SimulationWorld.GREY_RIDGE_CENTRAL_POSITION, "commander-level input should update the named Agent objective", failures)
+	_free_fixture(fixture)
+
+
+func _test_commander_card_drag_submits_intent(failures: Array[String]) -> void:
+	var fixture := _create_fixture(SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var input := fixture["input"] as InputController
+	var host := fixture["host"] as SimulationHost
+	var presentation := fixture["presentation"] as WorldPresentation
+	input.commander_intent_preview_changed.connect(presentation.set_commander_intent_preview)
+	input.commander_intent_preview_cleared.connect(presentation.clear_commander_intent_preview)
+	var drag_start := Vector2(420.0, 680.0)
+	var army_board := ArmyBoard.new()
+	army_board.input_controller = input
+	var card_press := InputEventMouseButton.new()
+	card_press.button_index = MOUSE_BUTTON_LEFT
+	card_press.pressed = true
+	card_press.global_position = drag_start
+	army_board._handle_commander_button_input(card_press, &"di_tian")
+	var card_motion := InputEventMouseMotion.new()
+	card_motion.button_mask = MOUSE_BUTTON_MASK_LEFT
+	card_motion.global_position = drag_start + Vector2(InputController.DRAG_THRESHOLD + 1.0, 0.0)
+	army_board._handle_commander_button_input(card_motion, &"di_tian")
+	_expect(input.commander_drag_active, "dragging a commander-card button past the threshold should enter formal map dragging", failures)
+	var motion := InputEventMouseMotion.new()
+	motion.position = SimulationWorld.GREY_RIDGE_WEST_POSITION
+	motion.relative = motion.position - drag_start
+	input._handle_commander_drag_input(motion)
+	_expect(input.commander_drag_active and presentation.commander_intent_active and presentation.commander_intent_target == SimulationWorld.GREY_RIDGE_WEST_POSITION, "commander dragging should expose a live battlefield intent arrow", failures)
+	var release := InputEventMouseButton.new()
+	release.button_index = MOUSE_BUTTON_LEFT
+	release.pressed = false
+	release.position = SimulationWorld.GREY_RIDGE_WEST_POSITION
+	input._handle_commander_drag_input(release)
+	_expect(not input.commander_drag_active and not presentation.commander_intent_active and host.get_queue_size() == 1, "releasing a commander over the battlefield should clear preview and enqueue exactly one command", failures)
+	host.advance_tick()
+	var commander := host.world.commanders[&"di_tian"] as CommanderState
+	_expect(commander.target_position == SimulationWorld.GREY_RIDGE_WEST_POSITION, "commander-card drag must update the named Agent only through the authoritative tick", failures)
+	_expect(input.last_command_status.contains("1") and input.last_command_status.contains(GameText.t(&"RESULT_ACCEPTED")), "drag receipt should identify the affected deployed card count and command result", failures)
+
+	var queue_before_cancel := host.get_queue_size()
+	input.begin_commander_drag(&"di_tian", drag_start)
+	var cancel := InputEventMouseButton.new()
+	cancel.button_index = MOUSE_BUTTON_RIGHT
+	cancel.pressed = true
+	input._handle_commander_drag_input(cancel)
+	_expect(not input.commander_drag_active and host.get_queue_size() == queue_before_cancel, "right-click should cancel commander dragging without submitting a command", failures)
+	army_board.free()
+	_free_fixture(fixture)
+
+
+func _test_commander_task_arrow_drag_retargets(failures: Array[String]) -> void:
+	var fixture := _create_fixture(SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var input := fixture["input"] as InputController
+	var host := fixture["host"] as SimulationHost
+	var presentation := fixture["presentation"] as WorldPresentation
+	input.commander_intent_preview_changed.connect(presentation.set_commander_intent_preview)
+	input.commander_intent_preview_cleared.connect(presentation.clear_commander_intent_preview)
+	input.select_commander_card(&"di_tian")
+	input.issue_commander_objective(SimulationWorld.GREY_RIDGE_CENTRAL_POSITION)
+	host.advance_tick()
+	_expect(input._find_commander_task_handle_at(SimulationWorld.GREY_RIDGE_CENTRAL_POSITION) == &"di_tian", "an active commander objective should expose a draggable map handle", failures)
+	var commander_snapshot := host.current_snapshot.get_commander(&"di_tian")
+	var arrow_origin := input._commander_task_origin(commander_snapshot, host.current_snapshot)
+	var visible_arrow_point := arrow_origin.lerp(SimulationWorld.GREY_RIDGE_CENTRAL_POSITION, 0.35)
+	_expect(input._find_commander_task_handle_at(visible_arrow_point) == &"di_tian", "the visible task-arrow shaft should remain draggable when its target ring is covered by HUD", failures)
+	var queue_before_drag := host.get_queue_size()
+
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	press.position = visible_arrow_point
+	input._unhandled_input(press)
+	_expect(input.commander_drag_active and presentation.commander_intent_active, "pressing a commander task handle should start the same live intent preview as card dragging", failures)
+
+	var release := InputEventMouseButton.new()
+	release.button_index = MOUSE_BUTTON_LEFT
+	release.pressed = false
+	release.position = SimulationWorld.GREY_RIDGE_EAST_POSITION
+	input._handle_commander_drag_input(release)
+	var commander := host.world.commanders[&"di_tian"] as CommanderState
+	_expect(host.get_queue_size() == queue_before_drag + 1, "task-handle dragging should enqueue exactly one additional commander command", failures)
+	_expect(commander.target_position == SimulationWorld.GREY_RIDGE_CENTRAL_POSITION, "task-handle dragging must not mutate authoritative state before the next tick", failures)
+	host.advance_tick()
+	_expect(commander.target_position == SimulationWorld.GREY_RIDGE_EAST_POSITION and not presentation.commander_intent_active, "the authoritative tick should apply a task-arrow retarget and clear its preview", failures)
+	_free_fixture(fixture)
+
+
+func _test_grey_ridge_hides_individual_selection(failures: Array[String]) -> void:
+	var fixture := _create_fixture(SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var input := fixture["input"] as InputController
+	var host := fixture["host"] as SimulationHost
+	var member := host.current_snapshot.get_unit(9)
+	input.select_at(member.position)
+	_expect(input.selected_unit_card_id == &"ironwall_assault_group" and input.selected_entity_ids.size() == 12, "formal Grey Ridge selection should promote a clicked member to its whole unit card", failures)
+	input.diagnostic_individual_selection_enabled = true
+	input.select_at(member.position)
+	_expect(input.selected_entity_ids == [member.entity_id], "F3 diagnostics should retain individual selection for development inspection only", failures)
+	_free_fixture(fixture)
+
+
+func _test_reserve_card_enters_deployment_targeting(failures: Array[String]) -> void:
+	var fixture := _create_fixture(SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var input := fixture["input"] as InputController
+	var host := fixture["host"] as SimulationHost
+	input.select_unit_card(&"armored_spearhead")
+	_expect(input.command_mode == InputController.CommandMode.DEPLOY_UNIT_CARD_TARGETING, "clicking a reserve card should enter map deployment targeting", failures)
+	_expect(input.selected_unit_card_id == &"armored_spearhead" and input.selected_entity_ids.is_empty(), "reserve selection should retain card context without inventing battlefield entities", failures)
+	var headquarters := host.current_snapshot.get_building(SimulationWorld.PLAYER_COMMAND_CENTER_ID)
+	var result := input.deploy_selected_unit_card_at(headquarters.position + Vector2(128.0, 0.0))
+	_expect(result != null and result.is_accepted() and input.command_mode == InputController.CommandMode.NORMAL, "valid map placement should submit the deployment through SimulationHost", failures)
+	host.advance_tick()
+	_expect(host.current_snapshot.get_unit_card(&"armored_spearhead").deployment_state == UnitCardState.DeploymentState.DEPLOYING, "deployment UI should reflect the next authoritative snapshot", failures)
+	_free_fixture(fixture)
+
+
+func _test_reserve_card_drag_commits_to_assigned_commander(failures: Array[String]) -> void:
+	var fixture := _create_fixture(SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var input := fixture["input"] as InputController
+	var host := fixture["host"] as SimulationHost
+	var army_board := ArmyBoard.new()
+	army_board.input_controller = input
+	army_board._snapshot = host.current_snapshot
+	var drag_start := Vector2(720.0, 410.0)
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	press.global_position = drag_start
+	army_board._handle_unit_card_button_input(press, &"armored_spearhead")
+	var motion := InputEventMouseMotion.new()
+	motion.button_mask = MOUSE_BUTTON_MASK_LEFT
+	motion.global_position = drag_start + Vector2(InputController.DRAG_THRESHOLD + 1.0, 0.0)
+	army_board._handle_unit_card_button_input(motion, &"armored_spearhead")
+	_expect(army_board._reserve_drag_active and input.selected_unit_card_id == &"armored_spearhead", "dragging a reserve card past the threshold should enter formal commander-drop mode", failures)
+
+	var expected_position := input._default_reserve_deployment_position(&"di_tian")
+	var headquarters := host.current_snapshot.get_building(SimulationWorld.PLAYER_COMMAND_CENTER_ID)
+	var queue_before_drop := host.get_queue_size()
+	var result := army_board._complete_reserve_drag(&"di_tian")
+	_expect(result != null and result.is_accepted(), "dropping a reserve card on its assigned commander should submit an authoritative deployment", failures)
+	_expect(host.get_queue_size() == queue_before_drop + 1 and input.command_mode == InputController.CommandMode.NORMAL, "accepted reserve dragging should enqueue exactly one deployment and leave targeting mode", failures)
+	_expect(expected_position.distance_to(headquarters.position) <= 384.0, "commander-drop deployment should choose a legal headquarters staging position", failures)
+	var queued_deployment := host.world.command_queue.snapshot()[-1] as DeployUnitCardCommand
+	var resolved_position := queued_deployment.deployment_position
+	_expect(resolved_position.distance_to(headquarters.position) <= 384.0 and resolved_position.is_finite(), "deployment validation should resolve the quick-drop anchor to a legal whole-card position", failures)
+	host.advance_tick()
+	var armored_card := host.world.unit_cards[&"armored_spearhead"] as UnitCardState
+	_expect(armored_card.deployment_state == UnitCardState.DeploymentState.DEPLOYING and armored_card.deployment_position == resolved_position, "the next authoritative tick should commit the whole reserve card at the validated commander-oriented staging point", failures)
+	army_board.free()
+	_free_fixture(fixture)
+
+	var mismatch_fixture := _create_fixture(SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var mismatch_input := mismatch_fixture["input"] as InputController
+	var mismatch_host := mismatch_fixture["host"] as SimulationHost
+	var supply_before := (mismatch_host.world.factions[SimulationWorld.LOCAL_PLAYER_ID] as FactionState).supply
+	var mismatch_queue_before := mismatch_host.get_queue_size()
+	_expect(mismatch_input.begin_reserve_card_drag(&"armored_spearhead"), "reserve mismatch fixture should begin from a valid reserve card", failures)
+	var mismatch_result := mismatch_input.deploy_reserve_card_to_commander(&"armored_spearhead", &"bai_jiuyang")
+	_expect(mismatch_result != null and mismatch_result.status == CommandValidationResult.Status.REJECTED and mismatch_result.reason == CommandValidationResult.Reason.COMMANDER_MISMATCH, "battlefield reserve dragging must reject free cross-commander reassignment", failures)
+	_expect(mismatch_host.get_queue_size() == mismatch_queue_before and (mismatch_host.world.factions[SimulationWorld.LOCAL_PLAYER_ID] as FactionState).supply == supply_before, "rejected commander mismatch must not enqueue deployment or spend supply", failures)
+	_free_fixture(mismatch_fixture)
+
+
+func _test_grey_ridge_route_editing(failures: Array[String]) -> void:
+	var fixture := _create_fixture(SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var input := fixture["input"] as InputController
+	var host := fixture["host"] as SimulationHost
+	input.set_unit_card_control(&"ironwall_assault_group", UnitCardControlCommand.Action.TAKEOVER)
+	host.advance_tick()
+	var card := host.world.unit_cards[&"ironwall_assault_group"] as UnitCardState
+	var formation := host.world.formations[card.formation_id] as FormationState
+	formation.planned_route = PackedVector2Array([formation.anchor_position + Vector2(64.0, -192.0)])
+	formation.has_deployment_line = true
+	var line_target := formation.anchor_position + Vector2(0.0, -384.0)
+	formation.deployment_line_start = line_target + Vector2(0.0, -176.0)
+	formation.deployment_line_end = line_target + Vector2(0.0, 176.0)
+	host.current_snapshot = host.world.create_snapshot()
+	input.formation_plan_preview_changed.connect((fixture["presentation"] as WorldPresentation).set_formation_plan_preview)
+	input.begin_unit_card_route(&"ironwall_assault_group")
+	_expect(input.command_mode == InputController.CommandMode.FORMATION_ROUTE_TARGETING and input.formation_route_points == formation.planned_route, "route editing should load the committed whole-card waypoints instead of starting from an empty plan", failures)
+	_expect(input.formation_line_start == formation.deployment_line_start and input.formation_line_end == formation.deployment_line_end, "route editing should load the committed deployment line for redrawing", failures)
+	var original_waypoint := input.formation_route_points[0]
+	var moved_waypoint := original_waypoint + Vector2(32.0, 0.0)
+	_simulate_left_drag(input, original_waypoint, moved_waypoint)
+	_expect(input.formation_route_points[0] == moved_waypoint and formation.planned_route[0] == original_waypoint, "dragging a visible route handle should update only the local plan before authoritative submission", failures)
+	var original_line_start := input.formation_line_start
+	var moved_line_start := original_line_start + Vector2(0.0, 32.0)
+	_simulate_left_drag(input, original_line_start, moved_line_start)
+	_expect(input.formation_line_start == moved_line_start and formation.deployment_line_start == original_line_start, "deployment-line endpoint handles should be directly draggable without mutating authoritative state", failures)
+	var submit_result := input._submit_formation_plan()
+	_expect(submit_result != null and submit_result.is_accepted(), "edited route handles should still submit through the authoritative formation command (reason=%s)" % (submit_result.reason if submit_result != null else -1), failures)
+	host.advance_tick()
+	_expect(formation.planned_route[0] == moved_waypoint and formation.deployment_line_start == moved_line_start, "accepted route edits should update both committed waypoints and the deployment line on the next tick", failures)
+	input.begin_unit_card_route(&"ironwall_assault_group")
+	_expect(input.undo_formation_route_waypoint() and input.formation_route_points.is_empty(), "route editing should remove the latest waypoint without changing authoritative state before submission", failures)
+	var clear_result := input.clear_selected_formation_route()
+	_expect(clear_result != null and clear_result.is_accepted(), "route editing should expose an explicit authoritative clear action", failures)
+	host.advance_tick()
+	_expect(formation.planned_route.is_empty() and not formation.has_deployment_line and not formation.is_moving, "clearing a committed route should stop the formation and remove its deployment line", failures)
+	_free_fixture(fixture)
+
+
+func _simulate_left_drag(input: InputController, from_position: Vector2, to_position: Vector2) -> void:
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	press.position = from_position
+	input._handle_formation_route_input(press)
+	var motion := InputEventMouseMotion.new()
+	motion.position = to_position
+	motion.relative = to_position - from_position
+	input._handle_formation_route_input(motion)
+	var release := InputEventMouseButton.new()
+	release.button_index = MOUSE_BUTTON_LEFT
+	release.pressed = false
+	release.position = to_position
+	input._handle_formation_route_input(release)
+
+
+func _test_army_card_selects_bound_entities(failures: Array[String]) -> void:
+	var fixture := _create_fixture()
+	var input := fixture["input"] as InputController
+	input.select_unit_card(&"ironwall_assault_group")
+	_expect(input.selected_entity_ids == [4, 5], "unit-card selection should select every live entity bound to the persistent card", failures)
+	_expect(input.selected_unit_card_id == &"ironwall_assault_group" and input.selected_commander_id == &"di_tian", "unit-card selection should retain its army-board context", failures)
+	input.select_commander_card(&"bai_jiuyang")
+	_expect(input.selected_entity_ids == [3] and input.selected_commander_id == &"bai_jiuyang", "commander-card selection should select all subordinate unit-card entities", failures)
+	_free_fixture(fixture)
 
 
 func _test_formation_selection_and_groups(failures: Array[String]) -> void:
@@ -222,10 +627,13 @@ func _test_produced_assault_defense_and_scout_orders(failures: Array[String]) ->
 	_free_fixture(scout_fixture)
 
 
-func _create_fixture() -> Dictionary:
+func _create_fixture(scenario_kind: SimulationWorld.ScenarioKind = SimulationWorld.ScenarioKind.LEGACY_RTS) -> Dictionary:
 	var host := SimulationHost.new()
+	host.scenario_kind = scenario_kind
 	Engine.get_main_loop().root.add_child(host)
 	host._ready()
+	if scenario_kind == SimulationWorld.ScenarioKind.GREY_RIDGE:
+		host.start_grey_ridge(ArmyPlan.grey_ridge_default())
 	var presentation := WorldPresentation.new()
 	var units_root := Node2D.new()
 	units_root.name = "Units"

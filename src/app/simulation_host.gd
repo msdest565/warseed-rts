@@ -2,8 +2,16 @@ class_name SimulationHost
 extends Node
 
 signal command_evaluated(result: CommandValidationResult)
+signal player_action_recorded(descriptor: Dictionary)
+signal campaign_record_changed(record: Dictionary)
+signal campaign_concluded(record: Dictionary)
+signal scenario_restarted(snapshot: WorldSnapshot)
+signal grey_ridge_prebattle_opened(plan: ArmyPlan)
+signal grey_ridge_battle_started(snapshot: WorldSnapshot)
 
 const TICK_SECONDS := SimulationWorld.TICK_SECONDS
+
+@export_enum("Legacy RTS", "Grey Ridge", "Broken Bridge", "Fog Forest", "Black Well") var scenario_kind: int = SimulationWorld.ScenarioKind.LEGACY_RTS
 
 var world := SimulationWorld.new()
 var previous_snapshot: WorldSnapshot
@@ -13,14 +21,40 @@ var _timed_tick_count: int = 0
 var _last_tick_usec: int = 0
 var _total_tick_usec: int = 0
 var _max_tick_usec: int = 0
+var _campaign_record: Dictionary = {}
+var _campaign_saved: bool = false
+var _playtest_recorder := PlaytestSessionRecorder.new()
+var _gameplay_report: GameplayObservabilityReport
+var _gameplay_event_cursor: int = 0
+var _gameplay_situation_projector := BattlefieldSituationProjector.new()
+var _gameplay_command_situation_projector := CommandSituationProjector.new()
+var _playtest_record_path := ""
+var _playtest_session_id := ""
+var _campaign_record_path := ArmyRosterStore.DEFAULT_PATH
+var _playtest_record_directory := PlaytestSessionRecorder.DEFAULT_DIRECTORY
+var _grey_ridge_battle_started: bool = true
+var _grey_ridge_army_plan: ArmyPlan = ArmyPlan.grey_ridge_default()
 
 
 func _ready() -> void:
+	_playtest_session_id = ArmyRosterStore.active_playtest_session_id()
+	_campaign_record_path = ArmyRosterStore.campaign_record_path_for_session(_playtest_session_id, get_scenario_id())
+	_playtest_record_directory = ArmyRosterStore.playtest_record_directory_for_session(_playtest_session_id)
+	if world.scenario_kind != scenario_kind:
+		_campaign_record = ArmyRosterStore.load_record(_campaign_record_path) if _is_card_battle() and ArmyRosterStore.runtime_persistence_allowed() else {}
+		world = SimulationWorld.new(true, false, scenario_kind, _campaign_record, &"", _grey_ridge_army_plan)
+	if _is_card_battle():
+		_grey_ridge_army_plan = world.grey_ridge_army_plan.duplicate_plan()
+	_grey_ridge_battle_started = not _is_card_battle()
 	current_snapshot = world.create_snapshot()
 	previous_snapshot = current_snapshot
+	if _grey_ridge_battle_started:
+		_start_playtest_session()
 
 
 func _process(delta: float) -> void:
+	if _is_card_battle() and not _grey_ridge_battle_started:
+		return
 	_accumulator += delta
 	while _accumulator >= TICK_SECONDS:
 		_accumulator -= TICK_SECONDS
@@ -28,9 +62,52 @@ func _process(delta: float) -> void:
 
 
 func submit_command(command: GameCommand) -> CommandValidationResult:
+	if _is_card_battle() and not _grey_ridge_battle_started:
+		var prebattle_result := CommandValidationResult.new(
+			CommandValidationResult.Status.REJECTED,
+			CommandValidationResult.Reason.SCENARIO_NOT_STARTED
+		)
+		command_evaluated.emit(prebattle_result)
+		return prebattle_result
+	var playtest_descriptor := _playtest_command_descriptor(command)
 	var result := world.submit_command(command)
+	if _is_card_battle():
+		_playtest_recorder.record_command(command, result, playtest_descriptor)
+		if _gameplay_report != null:
+			_gameplay_report.record_command(command, result, _gameplay_command_descriptor(command, playtest_descriptor))
+		if result.is_accepted() and not playtest_descriptor.is_empty():
+			player_action_recorded.emit(playtest_descriptor.duplicate(true))
 	command_evaluated.emit(result)
 	return result
+
+
+func create_deploy_unit_card_command(
+	unit_card_id: StringName,
+	deployment_position: Vector2,
+	commander_id: StringName = &""
+) -> DeployUnitCardCommand:
+	return DeployUnitCardCommand.new(
+		world.allocate_command_id(),
+		SimulationWorld.LOCAL_PLAYER_ID,
+		GameCommand.IssuerKind.PLAYER,
+		world.current_tick,
+		unit_card_id,
+		deployment_position,
+		commander_id
+	)
+
+
+func create_support_order_command(
+	support_kind: SupportOrderCommand.SupportKind,
+	primary_region_id: StringName = &"",
+	secondary_region_id: StringName = &"",
+	unit_card_id: StringName = &""
+) -> SupportOrderCommand:
+	return SupportOrderCommand.new(
+		world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID,
+		GameCommand.IssuerKind.PLAYER, world.current_tick, support_kind,
+		primary_region_id, secondary_region_id, unit_card_id
+	)
 
 
 func create_unit_disposition_command(
@@ -46,6 +123,99 @@ func create_unit_disposition_command(
 		entity_id,
 		disposition,
 		destination_formation_id
+	)
+
+
+func create_unit_card_control_command(
+	unit_card_id: StringName,
+	action: UnitCardControlCommand.Action
+) -> UnitCardControlCommand:
+	return UnitCardControlCommand.new(
+		world.allocate_command_id(),
+		SimulationWorld.LOCAL_PLAYER_ID,
+		world.current_tick,
+		unit_card_id,
+		action
+	)
+
+
+func create_commander_objective_command(
+	commander_id: StringName,
+	target_position: Vector2,
+	route_points: PackedVector2Array = PackedVector2Array()
+) -> CommanderOrderCommand:
+	var target_region_id := _strategic_region_at(target_position)
+	return CommanderOrderCommand.new(
+		world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, world.current_tick,
+		commander_id, CommanderOrderCommand.OrderKind.ASSIGN_OBJECTIVE, target_position,
+		target_region_id, CommanderState.Posture.BALANCED, route_points
+	)
+
+
+func _strategic_region_at(world_position: Vector2) -> StringName:
+	var best_region_id: StringName = &""
+	var best_distance_squared := INF
+	for region_variant in world.strategic_regions.values():
+		var region := region_variant as StrategicRegionState
+		if region == null:
+			continue
+		var distance_squared := world_position.distance_squared_to(region.position)
+		if distance_squared > region.radius * region.radius:
+			continue
+		if distance_squared < best_distance_squared or (is_equal_approx(distance_squared, best_distance_squared) \
+				and (best_region_id.is_empty() or String(region.region_id) < String(best_region_id))):
+			best_region_id = region.region_id
+			best_distance_squared = distance_squared
+	return best_region_id
+
+
+func create_commander_posture_command(
+	commander_id: StringName,
+	posture: CommanderState.Posture
+) -> CommanderOrderCommand:
+	return CommanderOrderCommand.new(
+		world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, world.current_tick,
+		commander_id, CommanderOrderCommand.OrderKind.SET_POSTURE, Vector2.ZERO, &"", posture
+	)
+
+
+func create_high_level_intent_command(
+	commander_id: StringName,
+	objective_region_id: StringName,
+	axis_region_id: StringName,
+	posture: CommanderState.Posture,
+	reserve_policy: CommanderState.ReservePolicy
+) -> CommanderOrderCommand:
+	var objective := world.strategic_regions.get(objective_region_id) as StrategicRegionState
+	var axis := world.strategic_regions.get(axis_region_id) as StrategicRegionState
+	var target_position := objective.position if objective != null else Vector2.INF
+	var route := PackedVector2Array()
+	if axis != null and objective != null and axis.region_id != objective.region_id:
+		route.append(axis.position)
+	var command_id := world.allocate_command_id()
+	return CommanderOrderCommand.new(
+		command_id, SimulationWorld.LOCAL_PLAYER_ID, world.current_tick,
+		commander_id, CommanderOrderCommand.OrderKind.ASSIGN_INTENT,
+		target_position, objective_region_id, posture, route,
+		StringName("intent:%s:%08d" % [commander_id, command_id]), axis_region_id, reserve_policy
+	)
+
+
+func create_cancel_high_level_intent_command(commander_id: StringName) -> CommanderOrderCommand:
+	return CommanderOrderCommand.new(
+		world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, world.current_tick,
+		commander_id, CommanderOrderCommand.OrderKind.CANCEL_INTENT
+	)
+
+
+func create_equip_doctrine_command(
+	commander_id: StringName,
+	doctrine_id: StringName,
+	slot_index: int = 0
+) -> EquipDoctrineCommand:
+	return EquipDoctrineCommand.new(
+		world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, world.current_tick,
+		commander_id, doctrine_id, slot_index
 	)
 
 
@@ -67,7 +237,11 @@ func create_move_command(
 func create_formation_move_command(
 	formation_id: int,
 	target_position: Vector2,
-	issuer_kind: GameCommand.IssuerKind = GameCommand.IssuerKind.PLAYER
+	issuer_kind: GameCommand.IssuerKind = GameCommand.IssuerKind.PLAYER,
+	route_points: PackedVector2Array = PackedVector2Array(),
+	deployment_line_start: Vector2 = Vector2.ZERO,
+	deployment_line_end: Vector2 = Vector2.ZERO,
+	has_deployment_line: bool = false
 ) -> FormationMoveCommand:
 	var formation := world.formations.get(formation_id) as FormationState
 	var leader_entity_id := formation.leader_entity_id if formation != null else 0
@@ -78,7 +252,11 @@ func create_formation_move_command(
 		world.current_tick,
 		leader_entity_id,
 		formation_id,
-		target_position
+		target_position,
+		route_points,
+		deployment_line_start,
+		deployment_line_end,
+		has_deployment_line
 	)
 
 
@@ -257,14 +435,351 @@ func create_task_control_command(task_id: int, action: TaskControlCommand.Action
 
 
 func advance_tick() -> WorldSnapshot:
+	if _is_card_battle() and not _grey_ridge_battle_started:
+		return current_snapshot
 	previous_snapshot = current_snapshot
 	var started_usec := Time.get_ticks_usec()
 	current_snapshot = world.advance_tick()
+	if _is_card_battle():
+		_playtest_recorder.observe_snapshot(current_snapshot)
+		_observe_gameplay_report(current_snapshot)
 	_last_tick_usec = Time.get_ticks_usec() - started_usec
 	_timed_tick_count += 1
 	_total_tick_usec += _last_tick_usec
 	_max_tick_usec = maxi(_max_tick_usec, _last_tick_usec)
+	_save_campaign_result_if_finished()
 	return current_snapshot
+
+
+func _save_campaign_result_if_finished() -> void:
+	if _campaign_saved or not _is_card_battle() or current_snapshot == null:
+		return
+	if current_snapshot.outcome == null or not current_snapshot.outcome.is_terminal():
+		return
+	_campaign_record = ArmyRosterStore.build_battle_record(current_snapshot, _campaign_record, get_scenario_id())
+	_campaign_saved = true
+	if _gameplay_report != null:
+		_observe_gameplay_report(current_snapshot, true)
+		_gameplay_report.finish(current_snapshot)
+	_playtest_recorder.finish(current_snapshot, _campaign_record, world.events)
+	_persist_playtest_summary()
+	_persist_campaign_record()
+	ArmyRosterStore.apply_to_world(world, _campaign_record)
+	current_snapshot = world.create_snapshot()
+	campaign_record_changed.emit(get_campaign_record())
+	campaign_concluded.emit(get_campaign_record())
+
+
+func get_campaign_record() -> Dictionary:
+	return _campaign_record.duplicate(true)
+
+
+func get_playtest_summary() -> Dictionary:
+	return _playtest_recorder.create_summary()
+
+
+func get_gameplay_observability_report() -> Dictionary:
+	return {} if _gameplay_report == null else _gameplay_report.create_report().duplicate(true)
+
+
+func get_playtest_record_path() -> String:
+	return _playtest_record_path
+
+
+func record_playtest_ui_event(event_type: String, subject: StringName = &"") -> void:
+	if _is_card_battle():
+		_playtest_recorder.record_ui_event(event_type, subject, world.current_tick)
+
+
+func record_gameplay_exception_action(exception_id: StringName, action: String, accepted: bool) -> void:
+	if _is_card_battle() and _gameplay_report != null:
+		_gameplay_report.record_exception_action(exception_id, action, world.current_tick, accepted)
+
+
+func replenish_unit_card(unit_card_id: StringName) -> bool:
+	if not ArmyRosterStore.replenish_card(_campaign_record, unit_card_id):
+		return false
+	_campaign_record_updated()
+	return true
+
+
+func replenish_unit_card_as_much_as_possible(unit_card_id: StringName) -> int:
+	var restored := ArmyRosterStore.replenish_card_as_much_as_possible(_campaign_record, unit_card_id)
+	if restored > 0:
+		_campaign_record_updated()
+	return restored
+
+
+func reset_grey_ridge_campaign_record() -> bool:
+	if not _is_card_battle() or _grey_ridge_battle_started:
+		return false
+	if ArmyRosterStore.runtime_persistence_allowed() and FileAccess.file_exists(_campaign_record_path):
+		if ArmyRosterStore.archive_record(_campaign_record_path).is_empty():
+			return false
+	_campaign_record = {}
+	world = SimulationWorld.new(true, false, scenario_kind, {}, &"", _grey_ridge_army_plan)
+	current_snapshot = world.create_snapshot()
+	previous_snapshot = current_snapshot
+	_campaign_saved = false
+	_gameplay_report = null
+	_gameplay_event_cursor = 0
+	campaign_record_changed.emit(get_campaign_record())
+	scenario_restarted.emit(current_snapshot)
+	return true
+
+
+func award_collective_commendation(unit_card_id: StringName) -> bool:
+	return apply_unit_card_growth(unit_card_id, ArmyRosterStore.HONOR_COLLECTIVE_COMMENDATION)
+
+
+func install_reinforced_side_skirts(unit_card_id: StringName) -> bool:
+	return apply_unit_card_growth(unit_card_id, ArmyRosterStore.EQUIPMENT_REINFORCED_SIDE_SKIRTS)
+
+
+func apply_unit_card_growth(unit_card_id: StringName, growth_id: StringName) -> bool:
+	if not ArmyRosterStore.apply_growth(_campaign_record, unit_card_id, growth_id):
+		return false
+	_campaign_record_updated()
+	var descriptor := {
+		"category": "growth",
+		"action": "apply",
+		"subject": String(unit_card_id),
+		"growth_id": String(growth_id),
+	}
+	player_action_recorded.emit(descriptor)
+	record_playtest_ui_event("growth_applied", growth_id)
+	return true
+
+
+func restart_grey_ridge() -> bool:
+	if not _is_card_battle():
+		return false
+	_playtest_recorder.mark_second_battle_requested(world.current_tick)
+	_persist_playtest_summary()
+	_grey_ridge_battle_started = false
+	world = SimulationWorld.new(true, false, scenario_kind, _campaign_record, &"", _grey_ridge_army_plan)
+	current_snapshot = world.create_snapshot()
+	previous_snapshot = current_snapshot
+	_accumulator = 0.0
+	_timed_tick_count = 0
+	_last_tick_usec = 0
+	_total_tick_usec = 0
+	_max_tick_usec = 0
+	_campaign_saved = false
+	_gameplay_report = null
+	_gameplay_event_cursor = 0
+	scenario_restarted.emit(current_snapshot)
+	grey_ridge_prebattle_opened.emit(_grey_ridge_army_plan.duplicate_plan())
+	return true
+
+
+func start_grey_ridge(plan: ArmyPlan, prebattle_metrics: Dictionary = {}) -> bool:
+	if not _is_card_battle() or plan == null:
+		return false
+	if not get_grey_ridge_army_plan_errors(plan).is_empty():
+		return false
+	_grey_ridge_army_plan = plan.duplicate_plan()
+	world = SimulationWorld.new(true, false, scenario_kind, _campaign_record, &"", _grey_ridge_army_plan)
+	current_snapshot = world.create_snapshot()
+	previous_snapshot = current_snapshot
+	_accumulator = 0.0
+	_timed_tick_count = 0
+	_last_tick_usec = 0
+	_total_tick_usec = 0
+	_max_tick_usec = 0
+	_campaign_saved = false
+	_grey_ridge_battle_started = true
+	_start_playtest_session(prebattle_metrics)
+	scenario_restarted.emit(current_snapshot)
+	grey_ridge_battle_started.emit(current_snapshot)
+	return true
+
+
+func is_grey_ridge_battle_started() -> bool:
+	return _grey_ridge_battle_started
+
+
+func get_grey_ridge_army_plan() -> ArmyPlan:
+	return _grey_ridge_army_plan.duplicate_plan()
+
+
+func get_grey_ridge_army_plan_errors(plan: ArmyPlan) -> Array[StringName]:
+	if not _is_card_battle() or plan == null:
+		return [&"ARMY_PLAN_ERROR_UNAVAILABLE"]
+	return world.get_grey_ridge_army_plan_errors(plan)
+
+
+func _campaign_record_updated() -> void:
+	_persist_campaign_record()
+	ArmyRosterStore.apply_to_world(world, _campaign_record)
+	current_snapshot = world.create_snapshot()
+	previous_snapshot = current_snapshot
+	campaign_record_changed.emit(get_campaign_record())
+
+
+func _persist_campaign_record() -> void:
+	if ArmyRosterStore.runtime_persistence_allowed():
+		ArmyRosterStore.save_record(_campaign_record, _campaign_record_path)
+
+
+func _start_playtest_session(prebattle_metrics: Dictionary = {}) -> void:
+	if not _is_card_battle():
+		return
+	_playtest_recorder = PlaytestSessionRecorder.new()
+	_playtest_record_path = ""
+	_playtest_recorder.start(
+		current_snapshot,
+		int(_campaign_record.get("battle_count", 0)) + 1,
+		world.enemy_opening_plan_id,
+		prebattle_metrics,
+		_playtest_session_id,
+		_playtest_record_directory,
+		get_scenario_id()
+	)
+	_start_gameplay_report()
+
+
+func _start_gameplay_report() -> void:
+	_gameplay_report = GameplayObservabilityReport.new(
+		get_scenario_id(), world.enemy_opening_plan_id, &"live_player", 0,
+		SimulationWorld.LOCAL_PLAYER_ID,
+		world.battle_definition.time_limit_ticks if world.battle_definition != null else 0
+	)
+	_gameplay_event_cursor = 0
+	_gameplay_report.start(current_snapshot)
+	_observe_gameplay_report(current_snapshot, true)
+
+
+func _observe_gameplay_report(snapshot: WorldSnapshot, force_situation: bool = false) -> void:
+	if _gameplay_report == null or snapshot == null:
+		return
+	var new_events: Array[SimulationEvent] = []
+	for index in range(_gameplay_event_cursor, world.events.size()):
+		new_events.append(world.events[index])
+	_gameplay_report.observe(snapshot, new_events)
+	_gameplay_event_cursor = world.events.size()
+	if not force_situation and snapshot.tick % 10 != 0 and not snapshot.outcome.is_terminal():
+		return
+	var battle := world.battle_definition
+	var bounds := battle.battlefield_bounds if battle != null else SimulationWorld.BATTLEFIELD_BOUNDS
+	var base_interval := battle.base_supply_interval_ticks if battle != null else BattlefieldSituationProjector.DEFAULT_BASE_SUPPLY_INTERVAL_TICKS
+	var region_interval := battle.region_settlement_interval_ticks if battle != null else BattlefieldSituationProjector.DEFAULT_REGION_SETTLEMENT_INTERVAL_TICKS
+	var support_costs := {}
+	if battle != null:
+		for support in battle.support_abilities:
+			support_costs[String(support.support_id)] = support.supply_cost
+	var situation := _gameplay_situation_projector.project(
+		snapshot, SimulationWorld.LOCAL_PLAYER_ID, bounds,
+		base_interval, region_interval, support_costs
+	)
+	if situation == null:
+		return
+	var command_situation := _gameplay_command_situation_projector.project(
+		snapshot, situation, SimulationWorld.LOCAL_PLAYER_ID
+	)
+	if command_situation != null:
+		_gameplay_report.observe_command_situation(command_situation)
+
+
+func _is_card_battle() -> bool:
+	return SimulationWorld.is_card_battle_kind(scenario_kind)
+
+
+func get_scenario_id() -> StringName:
+	return world.get_scenario_id() if world != null and world.scenario_kind == scenario_kind else SimulationWorld.scenario_id_for_kind(scenario_kind)
+
+
+func _persist_playtest_summary() -> void:
+	if not ArmyRosterStore.runtime_persistence_allowed():
+		return
+	if _playtest_record_path.is_empty():
+		_playtest_record_path = _playtest_recorder.default_archive_path()
+	_playtest_recorder.save_to_path(_playtest_record_path)
+	_playtest_recorder.save_to_path(_playtest_recorder.latest_record_path())
+
+
+func _playtest_command_descriptor(command: GameCommand) -> Dictionary:
+	if command == null or command.issuer_kind != GameCommand.IssuerKind.PLAYER:
+		return {}
+	if command is CommanderOrderCommand:
+		var commander_command := command as CommanderOrderCommand
+		var action := "objective"
+		if commander_command.order_kind == CommanderOrderCommand.OrderKind.SET_POSTURE:
+			action = "posture"
+		elif commander_command.order_kind == CommanderOrderCommand.OrderKind.ASSIGN_INTENT:
+			action = "intent"
+		elif commander_command.order_kind == CommanderOrderCommand.OrderKind.CANCEL_INTENT:
+			action = "cancel_intent"
+		return {
+			"category": "commander", "subject": String(commander_command.commander_id),
+			"action": action,
+			"target_region_id": String(commander_command.target_region_id),
+			"axis_region_id": String(commander_command.main_axis_region_id),
+			"reserve_policy": CommanderState.ReservePolicy.keys()[commander_command.reserve_policy],
+			"counts_as_replan": commander_command.order_kind in [CommanderOrderCommand.OrderKind.ASSIGN_OBJECTIVE, CommanderOrderCommand.OrderKind.ASSIGN_INTENT],
+			"uses_intel": commander_command.order_kind in [CommanderOrderCommand.OrderKind.ASSIGN_OBJECTIVE, CommanderOrderCommand.OrderKind.ASSIGN_INTENT],
+		}
+	if command is EquipDoctrineCommand:
+		return {"category": "commander", "subject": String((command as EquipDoctrineCommand).commander_id), "action": "doctrine"}
+	if command is DeployUnitCardCommand:
+		return {"category": "unit_card", "subject": String((command as DeployUnitCardCommand).unit_card_id), "action": "deploy", "uses_intel": true}
+	if command is UnitCardControlCommand:
+		var control := command as UnitCardControlCommand
+		var action := "takeover"
+		if control.action == UnitCardControlCommand.Action.RETURN_TO_COMMANDER:
+			action = "return_to_commander"
+		elif control.action == UnitCardControlCommand.Action.STAY_MANUAL:
+			action = "stay_manual"
+		return {"category": "unit_card", "subject": String(control.unit_card_id), "action": action}
+	if command is SupportOrderCommand:
+		var support := command as SupportOrderCommand
+		var action := ""
+		match support.support_kind:
+			SupportOrderCommand.SupportKind.AIR_RECON:
+				action = "air_recon"
+			SupportOrderCommand.SupportKind.EMERGENCY_FORTIFY:
+				action = "fortify"
+			SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT:
+				action = "field_reinforcement"
+		return {"category": "support", "subject": String(support.unit_card_id), "action": action, "uses_intel": true}
+	var formation_id := 0
+	if command is FormationMoveCommand:
+		formation_id = (command as FormationMoveCommand).formation_id
+	elif command is StopCommand:
+		formation_id = (command as StopCommand).formation_id
+	elif command is AttackCommand:
+		formation_id = (command as AttackCommand).formation_id
+	if formation_id == 0:
+		return {}
+	var unit_card := world._unit_card_for_formation(formation_id)
+	if unit_card == null:
+		return {}
+	var starts_takeover := unit_card.control_state not in [UnitCardState.ControlState.PLAYER_OVERRIDDEN, UnitCardState.ControlState.PLAYER_CONTROLLED]
+	var descriptor := {
+		"category": "unit_card", "subject": String(unit_card.definition.definition_id),
+		"action": "direct_order_takeover" if starts_takeover else "direct_order",
+		"counts_as_replan": true, "uses_intel": true,
+	}
+	if command is FormationMoveCommand:
+		var route_command := command as FormationMoveCommand
+		descriptor["route_planned"] = not route_command.route_points.is_empty() or route_command.has_deployment_line
+	return descriptor
+
+
+func _gameplay_command_descriptor(command: GameCommand, playtest_descriptor: Dictionary) -> Dictionary:
+	var descriptor := playtest_descriptor.duplicate(true)
+	var category := String(descriptor.get("category", "other"))
+	var subject := String(descriptor.get("subject", ""))
+	descriptor["reason_key"] = "player_%s" % String(descriptor.get("action", command.get_class())).to_lower()
+	descriptor["actor_id"] = subject if category == "commander" else "player"
+	if category == "unit_card" or category == "support":
+		descriptor["card_id"] = subject
+	descriptor["is_correction"] = bool(descriptor.get("counts_as_replan", false))
+	if command is UnitCardControlCommand:
+		var control := command as UnitCardControlCommand
+		descriptor["action"] = "card_control"
+		descriptor["control_action"] = control.action
+	return descriptor
 
 
 func get_true_state_snapshot_for_debug() -> WorldSnapshot:

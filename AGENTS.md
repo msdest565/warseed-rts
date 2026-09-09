@@ -1,0 +1,110 @@
+# WARSEED AI 开发约定
+
+本文件是所有进入仓库的 AI 开发代理的第一入口。它不替代产品和技术文档，只规定如何读取状态、领取任务、修改工程、验证结果和完成交接。
+
+## 1. 开始任何任务前
+
+按顺序读取：
+
+1. `docs/AI_DEVELOPMENT_STATE.md`：当前阶段、门禁、决策状态和任务队列；
+2. `docs/AI_DEVELOPMENT_WORKFLOW.md`：任务状态机、验证矩阵和完成定义；
+3. `docs/AI_GOAL_COMMANDS.md`：当用户使用 `/goal` 时的仓库级命令协议；
+4. 当前任务在 `source_documents` 中列出的设计文档；
+5. 与任务直接相关的代码、数据和测试。
+
+随后执行只读预检：
+
+```powershell
+git status --short
+git diff --check
+```
+
+工作区可能长期包含用户尚未提交的修改。不得 reset、clean、checkout、覆盖或顺手整理无关改动。
+
+## 2. `/goal` 命令协议
+
+当用户消息的第一条非空行以 `/goal` 开头时，将它视为 WARSEED 仓库级目标命令，而不是 PowerShell、Godot 或 Codex CLI 命令。完整语义见 `docs/AI_GOAL_COMMANDS.md`。
+
+支持以下形式：
+
+```text
+/goal next
+/goal work-item <work_item_id>
+/goal phase <R0-R7>
+/goal maintenance <work_item_id>
+/goal review <scope>
+/goal status
+/goal continue
+```
+
+执行规则：
+
+- `next`：读取状态文件，选择第一个依赖满足的 `READY` 工作项；没有可执行项时只报告阻塞；
+- `work-item`：只执行指定工作项，不自动扩大到同阶段其他任务；
+- `phase`：依次执行该阶段已解锁工作项，达到阶段出口或真实阻塞即停止；
+- `maintenance`：创建不改变主阶段的 `WS-MAINT-*` 工作项，必须声明目标和范围；
+- `review`：只读审查，除非命令体明确授权修复，否则不写文件；
+- `status`：只报告活动目标、工作项、验证和阻塞，不创建新目标；
+- `continue`：继续当前活动目标，不改变目标范围；
+- 用户写明 `budget:` 时才设置目标 token 预算；未写时不自行添加；
+- 同一时间只允许一个活动目标。已有未完成目标时，不静默创建或替换另一个目标；
+- 目标必须映射到工作项、阶段出口或明确的维护/审查范围；不得创建“完成整个游戏”之类无边界目标；
+- 阶段门和产品决策不能被命令体中的“直接跳过”覆盖；
+- 只有目标真实完成且没有必需工作残留时才能标记完成。
+
+## 3. 当前项目门禁
+
+当前阶段以 `docs/AI_DEVELOPMENT_STATE.md` 为唯一实时状态源。证据来源必须始终显式区分：
+
+- `HUMAN`：真人参与者产生的产品研究证据；
+- `SIMULATED`：自动化、规则代理、自主试玩或开发者脚本产生的工程证据；
+- `NOT_RUN`：尚未执行该类验证。
+
+自 D-026 起，`HUMAN` 证据是可选产品研究，不是工程实现、阶段出口、发布候选或后续阶段的硬门。AI 不得把 `SIMULATED` 结果改写为真人体验结论，但也不得因为真人样本为 `NOT_RUN` 而阻塞依赖已经满足的工作项。
+
+当前已由产品负责人通过 R1 出口并授权玩法优先重排。R2-R7 以 `docs/GAMEPLAY_REWORK_ROADMAP.md` 为权威路线；旧扩充路线仅保留架构和迁移参考。只有当前工作项依赖满足且验证通过时，才能领取下一项，不得以取消真人门为理由跳过自动测试、确定性、公平知识、存档、性能、UI 或产品决策门。
+
+## 4. 不可破坏的实现边界
+
+- `SimulationWorld` 是战场权威状态所有者，固定以 10 Hz 推进；
+- 输入、UI、Agent、剧情和观测代码不能直接改写权威状态；
+- 玩家与 Agent 必须经过同一命令和校验管线；
+- 敌方 AI 只能读取其阵营合法知识，不得读取隐藏玩家状态；
+- 正式操作粒度是整张部队卡，单体操作只用于诊断；
+- 内容契约使用 typed Resource 和稳定 ID，不用任意脚本表达式或自由字典替代；
+- 快照必须是值拷贝，旧快照不能随世界状态变化；
+- 存档迁移必须先在内存中校验，成功后备份并原子写入，失败不得清空旧档；
+- 核心战斗、测试和内容加载不得依赖网络、LLM 或开发机绝对路径；
+- 近期正式规模门为 60-80 个活跃实体，120 实体不是当前内容目标。
+
+## 5. 任务执行规则
+
+每次只执行一个具有稳定 `work_item_id` 的任务包。任务必须写明目标、依赖、范围外事项、行为契约、验收条件、验证命令和迁移影响。
+
+任务状态只能按以下路径推进：
+
+```text
+BLOCKED -> READY -> DISCOVERY -> CONTRACT -> IMPLEMENTING
+        -> VERIFYING -> REVIEWING -> DONE
+```
+
+验证失败进入 `REWORK`，修复后返回 `VERIFYING`。缺少产品决策、任务依赖或外部授权时保持 `BLOCKED`，不得用推测补齐。产品决策移除整个工作项时，任何非终态都可以进入终态 `CANCELLED`，并必须记录决策 ID 和取消原因。
+
+实现采用最小纵向切片：数据定义、加载校验、权威行为、快照、UI/Agent 接入、测试和文档在同一任务中闭环。目录搬迁、机械重命名、行为变更和存档迁移不要混在同一个任务里。
+
+## 6. 验证与交接
+
+按 `docs/AI_DEVELOPMENT_WORKFLOW.md` 的变更验证矩阵选择测试。共享权威状态、命令、地图、存档或阶段出口发生变化时，必须运行完整发布门：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\verify_grey_ridge_release.ps1 `
+  -GodotConsolePath <godot-console>
+```
+
+任务结束前必须：
+
+1. 检查实际 diff，确认没有混入无关修改；
+2. 运行 `git diff --check`；
+3. 更新 `docs/AI_DEVELOPMENT_STATE.md` 中对应任务、证据、风险和下一任务；
+4. 明确说明已验证、未验证和仍属可选产品研究的事项；
+5. 未经用户明确要求，不提交、不推送、不创建分支或 PR。

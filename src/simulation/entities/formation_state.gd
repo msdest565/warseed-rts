@@ -47,6 +47,10 @@ var order_destination: Vector2
 var order_target_entity_id: int = 0
 var pursuit_target_cell: Vector2i = Vector2i(-1, -1)
 var last_repath_tick: int = -1000000
+var planned_route: PackedVector2Array = PackedVector2Array()
+var has_deployment_line: bool = false
+var deployment_line_start: Vector2
+var deployment_line_end: Vector2
 
 
 func _init(new_formation_id: int, new_member_entity_ids: Array[int], new_anchor_position: Vector2) -> void:
@@ -94,6 +98,21 @@ func get_wide_offset(slot_id: int) -> Vector2:
 	var rank := reinforcement_index / 2 + 3
 	var side := -1.0 if reinforcement_index % 2 == 0 else 1.0
 	return Vector2(-48.0 * rank, 44.0 * side)
+
+
+func get_recon_offset(slot_id: int) -> Vector2:
+	if slot_id < 0 or member_entity_ids.size() <= 1:
+		return Vector2.ZERO
+	var centered_slot := float(slot_id) - float(member_entity_ids.size() - 1) * 0.5
+	var lateral := centered_slot * 58.0
+	return Vector2(-absf(lateral) * 0.22, lateral)
+
+
+func get_deployment_position(slot_id: int) -> Vector2:
+	if not has_deployment_line or member_entity_ids.size() <= 1:
+		return target_position
+	var ratio := float(slot_id) / float(member_entity_ids.size() - 1)
+	return deployment_line_start.lerp(deployment_line_end, ratio)
 
 
 func reset_anchor_history(path_direction: Vector2) -> void:

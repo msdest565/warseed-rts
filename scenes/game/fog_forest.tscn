@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/game/game_root.tscn" id="1_game"]
+
+[node name="FogForest" instance=ExtResource("1_game")]
+
+[node name="Battlefield" parent="." index="0"]
+scenario_kind = 3
+
+[node name="SimulationHost" parent="." index="1"]
+scenario_kind = 3
+
+[node name="CameraController" parent="." index="3"]
+position = Vector2(3072, 2944)

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CommanderDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/data/commander_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+definition_id = &"di_tian"
+display_name_key = &"COMMANDER_DI_TIAN"
+capacity = 6
+personality_key = &"PERSONALITY_STEADY"
+specialty_keys = Array[StringName]([&"SPECIALTY_COVER", &"SPECIALTY_ASSAULT"])
+doctrine_keys = Array[StringName]([&"DOCTRINE_ALTERNATING_COVER"])
+available_doctrine_ids = Array[StringName]([&"alternating_cover", &"concentrated_breakthrough", &"mutual_support"])

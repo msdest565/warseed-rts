@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="UnitCardDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/data/unit_card_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+definition_id = &"blackwell_guard_battalion"
+display_name_key = &"UNIT_CARD_BLACKWELL_GUARD"
+role_key = &"UNIT_CARD_ROLE_ASSAULT"
+commander_definition_id = &"lu_zheng"
+command_cost = 2
+authorized_strength = 10
+unit_definition_id = &"assault_vehicle"
+supply_cost = 3
+deployment_ticks = 90

@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="BattleObjectiveSetDefinition" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://src/objectives/battle_objective_set_definition.gd" id="1_set"]
+[ext_resource type="Script" path="res://src/objectives/battle_objective_definition.gd" id="2_objective"]
+[ext_resource type="Script" path="res://src/objectives/objective_group_definition.gd" id="3_group"]
+
+[sub_resource type="Resource" id="ObjectiveWithdrawal"]
+script = ExtResource("2_objective")
+objective_id = &"guard_battalion_withdrawn"
+display_name_key = &"OBJECTIVE_WITHDRAW_GUARD_BATTALION"
+kind = 3
+unit_card_id = &"blackwell_guard_battalion"
+region_id = &"withdrawal_corridor"
+minimum_strength = 1
+
+[sub_resource type="Resource" id="GroupOrderedWithdrawal"]
+script = ExtResource("3_group")
+group_id = &"ordered_withdrawal"
+objective_ids = Array[StringName]([&"guard_battalion_withdrawn"])
+outcome_result = 3
+outcome_grade = 3
+priority = 100
+
+[resource]
+script = ExtResource("1_set")
+objective_set_id = &"r1_ordered_withdrawal"
+objectives = Array[ExtResource("2_objective")]([SubResource("ObjectiveWithdrawal")])
+conclusion_groups = Array[ExtResource("3_group")]([SubResource("GroupOrderedWithdrawal")])

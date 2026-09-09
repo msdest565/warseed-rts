@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="UnitCardDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/data/unit_card_definition.gd" id="1_unit_card"]
+
+[resource]
+script = ExtResource("1_unit_card")
+definition_id = &"armored_spearhead"
+display_name_key = &"UNIT_CARD_ARMORED_SPEARHEAD"
+role_key = &"UNIT_CARD_ROLE_ARMOR"
+commander_definition_id = &"di_tian"
+command_cost = 2
+authorized_strength = 8
+unit_definition_id = &"assault_vehicle"
+supply_cost = 4
+deployment_ticks = 100
+starts_in_reserve = true

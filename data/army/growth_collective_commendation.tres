@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="GrowthDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/data/growth_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+definition_id = &"collective_commendation"
+display_name_key = &"GROWTH_COLLECTIVE_COMMENDATION"
+benefit_key = &"GROWTH_COLLECTIVE_COMMENDATION_BENEFIT"
+tradeoff_key = &"GROWTH_COLLECTIVE_COMMENDATION_TRADEOFF"
+merit_cost = 3
+attack_multiplier = 1.1
+deployment_supply_cost_modifier = 1
+replacement_cost_modifier = 1

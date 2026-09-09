@@ -25,12 +25,12 @@ func _test_scenario_and_differentiated_data(failures: Array[String]) -> void:
 	_expect((world.ore_fields[SimulationWorld.DEFAULT_ORE_FIELD_ID] as OreFieldState).ore_remaining == SimulationWorld.PRIMARY_ORE_CAPACITY, "player primary ore should support a full-length match", failures)
 	_expect((world.ore_fields[SimulationWorld.PLAYER_EXPANSION_ORE_FIELD_ID] as OreFieldState).ore_remaining == SimulationWorld.EXPANSION_ORE_CAPACITY, "player expansion should provide a second economic objective", failures)
 	_expect(SimulationWorld.PRIMARY_ORE_CAPACITY + SimulationWorld.EXPANSION_ORE_CAPACITY >= 18000, "each faction should have enough finite ore for sustained development", failures)
-	_expect(SimulationWorld.UNIT_CATALOG.validate().is_valid(), "five-unit catalog should validate", failures)
+	_expect(SimulationWorld.UNIT_CATALOG.validate().is_valid(), "committed unit catalog should validate", failures)
 	_expect(SimulationWorld.BUILDING_CATALOG.validate().is_valid(), "three-building catalog should validate", failures)
 	var player_spawn := LogicGrid.MAP_DEFINITION.player_spawn_cell
 	var enemy_spawn := LogicGrid.MAP_DEFINITION.enemy_spawn_cell
 	_expect(player_spawn.x < LogicGrid.GRID_SIZE.x / 2 and player_spawn.y < LogicGrid.GRID_SIZE.y / 2, "player base should start in the upper-left quadrant", failures)
-	_expect(enemy_spawn.x > LogicGrid.GRID_SIZE.x / 2 and enemy_spawn.y > LogicGrid.GRID_SIZE.y / 2, "enemy base should start in the lower-right quadrant", failures)
+	_expect(enemy_spawn.x > player_spawn.x and enemy_spawn.y > player_spawn.y, "legacy enemy base should remain southeast of the compact player test area", failures)
 	var enemy_ore := world.ore_fields[SimulationWorld.ENEMY_ORE_FIELD_ID] as OreFieldState
 	_expect(enemy_ore.position.distance_to((world.buildings[SimulationWorld.ENEMY_COMMAND_CENTER_ID] as BuildingState).position) < 320.0, "enemy ore field should be located near the enemy base", failures)
 	_expect(enemy_ore.position.distance_to((world.ore_fields[SimulationWorld.DEFAULT_ORE_FIELD_ID] as OreFieldState).position) > 1600.0, "player and enemy ore fields should be spatially separated", failures)

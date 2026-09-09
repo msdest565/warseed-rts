@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_faction_snapshot_filters_true_state(failures)
 	_test_last_seen_contact_and_snapshot_copy(failures)
+	_test_current_visible_contact_index(failures)
 	_test_hidden_attack_target_is_rejected(failures)
 	_test_enemy_raid_uses_last_seen_position(failures)
 	_test_enemy_harvester_mines_and_defends_itself(failures)
@@ -49,6 +50,23 @@ func _test_last_seen_contact_and_snapshot_copy(failures: Array[String]) -> void:
 	_expect(stale_contact.position == last_seen_position, "hidden hostile contact must retain last known position", failures)
 	_expect(stale_contact.last_seen_tick < hidden_snapshot.tick, "hidden contact should expose an older last-seen tick", failures)
 	_expect(visible_snapshot.knowledge.get_cell_state(old_knowledge_cell) == old_knowledge_state, "old knowledge snapshot must remain immutable", failures)
+
+
+func _test_current_visible_contact_index(failures: Array[String]) -> void:
+	var world := SimulationWorld.new()
+	var observer := world.units[1] as UnitState
+	var first_enemy := world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState
+	var second_enemy := world.units[SimulationWorld.ENEMY_HARVESTER_ID] as UnitState
+	first_enemy.position = observer.position + Vector2(96.0, 0.0)
+	second_enemy.position = observer.position + Vector2(128.0, 0.0)
+	world._update_faction_knowledge()
+	var knowledge := world.faction_knowledge[SimulationWorld.LOCAL_PLAYER_ID] as FactionKnowledge
+	_expect(Array(knowledge.visible_hostile_unit_ids) == [first_enemy.entity_id, second_enemy.entity_id], "current visible hostile IDs should be complete and deterministically sorted", failures)
+	_expect((knowledge.hostile_contacts[first_enemy.entity_id] as KnowledgeContact).attack_range == first_enemy.attack_range, "current knowledge should retain the hostile range observed by tactical evasion", failures)
+	second_enemy.position = world.logic_grid.cell_to_world(Vector2i(70, 50))
+	world._update_faction_knowledge()
+	_expect(Array(knowledge.visible_hostile_unit_ids) == [first_enemy.entity_id], "the current visible index should discard contacts that left vision", failures)
+	_expect(knowledge.hostile_contacts.has(second_enemy.entity_id), "discarding a current-visible ID must preserve the historical last-seen contact", failures)
 
 
 func _test_hidden_attack_target_is_rejected(failures: Array[String]) -> void:
