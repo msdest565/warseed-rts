@@ -1003,6 +1003,10 @@ msgid "TERRAIN_FOREST"
 msgstr "Forest"
 msgid "SUPPORT_PANEL_TITLE"
 msgstr "THEATER SUPPORT"
+
+msgid "SUPPORT_SUPPLY_BALANCE"
+msgstr "Supply %d / %d"
+
 msgid "SUPPORT_PAIR_WEST_CENTRAL"
 msgstr "West Mine + Central Relay"
 msgid "SUPPORT_PAIR_CENTRAL_EAST"
@@ -2938,3 +2942,93 @@ msgstr "Suggestions rejected. Unit orders are unchanged."
 
 msgid "REASON_STAFF_PLAN_STALE"
 msgstr "Situation or plan changed; generate new plans"
+
+msgid "COMMANDER_GRAPH_PHASE_0"
+msgstr "Muster"
+
+msgid "COMMANDER_GRAPH_PHASE_1"
+msgstr "Reconnaissance"
+
+msgid "COMMANDER_GRAPH_PHASE_2"
+msgstr "Deployment"
+
+msgid "COMMANDER_GRAPH_PHASE_3"
+msgstr "Engagement"
+
+msgid "COMMANDER_GRAPH_PHASE_4"
+msgstr "Exploitation"
+
+msgid "COMMANDER_GRAPH_PHASE_5"
+msgstr "Retreat"
+
+msgid "COMMANDER_GRAPH_WAITING"
+msgstr "Waiting for prerequisites"
+
+msgid "COMMANDER_GRAPH_EXECUTING"
+msgstr "Executing"
+
+msgid "COMMANDER_GRAPH_COMPLETED"
+msgstr "Completed"
+
+msgid "COMMANDER_GRAPH_NOT_REQUIRED"
+msgstr "Not required for this card"
+
+msgid "COMMANDER_GRAPH_PLAYER_CONTROL"
+msgstr "Waiting for player hand-back"
+
+msgid "COMMANDER_GRAPH_CONTROL_RETURNED"
+msgstr "Control returned; resuming"
+
+msgid "COMMANDER_GRAPH_TASK_BLOCKED"
+msgstr "Task blocked"
+
+msgid "COMMANDER_GRAPH_FAILED"
+msgstr "Unavailable or timed out"
+
+msgid "COMMANDER_GRAPH_CANCELLED"
+msgstr "Stage cancelled"
+
+msgid "COMMANDER_GRAPH_PLAYER_ORDER"
+msgstr "Replaced by a new player order"
+
+msgid "COMMANDER_GRAPH_NO_TASK"
+msgstr "Unable to create card task"
+
+msgid "COMMANDER_GRAPH_RETREAT"
+msgstr "Withdraw current plan"
+
+msgid "COMMANDER_GRAPH_RETREAT_QUEUED"
+msgstr "Retreat queued; manual cards stay under player control."
+
+msgid "COMMANDER_GRAPH_CURRENT"
+msgstr "Current plan execution"
+
+msgid "COMMANDER_GRAPH_SUMMARY"
+msgstr "Plan: %d active · %d waiting/blocked · %d completed"
+
+msgid "COMMANDER_GRAPH_PLAYER_RETREAT"
+msgstr "Player requested retreat"
+
+msgid "COMMANDER_GRAPH_CARD_LOST"
+msgstr "Card lost"
+
+msgid "COMMANDER_GRAPH_CARD_WITHDRAWN"
+msgstr "Card withdrawn"
+
+msgid "COMMANDER_GRAPH_DEPENDENCY_FAILED"
+msgstr "Prerequisite could not complete"
+
+msgid "COMMANDER_GRAPH_TIMEOUT"
+msgstr "Stage timed out"
+
+msgid "COMMANDER_GRAPH_TASK_REPLACED"
+msgstr "Execution task lost or replaced"
+
+msgid "CARD_ATTACK_HEADQUARTERS"
+msgstr "Attack enemy headquarters"
+
+msgid "CARD_ENEMY_HEADQUARTERS"
+msgstr "Known enemy headquarters"
+
+msgid "CARD_ATTACK_HEADQUARTERS_CONTEXT"
+msgstr "Advance this commander's cards to the confirmed headquarters location; return manual cards to AI."

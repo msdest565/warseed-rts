@@ -1,7 +1,7 @@
 # WARSEED AI 开发状态与任务队列
 
-> 状态版本：65
-> 更新时间：2026-09-13
+> 状态版本：69
+> 更新时间：2026-09-14
 > 更新规则：每个完成、阻塞或重新规划的工作项都必须更新本文件
 > 执行规则：[`AI_DEVELOPMENT_WORKFLOW.md`](AI_DEVELOPMENT_WORKFLOW.md)
 > 目标命令：[`AI_GOAL_COMMANDS.md`](AI_GOAL_COMMANDS.md)
@@ -10,19 +10,19 @@
 
 ```yaml
 workflow_version: 1.1
-state_version: 65
-updated_at: 2026-09-13
+state_version: 69
+updated_at: 2026-09-14
 project: WARSEED
 current_phase: R4
-current_gate: R4_IMPLEMENTATION
-phase_status: IMPLEMENTING
+current_gate: R4_USER_PAUSE
+phase_status: BLOCKED
 release_candidate: R1-FEEDBACK-RC2
 release_candidate_status: ENGINEERING_BASELINE_ARCHIVED
 release_candidate_package: build/playtest-kits/WARSEED-R1-Feedback-RC2-20260901.zip
 release_candidate_sha256: 730B7F496F8871D62CA887F5B955974CF540014F3B5EA9307E6F5D4070C10A08
 active_maintenance_work_item: none
-working_build_id: 0.1.0-r1-feedback.6-dev
-latest_maintenance_work_item: WS-MAINT-20260912-001
+working_build_id: 0.1.0-playable.20260914
+latest_maintenance_work_item: WS-MAINT-20260914-001
 latest_maintenance_status: DONE
 feedback_build_id: 0.1.0-r1-feedback.2
 feedback_schema_version: 1
@@ -45,14 +45,14 @@ human_validation_test_plan: docs/HUMAN_VALIDATION_TEST_PLAN.md
 simulated_gate_authorized_at: 2026-08-21
 simulated_gate_authority: product_owner_user_message
 next_work_item: WS-R4-004
-next_work_item_status: READY
-next_work_item_blocker_kind: none
-next_work_item_blocker: none
-machine_ready_work_item: WS-R4-004
+next_work_item_status: BLOCKED
+next_work_item_blocker_kind: USER_PAUSE
+next_work_item_blocker: Playable package delivered; await explicit user instruction to resume development
+machine_ready_work_item: none
 active_work_item: none
 queued_maintenance_work_item: none
 queued_maintenance_status: none
-expansion_implementation_allowed: true
+expansion_implementation_allowed: false
 phase_exit_requires_product_owner: true
 r1_engineering_status: COMPLETE
 r1_exit_status: ACCEPTED
@@ -77,7 +77,7 @@ r3_simulated_full_gate_duration_seconds: 686.300
 r3_simulated_verified_at: 2026-09-13
 goal_protocol_version: 1.1
 gameplay_rework_roadmap: docs/GAMEPLAY_REWORK_ROADMAP.md
-recommended_goal_command: "/goal continue"
+recommended_goal_command: "/goal status"
 full_gate_command: >-
   powershell -ExecutionPolicy Bypass -File
   .\tools\verify_grey_ridge_release.ps1
@@ -118,6 +118,8 @@ full_gate_command: >-
 | 可选产品研究 | P6.7 与集中真人用例尚未执行；D-026 后不参与工程、阶段或发布门 |
 
 ## 3. 当前阶段目标
+
+2026-09-14最新用户指示覆盖下述继续授权：`WS-MAINT-20260914-001` 的手控战斗可靠性、单位批量可见性、已知总部进攻和补给数值显示已完成，可直接运行的Windows最终包已交付，开发现已暂停。R4-004现有实现保留并随包回归，但工作项保持用户暂停的BLOCKED；不领取R4-005或R5，不宣称R4/R5完整目标完成。当前维护DONE，最终证据见第20节。
 
 2026-09-13 状态复核：共享增援冷却维护及R3-001至R3-006已完成。最终686.300秒发布门、双语五档、四关存档链和正式60/80实渲通过；606文件哈希复核变化0。R3工程出口已按用户R3/R4/R5继续授权接受，R4-001公平态势黑板与R4-002行动方案生成也已完成，R4-003方案比较与玩家确认也已完成，唯一下一项WS-R4-004（将领阶段任务图）。R4/R5尚未实现完成，完整目标继续。下文带日期的中途返工和旧阻塞仅作历史，当前结论以本段、控制块及第19节为准。
 
@@ -280,8 +282,8 @@ R2 的目标是建立灰脊玩法基准，不在本阶段批量增加地图、�
 ## 11. 下一次 AI 接手检查单
 
 1. 读取根目录 `AGENTS.md`、本文件控制块、D-026、D-027 与 `GAMEPLAY_REWORK_ROADMAP.md`；
-2. R3出口与共享冷却维护已完成；D-021/D-022均已接受，不重复确认。R4-001/002已完成，下一项WS-R4-003接入方案比较与玩家确认UI；
-3. R4按第19节逐项执行，契约与当前验证日志在对应工作项中；不得同时实现兄弟任务或越过依赖。完整活动 goal 包括维护自检后 R3、R4、R5，不能只完成 HUD 就结束；
+2. R3出口、共享冷却及本次手控维护已完成；D-021/D-022均已接受，不重复确认。R4-001/002/003已完成，R4-004保留实现并因用户要求暂停而BLOCKED；
+3. 先读第20节交付与暂停结论，未收到用户明确恢复指令不得继续开发。R3/R4/R5完整目标尚未完成，不能将维护包交付记为阶段出口；
 4. 所有自主试玩、规则代理和自动化证据继续标记为 `SIMULATED`，但真人 `NOT_RUN` 不再阻塞；
 5. 若出现真人记录，可按构建哈希和原始记录审计为 `HUMAN` 可选研究，不改变工程完成状态；
 6. R2-001 至 R2-006 已建立并验证完整对局观测、只读态势叠层、高层意图/异常队列、因果复盘、差异策略空间和发布门；R3已完成卡牌战术动词；R4继续方案与阶段任务图，不能把固定脚本策略外推为真人主观乐趣。
@@ -555,7 +557,7 @@ Git交接：此前 `.git/index.lock` 权限与审批服务503阻塞已于2026-09
 | WS-R4-001 | DONE (`SIMULATED`) | 公平态势评估黑板 | R3出口已满足 |
 | WS-R4-002 | DONE (`SIMULATED`) | 行动方案定义、生成与效用比较 | R4-001 |
 | WS-R4-003 | DONE (`SIMULATED`) | 参谋方案比较与玩家确认UI | R4-002 |
-| WS-R4-004 | READY | 将领阶段化任务图 | R4-002、R4-003已满足 |
+| WS-R4-004 | BLOCKED | 将领阶段化任务图 | 用户2026-09-14要求先修复出包，随后暂停 |
 | WS-R4-005 | BLOCKED | 预备队、增援、撤退与受阻重规划 | R4-004 |
 | WS-R4-006 | BLOCKED | R4阶段出口 | R4-003、R4-005 |
 
@@ -568,3 +570,22 @@ Git交接：此前 `.git/index.lock` 权限与审批服务503阻塞已于2026-09
 R4-002的983b87a现已推送并核对远端。R4-003审批、修改/拒绝和比较UI已实现，审查后补齐本地玩家阵营校验，并修正五档弹窗测试：鼠标经根窗口输入路由，无直接按钮回调补偿。最终专项 `artifacts/r4-003-focused-final.log`、双语五档 `artifacts/r4-003-ui-final.log` PASS，包含真实同tick接管与审批竞态；高分辨率和480窄屏截图已检查。此前含回调补偿的结果不作为最终鼠标证据。当前VERIFYING，冻结源码清单后重新运行完整门 `artifacts/r4-003-release-final.log`；未通过前不解锁004、不把批准记录当作已执行任务图。所有新证据为SIMULATED，HUMAN方案理解仍可选NOT_RUN，存档格式不变。
 
 2026-09-13 R4-003现已DONE：最终双语五档（r4-003-ui-layout-final.log）、专项及665.333秒完整门（r4-003-release-final2.log）全部PASS；两轮18/18、Legacy/四关、72案例、30场完整对局、反馈工具、80实体、Windows导出与包校验通过，无脚本错误，649受验文件哈希变化0。80实体模拟/表现更新P95 5.712/0.744ms；120实体仅压力测量。PCK SHA-256 40C2A740CDAE10BF8B592D78829D2F98283D3623F1F3AEFD0EBC2051E963A9E2。源码、矩阵、截图和摘要见artifacts/r4-003-evidence/与r4-003-summary.json，详细验收见work_items/WS-R4-003.md。此前验证中及返工描述仅作历史。所有证据SIMULATED、HUMAN理解研究可选NOT_RUN，无存档格式变化；批准只是本局权威记录。唯一下一项WS-R4-004已READY，实际阶段任务执行由该项实现；R4/R5完整目标尚未完成。
+
+
+R4-004已接通批准后的真实六阶段任务、依赖/整卡执行、手控恢复与显式撤退，审查边界及18/18回归通过（artifacts/r4-004-regression-boundaries.log）。当前VERIFYING：完整对局复测、双语五档、活动图60/80性能和完整发布门尚未全部完成；不提前解锁005或标DONE。完整目标保持活动，最新已推送为R4-003的f4cc93c。
+
+## 20. 手控战斗修复与可玩包
+
+2026-09-14 最新用户指示优先完成 `WS-MAINT-20260914-001` 并交付游戏包，然后暂停开发。上节 R4-004 验收中的描述为历史；其已有实现保留，当前状态为 BLOCKED / USER_PAUSE，不能继续 R4-005 或 R5，也不宣称 R4 阶段完成。
+
+本维护已修复超过56实体后的批量显示坐标与地形遮挡、手控局部自主攻击、Q攻击移动接敌/继续路线、旧AI任务与低组织阻断基础命令、混成卡攻击时成员脱离，并增加合法发现敌方总部后的进攻决策。左侧支援区顶部常驻当前补给/上限，支持中英切换；既有左右增援入口共享置灰与倒计时。坦克地形倍率、快速机动结束及队形等待规则已验证不累乘，详见 `PLAYABLE_20260914.md`。
+
+已验证（SIMULATED）：`artifacts/manual-battle-final2.log` 手控专项及四地图总部目标寻路 PASS；`manual-visibility2.log` 的55→57→80→40实体实渲像素检查 PASS；`manual-final-regression3.log` 18/18 PASS；`manual-shipping-ui.log` 中英五档真实窗口全部 PASS，包含补给常驻/刷新、左右冷却、R交还、总部点击与十二卡总览。独立解压包已通过清单哈希校验；包内EXE真实窗口完成选关→军团编成→进入会战，实际显示“补给4/10”，空格切换“已暂停”，退出前日志无脚本错误。未执行成功的临时外部启动脚本已移除，不作为通过证据。
+
+产品负责人明确允许本包暂时放宽帧数要求并停止调优：80实体最新实渲帧/模拟/输入呈现P95为16.803/10.003/102.786ms，150/150tick，零路径失败。原16.667ms帧门未通过，保留 `manual-render-fog-cache.log`、`manual-render-measured.json` 及此前失败记录；此例外不修改后续阶段性能标准。HUMAN主观体验为 OPTIONAL_NOT_RUN。
+
+最终交付入口：`build/playable/WARSEED-Playable-20260914-final/WARSEED.exe`；ZIP：`build/playable/WARSEED-Playable-20260914-final.zip`，SHA-256 `1AF08EEC4AA0A80AB181C6C0FB46103A5B34C91C2B8E483BC0F9237EBDC738C8`。最终PCK为6412340字节 / SHA-256 `F241FB8418F159EDB3A473786EE0EB1D3B7BFD6671E109D7561AA94F6C4F06A4`，与完整门导出完全一致；EXE SHA-256 `679DF06F7F9F2D2293768747AA9AD71FB996869249960179ADA8180445FC0A7A`。旧无final后缀包仅保留历史，不作为最终交付入口。
+
+VERIFYING → REVIEWING → DONE：`artifacts/manual-release-final2.log` 完整发布门727.735秒PASS、退出0、无脚本错误。两轮18/18、Legacy及四关smoke/矩阵、72案例、30场确定性完整对局、反馈工具、Windows导出与包校验均通过。80实体headless模拟/表现更新P95为6.429/0.946ms，120实体只作压力测量；此结果不替代上述实渲帧数例外。首轮唯一黄金漂移已单变量证明来自新增手控自主攻击，仅更新对应灰脊案例；其余黄金与确定性要求不变。
+
+714项冻结清单中现存712文件哈希均未变化，仅移除两个未使用的临时启动测试文件；不是受验运行代码变化。两次导出PCK的636项内容逐项比较，唯一差异为 `.godot/uid_cache.bin`，635项内容一致，详见 `artifacts/manual-package-pck-comparison.json`。最终ZIP独立解压清单校验和真实窗口选关→编成→战场→空格暂停再次通过；`manual-package-final-visible.log` 无脚本错误。源码diff已审查，`git diff --check`通过。上述证据全部为SIMULATED，HUMAN仍可选未运行；无存档格式变化。交付后停止开发，R4-004保持BLOCKED / USER_PAUSE。

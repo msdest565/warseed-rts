@@ -161,6 +161,7 @@ var _next_formation_id: int = 2
 var _next_building_id: int = FIRST_CONSTRUCTED_BUILDING_ID
 var _next_command_id: int = 1
 var staff_plan_system := StaffPlanSystem.new()
+var commander_task_graph_system := CommanderTaskGraphSystem.new()
 var _next_task_id: int = 1
 var _last_friendly_autonomy_tick: int = -FRIENDLY_AUTONOMY_INTERVAL_TICKS
 var _next_enemy_strategic_decision_tick: int = 0
@@ -897,7 +898,7 @@ func submit_command(command: GameCommand) -> CommandValidationResult:
 			if commander_order.order_kind == CommanderOrderCommand.OrderKind.SET_POSTURE \
 					and commander_order.posture == CommanderState.Posture.DISENGAGE:
 				_cancel_pending_commander_automation(commander_order.commander_id)
-		command_queue.enqueue(command.duplicate_value() if command is StaffPlanApprovalCommand else command)
+		command_queue.enqueue(command.duplicate_value() if command is StaffPlanApprovalCommand or command is CommanderCardTaskCommand else command)
 		event_kind = SimulationEvent.Kind.COMMAND_ACCEPTED
 	events.append(SimulationEvent.new(current_tick, event_kind, command.target_entity_id, result.describe()))
 	metrics.record_events(events, event_start)
@@ -920,11 +921,23 @@ func validate_command(command: GameCommand) -> CommandValidationResult:
 	# refreshed immediately before agent evaluation.
 	if not _is_advancing_tick:
 		_update_faction_knowledge()
+	if command is CommanderCardTaskCommand:
+		for queued in command_queue.snapshot():
+			if queued is CommanderCardTaskCommand and queued.graph_id == command.graph_id and queued.node_id == command.node_id:
+				return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.TASK_CONFLICT)
+		return commander_task_graph_system.validate(self, command as CommanderCardTaskCommand)
 	if command is StaffPlanApprovalCommand:
 		for queued in command_queue.snapshot():
 			if queued is StaffPlanApprovalCommand and queued.issuer_id == command.issuer_id:
 				return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.TASK_CONFLICT)
 		return staff_plan_system.validate(self, command as StaffPlanApprovalCommand)
+	if command is FormationMoveCommand and command.issuer_kind == GameCommand.IssuerKind.PLAYER and command.formation_id != 0 \
+			and not command.has_deployment_line and _unit_card_for_formation(command.formation_id) != null \
+			and command.target_position.is_finite() and _battlefield_bounds().has_point(command.target_position):
+		var requested_formation := formations.get(command.formation_id) as FormationState
+		var resolved_position := find_formation_deployment_position(requested_formation, command.target_position, 192.0, command.route_points)
+		if resolved_position.is_finite():
+			command.target_position = resolved_position
 	var result := tactical_ability_system.validate(self, command as TacticalAbilityCommand) if command is TacticalAbilityCommand else command_validator.validate(command, units, _battlefield_bounds(), pathfinder, formations, buildings, ore_fields, factions, UNIT_CATALOG, BUILDING_CATALOG, faction_knowledge, logic_grid, tasks, unit_cards, strategic_regions, commanders, doctrine_definitions, battle_definition)
 	if result.is_accepted() and command is CommanderOrderCommand:
 		result = _validate_resolved_commander_objective(command as CommanderOrderCommand)
@@ -940,7 +953,7 @@ func validate_command(command: GameCommand) -> CommandValidationResult:
 		if card != null and (card.definition.tactical_ability != null or card.uses_tactical_organization()):
 			if command.issuer_kind == GameCommand.IssuerKind.AGENT and card.tactical_command != null:
 				return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.TACTICAL_BUSY)
-			if card.organization_enabled and card.organization <= 0.0 and (command is AttackMoveCommand or command is AttackCommand):
+			if command.issuer_kind == GameCommand.IssuerKind.AGENT and card.organization_enabled and card.organization <= 0.0 and (command is AttackMoveCommand or command is AttackCommand):
 				return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.LOW_ORGANIZATION)
 	if result.is_accepted() and not _agent_authorization_allows(command):
 		return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.AGENT_NOT_AUTHORIZED)
@@ -992,6 +1005,12 @@ func _validate_resolved_commander_objective(command: CommanderOrderCommand) -> C
 
 
 func _validate_pending_unit_card_deployment(command: DeployUnitCardCommand) -> CommandValidationResult:
+	if command.issuer_kind == GameCommand.IssuerKind.AGENT and command.source_graph_id.is_empty() and commander_task_graph_system.owns_card(command.unit_card_id):
+		return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.TASK_CONFLICT)
+	if not command.source_graph_id.is_empty():
+		var graph_validation := commander_task_graph_system.validate_deployment(self, command)
+		if not graph_validation.is_accepted():
+			return graph_validation
 	var unit_card := unit_cards.get(command.unit_card_id) as UnitCardState
 	if unit_card == null:
 		return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.INVALID_TARGET)
@@ -1477,6 +1496,8 @@ func advance_tick() -> WorldSnapshot:
 	for agent in agents:
 		agent.advance(self)
 	strategic_task_system.advance(self)
+	if is_card_battle():
+		commander_task_graph_system.propose_commands(self)
 	if is_card_battle():
 		tactical_ability_system.propose_commands(self)
 	if scenario_kind == ScenarioKind.LEGACY_RTS:
@@ -2722,7 +2743,9 @@ func create_true_state_snapshot() -> WorldSnapshot:
 	for faction_id in faction_ids:
 		faction_snapshots.append(FactionSnapshot.new(factions[faction_id] as FactionState))
 	var task_snapshots := _create_task_snapshots()
-	return WorldSnapshot.new(current_tick, unit_snapshots, formation_snapshots, projectile_snapshots, metrics.create_snapshot(), faction_snapshots, building_snapshots, ore_snapshots, 0, null, true, task_snapshots, MissionSnapshot.new(mission_state), _create_commander_snapshots(), _create_unit_card_snapshots(), _create_strategic_region_snapshots(), _create_intel_report_snapshots(), _create_enemy_reaction_snapshots(), objective_system.create_snapshots(), battle_outcome, staff_plan_system.create_snapshots(0))
+	var snapshot := WorldSnapshot.new(current_tick, unit_snapshots, formation_snapshots, projectile_snapshots, metrics.create_snapshot(), faction_snapshots, building_snapshots, ore_snapshots, 0, null, true, task_snapshots, MissionSnapshot.new(mission_state), _create_commander_snapshots(), _create_unit_card_snapshots(), _create_strategic_region_snapshots(), _create_intel_report_snapshots(), _create_enemy_reaction_snapshots(), objective_system.create_snapshots(), battle_outcome, staff_plan_system.create_snapshots(0))
+	snapshot.commander_task_graphs = commander_task_graph_system.create_snapshots(0)
+	return snapshot
 
 
 func create_snapshot(faction_id: int = LOCAL_PLAYER_ID) -> WorldSnapshot:
@@ -2787,7 +2810,33 @@ func create_faction_snapshot(faction_id: int) -> WorldSnapshot:
 		var ore_field := ore_fields[ore_id] as OreFieldState
 		if knowledge.get_cell_state(logic_grid.world_to_cell(ore_field.position)) != FactionKnowledge.CellState.UNEXPLORED:
 			ore_snapshots.append(OreFieldSnapshot.new(ore_field))
-	return WorldSnapshot.new(current_tick, unit_snapshots, formation_snapshots, projectile_snapshots, metrics.create_snapshot(), faction_snapshots, building_snapshots, ore_snapshots, faction_id, FactionKnowledgeSnapshot.new(knowledge), false, _create_task_snapshots(), MissionSnapshot.new(mission_state), _create_commander_snapshots(faction_id), _create_unit_card_snapshots(faction_id), _create_strategic_region_snapshots(), _create_intel_report_snapshots(faction_id), [], objective_system.create_snapshots(), battle_outcome, staff_plan_system.create_snapshots(faction_id))
+	var snapshot := WorldSnapshot.new(current_tick, unit_snapshots, formation_snapshots, projectile_snapshots, metrics.create_snapshot(), faction_snapshots, building_snapshots, ore_snapshots, faction_id, FactionKnowledgeSnapshot.new(knowledge), false, _create_task_snapshots(), MissionSnapshot.new(mission_state), _create_commander_snapshots(faction_id), _create_unit_card_snapshots(faction_id), _create_strategic_region_snapshots(), _create_intel_report_snapshots(faction_id), [], objective_system.create_snapshots(), battle_outcome, staff_plan_system.create_snapshots(faction_id))
+	snapshot.commander_task_graphs = commander_task_graph_system.create_snapshots(faction_id)
+	return snapshot
+
+
+func create_commander_task_snapshot(faction_id: int) -> WorldSnapshot:
+	# Stage predicates need friendly card/task progress and currently visible hostiles.
+	_ensure_faction_knowledge(faction_id)
+	var knowledge := faction_knowledge[faction_id] as FactionKnowledge
+	var hostiles: Array[UnitSnapshot] = []
+	var hostile_ids := knowledge.visible_hostile_unit_ids.duplicate()
+	hostile_ids.sort()
+	for entity_id in hostile_ids:
+		var hostile := units.get(entity_id) as UnitState
+		if hostile != null and hostile.enabled and hostile.faction_id != faction_id:
+			var snapshot := UnitSnapshot.new(hostile)
+			snapshot.is_visible_to_local_player = true
+			hostiles.append(snapshot)
+	var own_formations: Array[FormationSnapshot] = []
+	for formation in formations.values():
+		var leader := units.get(formation.leader_entity_id) as UnitState
+		if leader != null and leader.faction_id == faction_id:
+			own_formations.append(FormationSnapshot.new(formation))
+	return WorldSnapshot.new(current_tick, hostiles, own_formations, [], null, [], [], [], faction_id,
+		FactionKnowledgeSnapshot.new(knowledge), false, _create_task_snapshots(), null,
+		_create_commander_snapshots(faction_id), _create_unit_card_snapshots(faction_id),
+		_create_strategic_region_snapshots(), [], [], [], battle_outcome)
 
 
 func _create_task_snapshots() -> Array[TaskSnapshot]:
@@ -3076,7 +3125,7 @@ func _update_combat_orders() -> void:
 		if formation.order_kind == FormationState.OrderKind.ATTACK_MOVE and target_id == 0:
 			var leader := units.get(formation.leader_entity_id) as UnitState
 			if leader != null:
-				target_id = _find_nearest_enemy_for_faction(formation.anchor_position, leader.faction_id, minf(leader.sight_range, 320.0))
+				target_id = _select_visible_target_in_formation_weapon_range(formation, leader.faction_id, minf(leader.sight_range, FORMATION_AUTO_ENGAGE_RADIUS))
 			if target_id != 0:
 				formation.order_target_entity_id = target_id
 		if target_id == 0 or not is_entity_enabled(target_id):
@@ -3105,9 +3154,13 @@ func _update_combat_orders() -> void:
 			formation.engagement_state = FormationState.EngagementState.ENGAGING
 			formation.is_moving = false
 			formation.path = PackedVector2Array()
+			for entity_id in formation.member_entity_ids:
+				var member := units.get(entity_id) as UnitState
+				if member != null and member.enabled and member.following_formation:
+					member.has_move_target = false
 		else:
 			formation.engagement_state = FormationState.EngagementState.PURSUING
-			if formation.order_kind == FormationState.OrderKind.ATTACK_TARGET:
+			if formation.order_kind in [FormationState.OrderKind.ATTACK_TARGET, FormationState.OrderKind.ATTACK_MOVE]:
 				var destination := get_attack_destination(target_id, formation.anchor_position)
 				var destination_cell := logic_grid.world_to_cell(destination)
 				var target_moved := formation.pursuit_target_cell != destination_cell
@@ -3170,6 +3223,8 @@ func _commander_agent_combat_cards(commander: CommanderState) -> Array[UnitCardS
 			or not formations.has(card.formation_id) or card.definition.role_key == &"UNIT_CARD_ROLE_RECON":
 			continue
 		var task := _task_for_unit_card(unit_card_id)
+		if not commander_task_graph_system.allows_coordination(unit_card_id):
+			continue
 		if not _task_allows_tactical_response(task):
 			continue
 		result.append(card)
@@ -3334,6 +3389,13 @@ func _update_shared_formation_responses() -> void:
 		var leader := units.get(formation.leader_entity_id) as UnitState
 		if leader == null:
 			continue
+		var manual_card := _unit_card_for_formation(formation_id)
+		if is_card_battle() and manual_card != null and manual_card.control_state in [UnitCardState.ControlState.PLAYER_CONTROLLED, UnitCardState.ControlState.PLAYER_OVERRIDDEN]:
+			# Manual movement keeps its route; weapon reactions do not inherit paused tasks.
+			var local_target := _select_visible_target_in_formation_weapon_range(formation, leader.faction_id)
+			if local_target != 0:
+				_assign_autonomous_in_range_target(formation, local_target)
+			continue
 		var task := tasks.get(leader.assigned_task_id) as TaskState
 		if not _task_allows_tactical_response(task) or _formation_is_scouting(formation):
 			continue
@@ -3385,7 +3447,7 @@ func _select_visible_target_in_formation_weapon_range(formation: FormationState,
 	for member_id in formation.member_entity_ids:
 		member_ids[member_id] = true
 		var member := units.get(member_id) as UnitState
-		if member != null and member.enabled and member.can_attack and member.can_accept_attack_orders:
+		if member != null and member.enabled and member.can_attack and member.can_accept_attack_orders and not member.can_harvest and not member.can_construct:
 			firing_members.append(member)
 	if firing_members.is_empty() and engagement_radius <= 0.0:
 		return 0
@@ -3444,9 +3506,11 @@ func _assign_autonomous_in_range_target(formation: FormationState, target_id: in
 	var target_position := get_entity_position(target_id)
 	for member_id in formation.member_entity_ids:
 		var member := units.get(member_id) as UnitState
-		if member == null or not member.enabled or not member.can_attack or not member.can_accept_attack_orders:
+		if member == null or not member.enabled or not member.can_attack or not member.can_accept_attack_orders or member.can_harvest or member.can_construct:
 			continue
 		if member.position.distance_to(target_position) > member.attack_range:
+			if member.attack_is_retaliation:
+				_clear_attack_target(member, "outside_weapon_range")
 			continue
 		if member.attack_target_entity_id != target_id:
 			member.attack_target_entity_id = target_id
@@ -3490,12 +3554,12 @@ func _update_individual_combat_orders() -> void:
 		var unit := units[entity_id] as UnitState
 		if not unit.enabled or unit.following_formation or not unit.can_attack:
 			continue
-		if unit.attack_target_entity_id == 0 and unit.can_accept_attack_orders and unit.tactical_role != UnitState.TacticalRole.SCOUT:
+		if unit.attack_target_entity_id == 0 and unit.can_accept_attack_orders and (unit.tactical_role != UnitState.TacticalRole.SCOUT or is_card_battle() and not unit.unit_card_id.is_empty() and unit.control_state != UnitState.ControlState.AGENT_ASSIGNED):
 			var acquisition_radius := minf(unit.sight_range, 320.0) if unit.is_attack_moving else unit.attack_range
 			var acquired_target := _find_nearest_enemy_for_faction(unit.position, unit.faction_id, acquisition_radius)
 			if acquired_target != 0:
 				unit.attack_target_entity_id = acquired_target
-				unit.attack_is_retaliation = false
+				unit.attack_is_retaliation = not unit.is_attack_moving
 				unit.pursuit_target_cell = Vector2i(-1, -1)
 				events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.ATTACK_STARTED, unit.entity_id, "target=%d;autonomous=%d" % [acquired_target, int(not unit.is_attack_moving)]))
 		if unit.attack_target_entity_id == 0:
@@ -3507,6 +3571,10 @@ func _update_individual_combat_orders() -> void:
 			_clear_attack_target(unit, "invalid")
 			continue
 		var target_position := get_entity_position(target_id)
+		if unit.attack_is_retaliation and unit.can_accept_attack_orders:
+			if unit.position.distance_to(target_position) > unit.attack_range:
+				_clear_attack_target(unit, "outside_weapon_range")
+			continue
 		if unit.position.distance_to(target_position) <= unit.attack_range:
 			unit.has_move_target = false
 			unit.path = PackedVector2Array()
@@ -3587,6 +3655,8 @@ func _begin_player_takeover(unit: UnitState, command: GameCommand, preserve_form
 
 
 func _apply_commander_order(command: CommanderOrderCommand) -> void:
+	if command.issuer_kind == GameCommand.IssuerKind.PLAYER:
+		commander_task_graph_system.cancel_commander(self, command.commander_id)
 	var commander := commanders[command.commander_id] as CommanderState
 	if command.issuer_kind == GameCommand.IssuerKind.PLAYER and command.order_kind != CommanderOrderCommand.OrderKind.CANCEL_INTENT and (command.hand_back_control or command.order_kind == CommanderOrderCommand.OrderKind.ASSIGN_INTENT):
 		for card_id in commander.subordinate_unit_card_ids:
@@ -3681,6 +3751,11 @@ func _assign_commander_objective(
 	var task_ids: Array[int] = []
 	for index in range(deployed_cards.size()):
 		var unit_card := deployed_cards[index]
+		if commander_task_graph_system.owns_card(unit_card.definition.definition_id):
+			var graph_task := _task_for_unit_card(unit_card.definition.definition_id)
+			if graph_task != null:
+				task_ids.append(graph_task.task_id)
+			continue
 		var formation := formations.get(unit_card.formation_id) as FormationState
 		var card_target := _commander_card_target(commander, unit_card, deployed_cards.size(), index, target_position, formation)
 		var existing_task := _task_for_unit_card(unit_card.definition.definition_id)
@@ -3741,7 +3816,8 @@ func _assign_unit_card_task(
 	commander: CommanderState,
 	unit_card: UnitCardState,
 	target_position: Vector2,
-	planned_route: PackedVector2Array = PackedVector2Array()
+	planned_route: PackedVector2Array = PackedVector2Array(),
+	task_kind: int = -1
 ) -> TaskState:
 	if unit_card.control_state in [UnitCardState.ControlState.PLAYER_OVERRIDDEN, UnitCardState.ControlState.RETURNING]:
 		return _task_for_unit_card(unit_card.definition.definition_id)
@@ -3760,6 +3836,8 @@ func _assign_unit_card_task(
 		return null
 	var kind := TaskState.Kind.DEFEND_AREA if commander.posture == CommanderState.Posture.DISENGAGE \
 		else (TaskState.Kind.SCOUT_AREA if unit_card.definition.role_key == &"UNIT_CARD_ROLE_RECON" else TaskState.Kind.DEFEND_AREA)
+	if task_kind >= 0:
+		kind = task_kind as TaskState.Kind
 	var task := TaskState.new(_next_task_id, commander.agent_id, participants)
 	_next_task_id += 1
 	task.faction_id = commander.faction_id
@@ -3856,7 +3934,7 @@ func _advance_card_battle_doctrine_actions() -> void:
 	commander_ids.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
 	for commander_id in commander_ids:
 		var commander := commanders[commander_id] as CommanderState
-		if commander == null or commander.posture == CommanderState.Posture.DISENGAGE or not commander.has_doctrine(&"rapid_bridging"):
+		if commander == null or commander_task_graph_system.owns_commander(commander) or commander.posture == CommanderState.Posture.DISENGAGE or not commander.has_doctrine(&"rapid_bridging"):
 			continue
 		for route in battle_definition.engineering_routes:
 			if route == null or opened_engineering_routes.has(route.route_id) or not _commander_targets_engineering_route(commander, route):
@@ -3879,7 +3957,7 @@ func _advance_card_battle_doctrine_actions() -> void:
 func _advance_reserve_commitment_doctrine() -> void:
 	for commander_variant in commanders.values():
 		var commander := commander_variant as CommanderState
-		if commander == null or commander.posture == CommanderState.Posture.DISENGAGE or not commander.has_doctrine(&"reserve_commitment"):
+		if commander == null or commander_task_graph_system.owns_commander(commander) or commander.posture == CommanderState.Posture.DISENGAGE or not commander.has_doctrine(&"reserve_commitment"):
 			continue
 		var estimate := _commander_hostile_estimate(commander)
 		if not bool(estimate.get("reliable", false)):
@@ -4488,6 +4566,8 @@ func _return_card_to_commander(card: UnitCardState) -> void:
 		if reachable:
 			return
 	_release_card_for_commander(card, "PLAYER_RETURN")
+	if commander_task_graph_system.owns_card(card.definition.definition_id):
+		return
 	var deployed_count := 0
 	for card_id in commander.subordinate_unit_card_ids:
 		var subordinate := unit_cards.get(card_id) as UnitCardState
@@ -4634,6 +4714,9 @@ func _refresh_unit_card_control_states() -> void:
 
 
 func _apply_command(command: GameCommand) -> void:
+	if command is CommanderCardTaskCommand:
+		commander_task_graph_system.apply(self, command as CommanderCardTaskCommand)
+		return
 	if command is StaffPlanApprovalCommand:
 		staff_plan_system.apply(self, command as StaffPlanApprovalCommand)
 		return
@@ -4655,6 +4738,12 @@ func _apply_command(command: GameCommand) -> void:
 		_apply_support_order(command as SupportOrderCommand)
 		return
 	if command is DeployUnitCardCommand:
+		if not command.source_graph_id.is_empty() or command.issuer_kind == GameCommand.IssuerKind.AGENT and commander_task_graph_system.owns_card(command.unit_card_id):
+			var deployment_validation := validate_command(command)
+			if not deployment_validation.is_accepted():
+				commander_task_graph_system.reject_deployment(self, command, deployment_validation.reason)
+				events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.COMMAND_REJECTED, 0, deployment_validation.describe()))
+				return
 		_apply_unit_card_deployment(command as DeployUnitCardCommand)
 		return
 	if command is StrategicOrderCommand:
@@ -5173,6 +5262,8 @@ func _scout_participants(formation_id: int) -> Array[int]:
 
 func _detach_noncombat_members(formation_id: int) -> void:
 	if not formations.has(formation_id):
+		return
+	if _unit_card_for_formation(formation_id) != null:
 		return
 	var formation := formations[formation_id] as FormationState
 	var member_ids := formation.member_entity_ids.duplicate()

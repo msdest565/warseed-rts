@@ -3,6 +3,7 @@ extends PanelContainer
 
 signal card_decision_requested(kind: int)
 var contextual_card_actions: bool = false
+var supply_label: Label
 
 @onready var title_label: Label = $Margin/Scroll/Layout/Title
 @onready var pair_selector: OptionButton = $Margin/Scroll/Layout/Pair
@@ -29,6 +30,22 @@ const STATUS_RECEIPT_DURATION_MSEC := 6000
 
 
 func _ready() -> void:
+	var supply_header := Control.new()
+	supply_header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(supply_header)
+	supply_label = Label.new()
+	supply_label.name = "Supply"
+	supply_label.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	supply_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	supply_label.add_theme_font_size_override("font_size", 13)
+	supply_label.add_theme_color_override("font_color", Color(0.96, 0.78, 0.28))
+	supply_header.add_child(supply_label)
+	supply_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	supply_label.offset_left = 10
+	supply_label.offset_right = -10
+	supply_label.offset_top = 8
+	supply_label.offset_bottom = 30
+	$Margin.add_theme_constant_override("margin_top", 36)
 	_resolve_extended_buttons()
 	if not recon_button.pressed.is_connected(_request_recon):
 		recon_button.pressed.connect(_request_recon)
@@ -84,6 +101,8 @@ func update_snapshot(snapshot: WorldSnapshot) -> void:
 	if snapshot == null or simulation_host == null:
 		return
 	var faction := snapshot.get_faction(SimulationWorld.LOCAL_PLAYER_ID)
+	if supply_label != null:
+		supply_label.text = GameText.t(&"SUPPORT_SUPPLY_BALANCE") % [faction.supply if faction != null else 0, faction.supply_capacity if faction != null else 0]
 	var affordable := faction != null and faction.supply >= SimulationWorld.SUPPORT_COST
 	var recon_cooldown := maxi(0, faction.air_recon_cooldown_until_tick - snapshot.tick) if faction != null else 0
 	var fortify_cooldown := _generic_cooldown(faction, SupportOrderCommand.SupportKind.EMERGENCY_FORTIFY, snapshot.tick)

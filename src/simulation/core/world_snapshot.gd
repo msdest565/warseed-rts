@@ -22,6 +22,7 @@ var enemy_reactions: Array[EnemyReactionSnapshot]
 var objectives: Array[ObjectiveSnapshot]
 var outcome: BattleOutcome
 var staff_plan_decisions: Array[StaffPlanDecisionSnapshot] = []
+var commander_task_graphs: Array[CommanderTaskGraphSnapshot] = []
 
 
 func _init(
@@ -45,7 +46,8 @@ func _init(
 	new_enemy_reactions: Array[EnemyReactionSnapshot] = [],
 	new_objectives: Array[ObjectiveSnapshot] = [],
 	new_outcome: BattleOutcome = null,
-	new_staff_plan_decisions: Array[StaffPlanDecisionSnapshot] = []
+	new_staff_plan_decisions: Array[StaffPlanDecisionSnapshot] = [],
+	new_commander_task_graphs: Array[CommanderTaskGraphSnapshot] = []
 ) -> void:
 	tick = new_tick
 	units = new_units
@@ -69,6 +71,8 @@ func _init(
 	outcome = new_outcome.duplicate_value() if new_outcome != null else BattleOutcome.new()
 	for decision in new_staff_plan_decisions:
 		staff_plan_decisions.append(decision.duplicate_value())
+	for graph in new_commander_task_graphs:
+		commander_task_graphs.append(graph.duplicate_value())
 
 
 func get_objective(objective_id: StringName) -> ObjectiveSnapshot:

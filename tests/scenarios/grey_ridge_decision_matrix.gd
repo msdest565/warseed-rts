@@ -20,7 +20,8 @@ const EXPECTED_FINGERPRINTS: Dictionary = {
 	"a_central_fire/western_feint": "662ed69248679fa9bc9969dd44eacde4b47a8e88433fe7f1c69a6dac858a94e8",
 	"b_split_armor/central_assault": "6a2ba51fa4b493e07b004fc641253ba99ea88c91539ba35bf94b806810bfc4c4",
 	"b_split_armor/western_hook": "5e98a13f057a242dcfaa57a5c5d7125310ae266bd99e1579bf54faae97c30e10",
-	"b_split_armor/western_feint": "22a1c4bef3aaa4f987337b8e646aabc5a8887a8443aecce975473f6fd0edd2ba",
+	# Manual armor now fires in range while preserving its move order (maintenance 20260914).
+	"b_split_armor/western_feint": "368fa11c096912e3ae8ec3a425fc22b3a558023697fbca5fa1f8abd7ea4e4e67",
 	"c_intel_first/central_assault": "019c7072bf5c104cf29c638ad471bb26df7b4c88b02d42e79e996c4b104d3072",
 	"c_intel_first/western_hook": "280cf205f564ef1b340aded7d733b3b96a4433578c1ecaaef5bb85600d5bebd4",
 	"c_intel_first/western_feint": "2e0a0a5223162a0eba859035ef0fc20f16890c8e4122096c20bd2dd6b6d4c409",

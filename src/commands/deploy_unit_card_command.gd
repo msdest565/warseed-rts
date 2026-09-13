@@ -4,6 +4,7 @@ extends GameCommand
 var unit_card_id: StringName
 var deployment_position: Vector2
 var commander_id: StringName
+var source_graph_id: StringName
 
 
 func _init(

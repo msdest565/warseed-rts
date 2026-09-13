@@ -637,14 +637,14 @@ func _advance_pending_ui_refresh() -> void:
 				_pending_ui_snapshot, _pending_situation, SimulationWorld.LOCAL_PLAYER_ID
 			) if _pending_situation != null else null
 		1:
+			command_desk.update_command_situation(_pending_ui_snapshot, _pending_command_situation)
+		2:
 			battlefield_overlay.set_situation(_pending_situation)
 			overlay_controls.update_situation(_pending_situation)
-			command_desk.update_command_situation(_pending_ui_snapshot, _pending_command_situation)
 			resource_bar.update_situation(_pending_situation)
 			resource_bar.update_snapshot(_pending_ui_snapshot)
 			scenario_status.update_snapshot(_pending_ui_snapshot)
 			tutorial_panel.observe_snapshot(_pending_ui_snapshot)
-		2:
 			minimap.set_situation(_pending_situation)
 			minimap.set_state(_pending_ui_snapshot, camera_controller, input_controller.selected_entity_ids)
 		3:

@@ -467,7 +467,7 @@ func _update_proxy_positions(apply_snapshot_data: bool) -> void:
 func _ensure_unit_batches() -> void:
 	if _unit_bodies_batch != null:
 		return
-	_unit_bodies_batch = _create_batch(Vector2(46.0, 30.0), -1)
+	_unit_bodies_batch = _create_batch(Vector2(46.0, 30.0), 2)
 	_projectile_batch = _create_batch(Vector2(11.0, 5.0), 4)
 
 
@@ -497,8 +497,10 @@ func _update_unit_batches() -> void:
 		_unit_body_buffer.resize(required_buffer_size)
 	for index in range(count):
 		var unit := current_snapshot.units[index]
-		var proxy := _proxies.get(unit.entity_id) as UnitProxy
-		var position := proxy.position if proxy != null else unit.position
+		var from_position := unit.position
+		if unit.is_visible_to_local_player and _previous_visible_unit_ids.has(unit.entity_id):
+			from_position = _previous_unit_positions.get(unit.entity_id, unit.position) as Vector2
+		var position := from_position.lerp(unit.position, interpolation_alpha)
 		var remembered := unit.faction_id != SimulationWorld.LOCAL_PLAYER_ID and not unit.is_visible_to_local_player
 		var body_color := UnitProxy.BODY_COLOR if unit.faction_id == SimulationWorld.LOCAL_PLAYER_ID else UnitProxy.ENEMY_COLOR
 		var body_scale := Vector2.ONE

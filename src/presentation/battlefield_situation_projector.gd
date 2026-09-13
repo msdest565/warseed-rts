@@ -11,6 +11,8 @@ var _uncertainty_cells := PackedByteArray()
 var _uncertainty_grid_size := Vector2i.ZERO
 var _uncertainty_bounds := Rect2()
 var _uncertainty_cache: Array[Dictionary] = []
+var _uncertainty_row_cells: Array[PackedByteArray] = []
+var _uncertainty_row_results: Array[Array] = []
 
 
 func project(
@@ -258,11 +260,21 @@ func _derive_uncertainty(snapshot: WorldSnapshot, battlefield_bounds: Rect2) -> 
 	var knowledge := snapshot.knowledge
 	if knowledge.grid_size == _uncertainty_grid_size and battlefield_bounds == _uncertainty_bounds and knowledge.cells == _uncertainty_cells:
 		return _uncertainty_cache
+	if knowledge.grid_size != _uncertainty_grid_size or battlefield_bounds != _uncertainty_bounds:
+		_uncertainty_row_cells.clear()
+		_uncertainty_row_results.clear()
+		_uncertainty_row_cells.resize(knowledge.grid_size.y)
+		_uncertainty_row_results.resize(knowledge.grid_size.y)
 	_uncertainty_grid_size = knowledge.grid_size
 	_uncertainty_bounds = battlefield_bounds
 	_uncertainty_cells = knowledge.cells.duplicate()
 	for y in range(knowledge.grid_size.y):
 		var row_offset := y * knowledge.grid_size.x
+		var row_cells := knowledge.cells.slice(row_offset, row_offset + knowledge.grid_size.x)
+		if row_cells == _uncertainty_row_cells[y]:
+			result.append_array(_uncertainty_row_results[y])
+			continue
+		var row_result: Array[Dictionary] = []
 		var run_state := FactionKnowledge.CellState.VISIBLE
 		var run_start := -1
 		for x in range(knowledge.grid_size.x + 1):
@@ -277,13 +289,16 @@ func _derive_uncertainty(snapshot: WorldSnapshot, battlefield_bounds: Rect2) -> 
 					Vector2(x - run_start, 1) * LogicGrid.CELL_SIZE
 				).intersection(battlefield_bounds)
 				if world_rect.has_area():
-					result.append({
+					row_result.append({
 						"zone_id": "fog:%03d:%03d:%d" % [y, run_start, run_state],
 						"rect": world_rect,
 						"state": run_state,
 					})
 			run_state = state
 			run_start = x if state != FactionKnowledge.CellState.VISIBLE else -1
+		_uncertainty_row_cells[y] = row_cells
+		_uncertainty_row_results[y] = row_result
+		result.append_array(row_result)
 	_uncertainty_cache = result
 	return result
 

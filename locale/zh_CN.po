@@ -1003,6 +1003,10 @@ msgid "TERRAIN_FOREST"
 msgstr "林地"
 msgid "SUPPORT_PANEL_TITLE"
 msgstr "战区支援"
+
+msgid "SUPPORT_SUPPLY_BALANCE"
+msgstr "补给 %d / %d"
+
 msgid "SUPPORT_PAIR_WEST_CENTRAL"
 msgstr "西部矿场 + 中央中继站"
 msgid "SUPPORT_PAIR_CENTRAL_EAST"
@@ -2877,3 +2881,93 @@ msgstr "已拒绝本次建议，部队命令未改变。"
 
 msgid "REASON_STAFF_PLAN_STALE"
 msgstr "战况或方案已变化，请重新生成"
+
+msgid "COMMANDER_GRAPH_PHASE_0"
+msgstr "集结"
+
+msgid "COMMANDER_GRAPH_PHASE_1"
+msgstr "侦察"
+
+msgid "COMMANDER_GRAPH_PHASE_2"
+msgstr "展开"
+
+msgid "COMMANDER_GRAPH_PHASE_3"
+msgstr "交战"
+
+msgid "COMMANDER_GRAPH_PHASE_4"
+msgstr "利用战果"
+
+msgid "COMMANDER_GRAPH_PHASE_5"
+msgstr "撤退"
+
+msgid "COMMANDER_GRAPH_WAITING"
+msgstr "等待前置阶段"
+
+msgid "COMMANDER_GRAPH_EXECUTING"
+msgstr "执行中"
+
+msgid "COMMANDER_GRAPH_COMPLETED"
+msgstr "已完成"
+
+msgid "COMMANDER_GRAPH_NOT_REQUIRED"
+msgstr "本卡无需此阶段"
+
+msgid "COMMANDER_GRAPH_PLAYER_CONTROL"
+msgstr "等待玩家交还"
+
+msgid "COMMANDER_GRAPH_CONTROL_RETURNED"
+msgstr "已交还，恢复阶段"
+
+msgid "COMMANDER_GRAPH_TASK_BLOCKED"
+msgstr "任务受阻"
+
+msgid "COMMANDER_GRAPH_FAILED"
+msgstr "无法完成或超时"
+
+msgid "COMMANDER_GRAPH_CANCELLED"
+msgstr "阶段已取消"
+
+msgid "COMMANDER_GRAPH_PLAYER_ORDER"
+msgstr "已由玩家新指令替换"
+
+msgid "COMMANDER_GRAPH_NO_TASK"
+msgstr "未能建立部队任务"
+
+msgid "COMMANDER_GRAPH_RETREAT"
+msgstr "撤回当前方案"
+
+msgid "COMMANDER_GRAPH_RETREAT_QUEUED"
+msgstr "撤退已入队；手控部队保持玩家控制。"
+
+msgid "COMMANDER_GRAPH_CURRENT"
+msgstr "当前方案执行"
+
+msgid "COMMANDER_GRAPH_SUMMARY"
+msgstr "方案：%d 卡执行 · %d 卡等待/受阻 · %d 卡完成"
+
+msgid "COMMANDER_GRAPH_PLAYER_RETREAT"
+msgstr "玩家要求撤退"
+
+msgid "COMMANDER_GRAPH_CARD_LOST"
+msgstr "部队已损失"
+
+msgid "COMMANDER_GRAPH_CARD_WITHDRAWN"
+msgstr "部队已撤出"
+
+msgid "COMMANDER_GRAPH_DEPENDENCY_FAILED"
+msgstr "前置阶段未能完成"
+
+msgid "COMMANDER_GRAPH_TIMEOUT"
+msgstr "阶段超时"
+
+msgid "COMMANDER_GRAPH_TASK_REPLACED"
+msgstr "执行任务已失效或被替换"
+
+msgid "CARD_ATTACK_HEADQUARTERS"
+msgstr "进攻敌方指挥所"
+
+msgid "CARD_ENEMY_HEADQUARTERS"
+msgstr "已发现的敌方指挥所"
+
+msgid "CARD_ATTACK_HEADQUARTERS_CONTEXT"
+msgstr "该将领部队向已确认的指挥所所在地进攻；手控部队交还AI。"

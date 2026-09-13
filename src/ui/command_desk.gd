@@ -62,6 +62,7 @@ var _card_receipt_until: int = -1
 var staff_plan_button: Button
 var staff_plan_status: Label
 var staff_plan_panel: StaffPlanPanel
+var staff_retreat_button: Button
 
 
 func _ready() -> void:
@@ -76,6 +77,12 @@ func _ready() -> void:
 	$Intent.add_child(staff_plan_status)
 	staff_plan_panel = StaffPlanPanel.new()
 	add_child(staff_plan_panel)
+	staff_retreat_button = Button.new()
+	staff_retreat_button.clip_text = true
+	staff_retreat_button.custom_minimum_size.y = 30
+	staff_retreat_button.visible = false
+	$Intent.add_child(staff_retreat_button)
+	staff_retreat_button.pressed.connect(_request_staff_retreat)
 	staff_plan_button.pressed.connect(func() -> void:
 		staff_plan_panel.open_plans(simulation_host, StringName(_selected_metadata(objective_selector, &""))))
 	staff_plan_panel.status_changed.connect(func(message: String) -> void:
@@ -137,6 +144,7 @@ func reset_decision_session() -> void:
 	_card_receipt_until = -1
 	_card_action_filter = -2
 	card_actions.clear()
+	_update_staff_execution()
 	_decision_history.clear()
 	_pending_responses.clear()
 	_clear_decision_preview()
@@ -146,6 +154,7 @@ func reset_decision_session() -> void:
 func update_command_situation(snapshot: WorldSnapshot, command_situation: CommandSituationSnapshot) -> void:
 	current_snapshot = snapshot
 	current_command_situation = command_situation
+	_update_staff_execution()
 	if snapshot == null or command_situation == null:
 		return
 	card_actions.clear()
@@ -193,6 +202,8 @@ func refresh_locale() -> void:
 		return
 	if staff_plan_button != null:
 		staff_plan_button.text = GameText.t(&"STAFF_OPEN")
+	if staff_retreat_button != null:
+		staff_retreat_button.text = GameText.t(&"COMMANDER_GRAPH_RETREAT")
 	if staff_plan_panel != null:
 		staff_plan_panel.refresh_locale()
 	intent_title.text = GameText.t(&"COMMAND_DESK_INTENT_TITLE")
@@ -222,6 +233,32 @@ func refresh_locale() -> void:
 		_refresh_dynamic_options()
 		_rebuild_exception_rows()
 		_update_status()
+	_update_staff_execution()
+
+
+func _update_staff_execution() -> void:
+	if staff_retreat_button == null:
+		return
+	staff_retreat_button.visible = current_snapshot != null and not current_snapshot.commander_task_graphs.is_empty()
+	if not staff_retreat_button.visible:
+		return
+	var graph := current_snapshot.commander_task_graphs[0]
+	staff_retreat_button.disabled = graph.retreat_requested or current_snapshot.outcome.is_terminal()
+	staff_plan_button.tooltip_text = CommanderTaskGraphPresenter.describe(current_snapshot, graph)
+	if staff_plan_panel.pending_command_id == 0:
+		staff_plan_status.text = CommanderTaskGraphPresenter.summary(graph)
+		staff_plan_status.visible = true
+
+
+func _request_staff_retreat() -> void:
+	if simulation_host == null or current_snapshot == null or current_snapshot.commander_task_graphs.is_empty():
+		return
+	var graph := current_snapshot.commander_task_graphs[0]
+	var command := CommanderCardTaskCommand.new(simulation_host.world.allocate_command_id(), graph.faction_id,
+		GameCommand.IssuerKind.PLAYER, current_snapshot.tick, graph.graph_id, &"", CommanderCardTaskCommand.Action.RETREAT)
+	var result := simulation_host.submit_command(command)
+	staff_plan_status.text = GameText.t(&"COMMANDER_GRAPH_RETREAT_QUEUED") if result.is_accepted() else GameText.t(&"STAFF_APPROVAL_FAILED") % GameText.t(StringName("REASON_%s" % CommandValidationResult.Reason.keys()[result.reason]))
+	staff_plan_status.visible = true
 
 
 func _populate_static_options() -> void:
@@ -353,6 +390,10 @@ func _rebuild_exception_rows() -> void:
 	for child in exception_rows.get_children():
 		if child.has_meta(&"card_decision_id") and visible_card_ids.has(child.get_meta(&"card_decision_id")):
 			continue
+		if _card_action_filter == -2 and current_command_situation != null and child.has_meta(&"exception_id"):
+			var current_exception := current_command_situation.get_exception(child.get_meta(&"exception_id"))
+			if current_exception != null and current_exception.kind != CommandExceptionSnapshot.Kind.REINFORCEMENT_REQUEST:
+				continue
 		exception_rows.remove_child(child)
 		child.queue_free()
 	if _card_action_filter != -2:
@@ -379,9 +420,20 @@ func _rebuild_exception_rows() -> void:
 
 
 func _add_exception_row(exception: CommandExceptionSnapshot) -> void:
-	var row := VBoxContainer.new()
-	row.name = "Exception_%s" % String(exception.exception_id).validate_node_name()
+	var row_name := "Exception_%s" % String(exception.exception_id).validate_node_name()
+	var primary_action := exception.action_ids[0] if not exception.action_ids.is_empty() else CommandExceptionSnapshot.Action.KEEP_PLAN
+	var row := exception_rows.get_node_or_null(NodePath(row_name)) as VBoxContainer
+	if row != null and int(row.get_meta(&"primary_action", -1)) == primary_action:
+		_refresh_exception_row(row, exception, primary_action)
+		_place_decision_row(row)
+		return
+	if row != null:
+		exception_rows.remove_child(row)
+		row.queue_free()
+	row = VBoxContainer.new()
+	row.name = row_name
 	row.set_meta(&"exception_id", exception.exception_id)
+	row.set_meta(&"primary_action", primary_action)
 	row.add_theme_constant_override("separation", 2)
 	var summary := Button.new()
 	summary.name = "Summary"
@@ -390,42 +442,22 @@ func _add_exception_row(exception: CommandExceptionSnapshot) -> void:
 	summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	summary.custom_minimum_size.y = 30.0
 	summary.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	summary.text = _exception_text(exception)
-	summary.tooltip_text = _exception_tooltip(exception)
 	summary.pressed.connect(_perform_exception_action.bind(exception.exception_id, CommandExceptionSnapshot.Action.FOCUS))
 	summary.mouse_entered.connect(_preview_exception.bind(exception.exception_id))
 	summary.mouse_exited.connect(_clear_decision_preview)
-	if exception.severity == CommandExceptionSnapshot.Severity.CRITICAL:
-		summary.add_theme_color_override("font_color", Color(1.0, 0.55, 0.4))
-	elif exception.severity == CommandExceptionSnapshot.Severity.WARNING:
-		summary.add_theme_color_override("font_color", Color(1.0, 0.78, 0.36))
 	row.add_child(summary)
 	var context := Label.new()
 	context.name = "Context"
 	context.add_theme_font_size_override("font_size", 9)
 	context.add_theme_color_override("font_color", Color(0.64, 0.72, 0.7))
 	context.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	context.text = GameText.t(&"DECISION_ROW_CONTEXT") % [
-		GameText.t(StringName("COMMAND_EXCEPTION_KIND_%s" % CommandExceptionSnapshot.Kind.keys()[exception.kind])),
-		floori(exception.source_tick * SimulationWorld.TICK_SECONDS),
-		exception.value_current,
-		exception.value_limit,
-	]
 	row.add_child(context)
 	var buttons := HBoxContainer.new()
 	buttons.name = "Buttons"
 	buttons.add_theme_constant_override("separation", 4)
-	var primary_action := exception.action_ids[0] if not exception.action_ids.is_empty() else CommandExceptionSnapshot.Action.KEEP_PLAN
 	var action_button := Button.new()
 	action_button.name = "Action"
-	action_button.custom_minimum_size = Vector2(110.0 if not _compact else 82.0, 30.0)
 	action_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	action_button.text = _action_text(primary_action)
-	action_button.tooltip_text = _action_tooltip(primary_action, exception)
-	action_button.disabled = _has_active_action_receipt() \
-		and _action_receipt_accepted \
-		and _action_receipt_exception_id == exception.exception_id \
-		and _action_receipt_action == primary_action
 	action_button.pressed.connect(_perform_exception_action.bind(exception.exception_id, primary_action))
 	action_button.mouse_entered.connect(_preview_exception.bind(exception.exception_id))
 	action_button.mouse_exited.connect(_clear_decision_preview)
@@ -433,13 +465,32 @@ func _add_exception_row(exception: CommandExceptionSnapshot) -> void:
 	var acknowledge := Button.new()
 	acknowledge.name = "Acknowledge"
 	acknowledge.custom_minimum_size = Vector2(64.0, 30.0)
-	acknowledge.text = GameText.t(&"COMMAND_EXCEPTION_ACK_SHORT")
-	acknowledge.tooltip_text = GameText.t(&"COMMAND_EXCEPTION_ACK_TOOLTIP")
-	acknowledge.disabled = acknowledged_exception_ids.has(exception.exception_id)
 	acknowledge.pressed.connect(_acknowledge_exception.bind(exception.exception_id))
 	buttons.add_child(acknowledge)
 	row.add_child(buttons)
+	_refresh_exception_row(row, exception, primary_action)
 	_place_decision_row(row)
+
+
+func _refresh_exception_row(row: VBoxContainer, exception: CommandExceptionSnapshot, primary_action: int) -> void:
+	var summary := row.get_node("Summary") as Button
+	summary.text = _exception_text(exception)
+	summary.tooltip_text = _exception_tooltip(exception)
+	var color := Color(1.0, 0.55, 0.4) if exception.severity == CommandExceptionSnapshot.Severity.CRITICAL else (Color(1.0, 0.78, 0.36) if exception.severity == CommandExceptionSnapshot.Severity.WARNING else Color.WHITE)
+	if summary.get_theme_color("font_color") != color:
+		summary.add_theme_color_override("font_color", color)
+	(row.get_node("Context") as Label).text = GameText.t(&"DECISION_ROW_CONTEXT") % [
+		GameText.t(StringName("COMMAND_EXCEPTION_KIND_%s" % CommandExceptionSnapshot.Kind.keys()[exception.kind])),
+		floori(exception.source_tick * SimulationWorld.TICK_SECONDS), exception.value_current, exception.value_limit]
+	var action := row.get_node("Buttons/Action") as Button
+	action.custom_minimum_size = Vector2(110.0 if not _compact else 82.0, 30.0)
+	action.text = _action_text(primary_action)
+	action.tooltip_text = _action_tooltip(primary_action, exception)
+	action.disabled = _has_active_action_receipt() and _action_receipt_accepted and _action_receipt_exception_id == exception.exception_id and _action_receipt_action == primary_action
+	var acknowledge := row.get_node("Buttons/Acknowledge") as Button
+	acknowledge.text = GameText.t(&"COMMAND_EXCEPTION_ACK_SHORT")
+	acknowledge.tooltip_text = GameText.t(&"COMMAND_EXCEPTION_ACK_TOOLTIP")
+	acknowledge.disabled = acknowledged_exception_ids.has(exception.exception_id)
 
 
 func _perform_exception_action(exception_id: StringName, action: int) -> void:
@@ -891,6 +942,8 @@ func show_card_actions(kind: int) -> void:
 
 
 func _card_subject(decision: CardActionSnapshot) -> String:
+	if decision.action_kind == CardActionSnapshot.ATTACK_HEADQUARTERS:
+		return "%s / %s" % [GameText.t(decision.commander_name_key), GameText.t(decision.target_name_key)]
 	return "%s / %s" % [GameText.t(decision.card_name_key), GameText.t(decision.commander_name_key)]
 
 
@@ -949,6 +1002,8 @@ func _add_card_action_row(decision: CardActionSnapshot) -> void:
 	title.tooltip_text = title.text
 	var detail_text := GameText.t(&"CARD_DECISION_CONTEXT") % [decision.current_strength, decision.authorized_strength, decision.supply_cost, decision.available_supply, decision.population, decision.population_capacity, decision.population_required, ceili(decision.cooldown_ticks * SimulationWorld.TICK_SECONDS), GameText.t(decision.target_name_key)]
 	detail_text += "\n" + _card_reason(decision.reason)
+	if decision.action_kind == CardActionSnapshot.ATTACK_HEADQUARTERS:
+		detail_text = GameText.t(&"CARD_ATTACK_HEADQUARTERS_CONTEXT") + "\n" + _card_reason(decision.reason)
 	if decision.action_kind >= CardActionSnapshot.TACTICAL:
 		var card := current_snapshot.get_unit_card(decision.unit_card_id)
 		if card != null and card.ammunition_capacity > 0:
@@ -1012,7 +1067,9 @@ func _perform_card_action(decision_id: StringName) -> void:
 		_rebuild_exception_rows()
 		return
 	var command: GameCommand
-	if decision.action_kind >= CardActionSnapshot.TACTICAL:
+	if decision.action_kind == CardActionSnapshot.ATTACK_HEADQUARTERS:
+		command = CardActionProjector.headquarters_command(decision, simulation_host.world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, simulation_host.current_snapshot.tick)
+	elif decision.action_kind >= CardActionSnapshot.TACTICAL:
 		command = TacticalActionProjector.command_for(decision, simulation_host.world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, simulation_host.current_snapshot.tick)
 	else:
 		command = simulation_host.create_support_order_command(decision.action_kind, decision.target_id, &"", decision.unit_card_id)
@@ -1034,6 +1091,7 @@ func _card_submission_result(decision: CardActionSnapshot, result: CommandValida
 	_watch_response({
 		"kind": "card", "decision_id": decision.decision_id, "unit_card_id": decision.unit_card_id,
 		"support_kind": decision.action_kind, "target_id": decision.target_id,
+		"commander_id": decision.commander_id, "target_position": decision.position,
 		"before_members": card.member_entity_ids.duplicate(),
 		"before_tactical_tick": card.tactical_started_tick,
 		"issued_tick": simulation_host.current_snapshot.tick, "deployment_ticks": card.deployment_ticks,
@@ -1085,6 +1143,9 @@ func _card_response_is_confirmed(response: Dictionary) -> bool:
 	if card == null or faction == null or current_snapshot.tick <= int(response["issued_tick"]):
 		return false
 	var kind := int(response["support_kind"])
+	if kind == CardActionSnapshot.ATTACK_HEADQUARTERS:
+		var commander := current_snapshot.get_commander(response["commander_id"] as StringName)
+		return commander != null and commander.target_position.is_equal_approx(response["target_position"] as Vector2) and not commander.current_task_ids.is_empty()
 	if kind >= CardActionSnapshot.TACTICAL:
 		if card.tactical_started_tick <= int(response["before_tactical_tick"]):
 			return false

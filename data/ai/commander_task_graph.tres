@@ -1,0 +1,46 @@
+[gd_resource type="Resource" script_class="CommanderTaskGraphDefinition" load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://src/data/commander_task_graph_definition.gd" id="1"]
+[ext_resource type="Script" path="res://src/data/commander_task_stage_definition.gd" id="2"]
+
+[sub_resource type="Resource" id="Muster"]
+script = ExtResource("2")
+stage_id = &"muster"
+phase = 0
+
+[sub_resource type="Resource" id="Recon"]
+script = ExtResource("2")
+stage_id = &"recon"
+phase = 1
+prerequisite_ids = Array[StringName]([&"muster"])
+dwell_ticks = 30
+
+[sub_resource type="Resource" id="Deploy"]
+script = ExtResource("2")
+stage_id = &"deploy"
+phase = 2
+prerequisite_ids = Array[StringName]([&"recon"])
+
+[sub_resource type="Resource" id="Engage"]
+script = ExtResource("2")
+stage_id = &"engage"
+phase = 3
+prerequisite_ids = Array[StringName]([&"deploy"])
+timeout_ticks = 2400
+
+[sub_resource type="Resource" id="Exploit"]
+script = ExtResource("2")
+stage_id = &"exploit"
+phase = 4
+prerequisite_ids = Array[StringName]([&"engage"])
+dwell_ticks = 50
+
+[sub_resource type="Resource" id="Retreat"]
+script = ExtResource("2")
+stage_id = &"retreat"
+phase = 5
+
+[resource]
+script = ExtResource("1")
+graph_id = &"commander_operation_v1"
+stages = Array[ExtResource("2")]([SubResource("Muster"), SubResource("Recon"), SubResource("Deploy"), SubResource("Engage"), SubResource("Exploit"), SubResource("Retreat")])

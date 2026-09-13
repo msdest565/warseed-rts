@@ -19,6 +19,7 @@ var budget_label: Label
 var risk_label: Label
 var cards_label: Label
 var scroll: ScrollContainer
+var execution_label: Label
 var current_plans: StaffPlanSet
 var pending_command_id: int = 0
 var _was_paused := false
@@ -91,6 +92,8 @@ func _build() -> void:
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", 10)
 	scroll.add_child(content)
+	execution_label = _label()
+	content.add_child(execution_label)
 	var fields := GridContainer.new()
 	fields.columns = 2
 	content.add_child(fields)
@@ -189,6 +192,7 @@ func refresh_locale() -> void:
 				_choices[id].text = GameText.t(card.display_name_key)
 				_choices[id].tooltip_text = _choices[id].text
 	_rebuild_plans()
+	_refresh_execution()
 
 
 func generate() -> void:
@@ -274,6 +278,8 @@ func _approve(plan: StaffCourseOfAction) -> void:
 
 
 func _process(_delta: float) -> void:
+	if visible:
+		_refresh_execution()
 	if pending_command_id == 0 or host == null or not is_instance_valid(host) or host.current_snapshot == null:
 		return
 	for decision in host.current_snapshot.staff_plan_decisions:
@@ -283,6 +289,14 @@ func _process(_delta: float) -> void:
 		_set_status(GameText.t(&"STAFF_APPROVED") if decision.accepted else GameText.t(&"STAFF_APPROVAL_FAILED") %
 			GameText.t(StringName("REASON_%s" % CommandValidationResult.Reason.keys()[decision.reason])))
 		break
+
+
+func _refresh_execution() -> void:
+	if execution_label == null:
+		return
+	execution_label.visible = host != null and is_instance_valid(host) and host.current_snapshot != null and not host.current_snapshot.commander_task_graphs.is_empty()
+	if execution_label.visible:
+		execution_label.text = GameText.t(&"COMMANDER_GRAPH_CURRENT") + "\n" + CommanderTaskGraphPresenter.describe(host.current_snapshot, host.current_snapshot.commander_task_graphs[0])
 
 
 func _reject() -> void:

@@ -263,7 +263,8 @@ func prepare_weapons(world: SimulationWorld) -> void:
 	for value in world.units.values():
 		var unit := value as UnitState
 		var card := world.unit_cards.get(unit.unit_card_id) as UnitCardState
-		unit.organization_attack_restricted = card != null and card.uses_tactical_organization() and card.organization <= 0.0
+		unit.organization_attack_restricted = card != null and card.uses_tactical_organization() and card.organization <= 0.0 \
+			and card.control_state not in [UnitCardState.ControlState.PLAYER_CONTROLLED, UnitCardState.ControlState.PLAYER_OVERRIDDEN]
 		if unit.enabled and unit.organization_attack_restricted:
 			# Broken formations retain legal self-defense, never proactive fire.
 			unit.attack_target_entity_id = world._find_worker_aggressor(unit) if unit.auto_retaliate else 0

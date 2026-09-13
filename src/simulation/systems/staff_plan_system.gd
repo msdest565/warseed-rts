@@ -29,6 +29,8 @@ func apply(world: SimulationWorld, command: StaffPlanApprovalCommand) -> void:
 		var previous := _decisions[command.issuer_id].approved_plan
 		decision.approved_plan = previous.duplicate_value() if previous != null else null
 	_decisions[command.issuer_id] = decision
+	if plan != null:
+		world.commander_task_graph_system.install(world, plan)
 	world.events.append(SimulationEvent.new(world.current_tick, SimulationEvent.Kind.STAFF_PLAN_DECIDED, 0,
 		"faction=%d;command=%d;accepted=%d;profile=%s;reason=%s" % [command.issuer_id, command.command_id,
 			1 if decision.accepted else 0, command.profile_id, CommandValidationResult.Reason.keys()[decision.reason]]))

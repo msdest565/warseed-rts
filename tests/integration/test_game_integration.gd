@@ -779,6 +779,13 @@ func _test_host_and_presentation_consume_faction_snapshot(failures: Array[String
 	var tracked_proxy := presentation._proxies[tracked_unit.entity_id] as UnitProxy
 	_expect(tracked_proxy.position.is_equal_approx(previous_unit_position + Vector2(16.0, 0.0)), "unit interpolation should use the cached previous visible position", failures)
 	_expect(is_equal_approx(presentation._projectile_buffer[3], previous_projectile_position.x + 24.0) and is_equal_approx(presentation._projectile_buffer[7], previous_projectile_position.y), "projectile interpolation should write the cached midpoint into the reusable MultiMesh buffer", failures)
+	presentation._detailed_units_enabled = false
+	tracked_proxy.position = Vector2(-9999, -9999)
+	presentation._update_unit_batches()
+	for index in range(interpolation_current.units.size()):
+		if interpolation_current.units[index].entity_id == tracked_unit.entity_id:
+			_expect(is_equal_approx(presentation._unit_body_buffer[index * 12 + 3], previous_unit_position.x + 16.0), "batched bodies interpolate snapshots independently of stale hidden proxies", failures)
+	_expect(presentation._unit_bodies_batch.z_index == 2, "batched bodies render above opaque terrain like detailed units", failures)
 	var stale_contact := KnowledgeContact.from_unit(host.world.units[SimulationWorld.DEFAULT_ENEMY_UNIT_ID] as UnitState, host.world.current_tick)
 	var stale_proxy := UnitProxy.new()
 	stale_proxy.apply_snapshot(UnitSnapshot.new(null, stale_contact))

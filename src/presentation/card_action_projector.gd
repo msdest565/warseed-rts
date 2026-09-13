@@ -12,6 +12,7 @@ func project(snapshot: WorldSnapshot, battle: BattleDefinition) -> Array[CardAct
 	if faction == null:
 		return result
 	result.append_array(TacticalActionProjector.new().project(snapshot, battle))
+	result.append_array(_headquarters_actions(snapshot))
 	for card in snapshot.unit_cards:
 		if card.faction_id != snapshot.observer_faction_id:
 			continue
@@ -35,11 +36,56 @@ func project(snapshot: WorldSnapshot, battle: BattleDefinition) -> Array[CardAct
 			else:
 				result.append(_make(snapshot, battle, faction, card, kind))
 	result.sort_custom(func(a: CardActionSnapshot, b: CardActionSnapshot) -> bool:
+		if (a.action_kind == CardActionSnapshot.ATTACK_HEADQUARTERS) != (b.action_kind == CardActionSnapshot.ATTACK_HEADQUARTERS):
+			return a.action_kind == CardActionSnapshot.ATTACK_HEADQUARTERS
 		var a_priority := 0 if a.action_kind == SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT else (1 if a.action_kind == CardActionSnapshot.DEPLOY else 2)
 		var b_priority := 0 if b.action_kind == SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT else (1 if b.action_kind == CardActionSnapshot.DEPLOY else 2)
 		return a_priority < b_priority if a_priority != b_priority else String(a.decision_id) < String(b.decision_id)
 	)
 	return result
+
+
+func _headquarters_actions(snapshot: WorldSnapshot) -> Array[CardActionSnapshot]:
+	var result: Array[CardActionSnapshot] = []
+	var commanders: Array[StringName] = []
+	for building in snapshot.buildings:
+		if not building.enabled or building.faction_id == snapshot.observer_faction_id or building.definition_id != &"command_center":
+			continue
+		for card in snapshot.unit_cards:
+			if card.faction_id != snapshot.observer_faction_id or card.deployment_state != UnitCardState.DeploymentState.DEPLOYED or card.current_strength <= 0 or commanders.has(card.commander_definition_id):
+				continue
+			var armed := false
+			for id in card.active_member_entity_ids:
+				var unit := snapshot.get_unit(id)
+				armed = armed or unit != null and unit.can_attack and unit.can_accept_attack_orders and unit.tactical_role != UnitState.TacticalRole.SCOUT
+			if not armed:
+				continue
+			var commander := snapshot.get_commander(card.commander_definition_id)
+			if commander == null:
+				continue
+			commanders.append(card.commander_definition_id)
+			var decision := CardActionSnapshot.new()
+			decision.action_kind = CardActionSnapshot.ATTACK_HEADQUARTERS
+			decision.decision_id = StringName("headquarters:%s:%d" % [commander.definition_id, building.entity_id])
+			decision.commander_id = card.commander_definition_id
+			decision.commander_name_key = commander.display_name_key
+			decision.unit_card_id = card.definition_id
+			decision.card_name_key = card.display_name_key
+			decision.target_name_key = &"CARD_ENEMY_HEADQUARTERS"
+			decision.target_entity_id = building.entity_id
+			decision.position = building.position + building.position.direction_to(card.center_position) * 320.0
+			decision.route = PackedVector2Array([card.center_position, decision.position])
+			if snapshot.outcome != null and snapshot.outcome.is_terminal():
+				decision.reason = CommandValidationResult.Reason.BATTLE_CONCLUDED
+			result.append(decision)
+	return result
+
+
+static func headquarters_command(decision: CardActionSnapshot, command_id: int, faction_id: int, tick: int) -> CommanderOrderCommand:
+	var command := CommanderOrderCommand.new(command_id, faction_id, tick, decision.commander_id,
+		CommanderOrderCommand.OrderKind.ASSIGN_OBJECTIVE, decision.position)
+	command.hand_back_control = true
+	return command
 
 
 func _make(snapshot: WorldSnapshot, battle: BattleDefinition, faction: FactionSnapshot, card: UnitCardSnapshot, kind: int, engineering_route: BattleEngineeringRouteDefinition = null) -> CardActionSnapshot:

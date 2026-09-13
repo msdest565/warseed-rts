@@ -102,6 +102,7 @@ func _run_resolution(resolution: Vector2i) -> void:
 	await _verify_tactical_planning(game, resolution)
 	await _verify_contextual_card_decisions(game, resolution, viewport_rect)
 	await _verify_control_handoff(game, resolution)
+	await _verify_headquarters_decision(game, resolution)
 	var zoom_report := await _verify_map_wheel_scope(game)
 	await _save_screenshot(resolution, "battlefield")
 	resolution_report["screens"]["battlefield"] = {
@@ -314,8 +315,92 @@ func _verify_staff_plans(game: GameRoot, resolution: Vector2i) -> void:
 	if panel.pending_command_id != 0 or host.current_snapshot.staff_plan_decisions.is_empty() or not host.current_snapshot.staff_plan_decisions[0].accepted:
 		_fail("staff approval must receive its authority snapshot after resuming")
 	await _save_screenshot(resolution, "staff_plan_approved")
+	if host.current_snapshot.commander_task_graphs.is_empty() or not desk.staff_retreat_button.visible:
+		_fail("approved plans must expose a real execution graph and retreat entry")
+	for locale in ["en", "zh_CN"]:
+		TranslationServer.set_locale(locale)
+		game._on_language_changed(locale)
+		await _wait_frames(4)
+		await _click_control(desk.staff_plan_button)
+		await _wait_frames(5)
+		if not panel.execution_label.visible or not panel.execution_label.text.contains(GameText.t(&"COMMANDER_GRAPH_CURRENT")):
+			_fail("normal plan panel must expose localized per-card execution stages")
+		_expect_no_horizontal_scroll(panel.scroll, "staff execution")
+		await _save_screenshot(resolution, "staff_plan_execution_" + locale)
+		await _click_popup_control(panel, panel.reject_button)
+	await _click_control(desk.staff_retreat_button)
+	var queued_retreat := false
+	for command in host.world.command_queue.snapshot():
+		if command is CommanderCardTaskCommand and command.action == CommanderCardTaskCommand.Action.RETREAT:
+			queued_retreat = true
+	if not queued_retreat:
+		_fail("real retreat mouse click must enqueue the operation command")
+	if host.current_snapshot.commander_task_graphs[0].retreat_requested:
+		_fail("paused retreat must remain queued until the simulation advances")
+	host.set_tactical_paused(false)
+	host.advance_tick()
+	host.set_tactical_paused(true)
+	await _wait_frames(5)
+	if not host.current_snapshot.commander_task_graphs[0].retreat_requested:
+		_fail("real retreat button must request the graph retreat through authority")
 	desk.staff_plan_status.visible = false
 	host.set_tactical_paused(was_paused)
+
+
+func _verify_headquarters_decision(game: GameRoot, resolution: Vector2i) -> void:
+	var host := game.simulation_host
+	host.set_tactical_paused(true)
+	var scout: UnitState
+	for id in (host.world.unit_cards[&"falcon_recon_group"] as UnitCardState).member_entity_ids:
+		if (host.world.units[id] as UnitState).enabled:
+			scout = host.world.units[id] as UnitState
+			break
+	if scout == null:
+		_fail("headquarters visibility fixture requires a living observer")
+		return
+	var old_sight := scout.sight_range
+	var old_base_sight := scout.base_sight_range
+	scout.sight_range = 10000
+	scout.base_sight_range = 10000
+	host.world._update_faction_knowledge()
+	host.set_tactical_paused(false)
+	host.advance_tick()
+	host.set_tactical_paused(true)
+	game.command_desk.show_card_actions(CardActionSnapshot.ATTACK_HEADQUARTERS)
+	await _wait_frames(5)
+	for locale in ["en", "zh_CN"]:
+		TranslationServer.set_locale(locale)
+		game._on_language_changed(locale)
+		await _wait_frames(5)
+		await _save_screenshot(resolution, "headquarters_decision_" + locale)
+	var button: Button
+	for row in game.command_desk.exception_rows.get_children():
+		if row.has_node("Action") and (row.get_node("Action") as Button).text == GameText.t(&"CARD_ATTACK_HEADQUARTERS"):
+			button = row.get_node("Action") as Button
+			break
+	if button == null:
+		_fail("discovered enemy headquarters must offer a normal decision action")
+	else:
+		(game.command_desk.get_node("Exceptions/Scroll") as ScrollContainer).ensure_control_visible(button)
+		await _wait_frames(5)
+		await _click_control(button)
+		var queued := false
+		for command in host.world.command_queue.snapshot():
+			if command is CommanderOrderCommand and command.hand_back_control:
+				queued = true
+		if not queued:
+			_fail("headquarters decision mouse click must enqueue a commander attack")
+		host.set_tactical_paused(false)
+		host.advance_tick()
+		host.set_tactical_paused(true)
+		await _wait_frames(5)
+		if not game.command_desk._pending_responses.is_empty():
+			_fail("headquarters attack must confirm via applied snapshot")
+	scout.sight_range = old_sight
+	scout.base_sight_range = old_base_sight
+	host.world._update_faction_knowledge()
+	game.command_desk.show_card_actions(-2)
+	host.set_tactical_paused(false)
 
 
 func _click_popup_control(panel: StaffPlanPanel, button: Button) -> void:
@@ -1214,6 +1299,12 @@ func _verify_contextual_card_decisions(game: GameRoot, resolution: Vector2i, vie
 		support_scroll.ensure_control_visible(game.support_panel.reinforcement_button)
 		await _wait_frames(5)
 		_expect_no_horizontal_scroll(scroll, "localized reinforcement cooldown")
+		var supply_label := game.support_panel.supply_label
+		if supply_label.text != GameText.t(&"SUPPORT_SUPPLY_BALANCE") % [cooldown_faction.supply, cooldown_faction.supply_capacity]:
+			_fail("supply counter must show the authoritative balance after reinforcement in both languages")
+		_expect_control_in_viewport(supply_label, viewport_rect, "persistent supply balance")
+		if not game.support_panel.get_global_rect().encloses(supply_label.get_global_rect()) or supply_label.get_global_rect().intersects(support_scroll.get_global_rect()):
+			_fail("supply counter must remain above the scrolling support actions")
 		if game.support_panel.get_global_rect().intersects(game.get_grey_ridge_map_rect()):
 			_fail("localized support panel must not expand across the map")
 		await _save_screenshot(resolution, "left_support_cooldown_" + locale)
@@ -1234,6 +1325,7 @@ func _verify_contextual_card_decisions(game: GameRoot, resolution: Vector2i, vie
 	await _click_control(action)
 	await _wait_frames(4)
 	if desk._targeting_decision == null or game.battlefield_overlay.decision_preview_radius != host.world.battle_definition.deployment_radius:
+		print("RESERVE_CLICK rect=%s scroll=%s hover=%s filter=%d targeting=%s radius=%f" % [action.get_global_rect(), scroll.get_global_rect(), root.gui_get_hovered_control(), desk._card_action_filter, desk._targeting_decision, game.battlefield_overlay.decision_preview_radius])
 		_fail("%s reserve click did not enter targeting with a persistent HQ area preview" % resolution)
 		return
 	var reserve_id := desk._targeting_decision.unit_card_id
