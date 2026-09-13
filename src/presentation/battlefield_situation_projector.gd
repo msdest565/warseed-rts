@@ -7,6 +7,10 @@ const DEFAULT_BASE_SUPPLY_INTERVAL_TICKS := 200
 const DEFAULT_REGION_SETTLEMENT_INTERVAL_TICKS := 300
 
 var last_rejection_reason: StringName
+var _uncertainty_cells := PackedByteArray()
+var _uncertainty_grid_size := Vector2i.ZERO
+var _uncertainty_bounds := Rect2()
+var _uncertainty_cache: Array[Dictionary] = []
 
 
 func project(
@@ -252,13 +256,19 @@ func _derive_frontlines(
 func _derive_uncertainty(snapshot: WorldSnapshot, battlefield_bounds: Rect2) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	var knowledge := snapshot.knowledge
+	if knowledge.grid_size == _uncertainty_grid_size and battlefield_bounds == _uncertainty_bounds and knowledge.cells == _uncertainty_cells:
+		return _uncertainty_cache
+	_uncertainty_grid_size = knowledge.grid_size
+	_uncertainty_bounds = battlefield_bounds
+	_uncertainty_cells = knowledge.cells.duplicate()
 	for y in range(knowledge.grid_size.y):
+		var row_offset := y * knowledge.grid_size.x
 		var run_state := FactionKnowledge.CellState.VISIBLE
 		var run_start := -1
 		for x in range(knowledge.grid_size.x + 1):
 			var state := FactionKnowledge.CellState.VISIBLE
 			if x < knowledge.grid_size.x:
-				state = knowledge.get_cell_state(Vector2i(x, y))
+				state = knowledge.cells[row_offset + x] as FactionKnowledge.CellState
 			if state == run_state:
 				continue
 			if run_start >= 0 and run_state != FactionKnowledge.CellState.VISIBLE:
@@ -274,6 +284,7 @@ func _derive_uncertainty(snapshot: WorldSnapshot, battlefield_bounds: Rect2) -> 
 					})
 			run_state = state
 			run_start = x if state != FactionKnowledge.CellState.VISIBLE else -1
+	_uncertainty_cache = result
 	return result
 
 

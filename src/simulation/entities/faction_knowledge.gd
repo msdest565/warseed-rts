@@ -14,6 +14,9 @@ var hostile_contacts: Dictionary = {}
 var visible_hostile_unit_ids: PackedInt32Array = PackedInt32Array()
 var visible_hostile_building_ids: PackedInt32Array = PackedInt32Array()
 var _visible_indices: PackedInt32Array = PackedInt32Array()
+var identification_until_by_entity: Dictionary = {}
+var _reveal_offsets_by_radius: Dictionary = {}
+var _revealed_circles: Dictionary = {}
 
 
 func _init(new_faction_id: int, new_grid_size: Vector2i) -> void:
@@ -24,6 +27,7 @@ func _init(new_faction_id: int, new_grid_size: Vector2i) -> void:
 
 
 func begin_update() -> void:
+	_revealed_circles.clear()
 	for index in _visible_indices:
 		if cells[index] == CellState.VISIBLE:
 			cells[index] = CellState.EXPLORED
@@ -33,6 +37,25 @@ func begin_update() -> void:
 
 
 func reveal(center: Vector2i, radius_cells: int) -> void:
+	var circle := Vector3i(center.x, center.y, radius_cells)
+	if _revealed_circles.has(circle):
+		return
+	_revealed_circles[circle] = true
+	if center.x >= radius_cells and center.y >= radius_cells and center.x + radius_cells < grid_size.x and center.y + radius_cells < grid_size.y:
+		if not _reveal_offsets_by_radius.has(radius_cells):
+			var offsets := PackedInt32Array()
+			for y in range(-radius_cells, radius_cells + 1):
+				for x in range(-radius_cells, radius_cells + 1):
+					if x * x + y * y <= radius_cells * radius_cells:
+						offsets.append(y * grid_size.x + x)
+			_reveal_offsets_by_radius[radius_cells] = offsets
+		var center_index := center.y * grid_size.x + center.x
+		for offset in _reveal_offsets_by_radius[radius_cells]:
+			var index: int = center_index + offset
+			if cells[index] != CellState.VISIBLE:
+				cells[index] = CellState.VISIBLE
+				_visible_indices.append(index)
+		return
 	var radius_squared := radius_cells * radius_cells
 	for y in range(maxi(0, center.y - radius_cells), mini(grid_size.y, center.y + radius_cells + 1)):
 		for x in range(maxi(0, center.x - radius_cells), mini(grid_size.x, center.x + radius_cells + 1)):

@@ -145,11 +145,13 @@ var metrics := SimulationMetrics.new()
 var pathfinder := GridPathfinder.new(logic_grid, metrics)
 var formation_movement := FormationMovementSystem.new(logic_grid, pathfinder)
 var combat_system := CombatSystem.new()
+var tactical_ability_system := TacticalAbilitySystem.new()
 var economy_system := EconomySystem.new()
 var engineering_system := EngineeringSystem.new()
 var strategic_task_system := StrategicTaskSystem.new()
 var strategic_headquarters := StrategicHeadquarters.new()
 var objective_system := ObjectiveSystem.new()
+var _doctrine_effect_registry := DoctrineEffectRegistry.new()
 var battle_outcome := BattleOutcome.new()
 var events: Array[SimulationEvent] = []
 var projectiles: Dictionary = {}
@@ -478,7 +480,7 @@ func _setup_grey_ridge_scenario() -> void:
 			card_definition.authorized_strength,
 			battle_definition.friendly_spawn_positions[index],
 			next_friendly_entity_id,
-			Vector2.DOWN
+			Vector2.DOWN, 0, 0, UnitCardCompositionCompiler.expand(card_definition)
 		)
 		friendly_member_ids_by_card[unit_card_id] = member_ids
 		next_friendly_entity_id += member_ids.size()
@@ -491,6 +493,18 @@ func _setup_grey_ridge_scenario() -> void:
 		)
 		for entity_id in member_ids:
 			(units[entity_id] as UnitState).tactical_role = formation_definition.tactical_role as UnitState.TacticalRole
+		if formation_definition.unit_card_definition != null:
+			var enemy_card := UnitCardState.new(formation_definition.unit_card_definition, formation_definition.faction_id, member_ids)
+			enemy_card.formation_id = formation_definition.formation_id
+			enemy_card.deployment_state = UnitCardState.DeploymentState.DEPLOYED
+			enemy_card.control_state = UnitCardState.ControlState.AGENT_ASSIGNED
+			enemy_card.assigned_agent_id = formation_definition.agent_id
+			enemy_card.assigned_task_id = formation_definition.task_id
+			enemy_card.organization_enabled = battle_definition.organization_max > 0.0
+			enemy_card.organization = battle_definition.organization_max
+			_bind_unit_card_members(enemy_card)
+			_reset_unit_card_organization_baseline(enemy_card)
+			unit_cards[enemy_card.definition.definition_id] = enemy_card
 	_setup_grey_ridge_army_roster(friendly_member_ids_by_card)
 	_initialize_grey_ridge_commander_tasks()
 	_setup_grey_ridge_enemy_reaction_table()
@@ -588,7 +602,19 @@ func _bind_unit_card_members(unit_card: UnitCardState) -> void:
 		var unit := units.get(entity_id) as UnitState
 		if unit != null:
 			unit.unit_card_id = unit_card.definition.definition_id
-			unit.tactical_role = role
+			var ability := unit_card.definition.tactical_ability
+			if not unit.card_weapon_initialized and unit_card.definition.tactical_weapon_override != null and ability != null and unit.definition_id == ability.required_unit_id:
+				unit.configure_tactical_weapon(unit_card.definition.tactical_weapon_override)
+				unit.card_weapon_initialized = true
+			if unit.composition_entry_id.is_empty():
+				unit.composition_entry_id = &"main"
+			var entry := unit_card.get_composition_entry(unit.composition_entry_id)
+			if entry != null:
+				if not entry.member_entity_ids.has(entity_id):
+					entry.member_entity_ids.append(entity_id)
+				unit.tactical_role = UnitCardCompositionCompiler.ROLES.find(entry.formation_role) as UnitState.TacticalRole
+			else:
+				unit.tactical_role = role
 	apply_unit_card_persistent_modifiers(unit_card)
 
 
@@ -698,7 +724,8 @@ func _create_scenario_formation(
 	first_entity_id: int,
 	forward: Vector2,
 	agent_id: int = 0,
-	task_id: int = 0
+	task_id: int = 0,
+	composition_members: Array[UnitCardCompositionEntry] = []
 ) -> Array[int]:
 	var member_ids: Array[int] = []
 	for index in range(count):
@@ -710,10 +737,14 @@ func _create_scenario_formation(
 	var lateral := Vector2(-forward.y, forward.x)
 	for entity_id in member_ids:
 		var slot_id := formation.get_slot_id(entity_id)
+		if not composition_members.is_empty():
+			definition = UNIT_CATALOG.get_unit(composition_members[slot_id].unit_definition_id)
 		var offset := formation.get_wide_offset(slot_id)
 		var position := anchor + forward * offset.x + lateral * offset.y
 		var unit := UnitState.new(entity_id, position, definition.move_speed, faction_id)
 		_apply_unit_definition(unit, definition)
+		if not composition_members.is_empty():
+			unit.composition_entry_id = composition_members[slot_id].entry_id
 		unit.formation_id = formation_id
 		unit.formation_slot_id = slot_id
 		unit.following_formation = true
@@ -815,6 +846,8 @@ func _apply_unit_definition(unit: UnitState, definition: UnitDefinition) -> void
 	unit.projectile_speed = definition.combat.projectile_speed
 	unit.sight_range = definition.sight_range
 	unit.base_sight_range = definition.sight_range
+	if definition.tactical_weapon != null:
+		unit.configure_tactical_weapon(definition.tactical_weapon)
 	if definition.definition_id == &"scout_vehicle":
 		unit.tactical_role = UnitState.TacticalRole.SCOUT
 	elif definition.definition_id == &"missile_vehicle":
@@ -886,7 +919,7 @@ func validate_command(command: GameCommand) -> CommandValidationResult:
 	# refreshed immediately before agent evaluation.
 	if not _is_advancing_tick:
 		_update_faction_knowledge()
-	var result := command_validator.validate(command, units, _battlefield_bounds(), pathfinder, formations, buildings, ore_fields, factions, UNIT_CATALOG, BUILDING_CATALOG, faction_knowledge, logic_grid, tasks, unit_cards, strategic_regions, commanders, doctrine_definitions, battle_definition)
+	var result := tactical_ability_system.validate(self, command as TacticalAbilityCommand) if command is TacticalAbilityCommand else command_validator.validate(command, units, _battlefield_bounds(), pathfinder, formations, buildings, ore_fields, factions, UNIT_CATALOG, BUILDING_CATALOG, faction_knowledge, logic_grid, tasks, unit_cards, strategic_regions, commanders, doctrine_definitions, battle_definition)
 	if result.is_accepted() and command is CommanderOrderCommand:
 		result = _validate_resolved_commander_objective(command as CommanderOrderCommand)
 	if result.is_accepted() and command is ProduceUnitCommand:
@@ -895,6 +928,14 @@ func validate_command(command: GameCommand) -> CommandValidationResult:
 		result = _validate_pending_unit_card_deployment(command as DeployUnitCardCommand)
 	if result.is_accepted() and command is SupportOrderCommand:
 		result = _validate_pending_support_order(command as SupportOrderCommand)
+	if result.is_accepted() and (command is FormationMoveCommand or command is AttackCommand or command is MoveCommand):
+		var unit := units.get(command.target_entity_id) as UnitState
+		var card := unit_cards.get(unit.unit_card_id) as UnitCardState if unit != null else null
+		if card != null and (card.definition.tactical_ability != null or card.uses_tactical_organization()):
+			if command.issuer_kind == GameCommand.IssuerKind.AGENT and card.tactical_command != null:
+				return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.TACTICAL_BUSY)
+			if card.organization_enabled and card.organization <= 0.0 and (command is AttackMoveCommand or command is AttackCommand):
+				return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.LOW_ORGANIZATION)
 	if result.is_accepted() and not _agent_authorization_allows(command):
 		return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.AGENT_NOT_AUTHORIZED)
 	return result
@@ -913,6 +954,17 @@ func _validate_resolved_commander_objective(command: CommanderOrderCommand) -> C
 			deployed_cards.append(unit_card)
 	for index in range(deployed_cards.size()):
 		var unit_card := deployed_cards[index]
+		if unit_card.uses_tactical_organization():
+			if unit_card.organization <= 0.0 and commander.posture != CommanderState.Posture.DISENGAGE:
+				return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.LOW_ORGANIZATION)
+			if unit_card.organization < 30.0:
+				for doctrine_id in commander.equipped_doctrine_ids:
+					var doctrine := doctrine_definitions.get(doctrine_id) as DoctrineDefinition
+					if doctrine == null:
+						continue
+					for effect in doctrine.effects:
+						if effect.effect.kind == DoctrineActionDefinition.Kind.STAGED_DEPARTURE:
+							return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.LOW_ORGANIZATION)
 		var formation := formations[unit_card.formation_id] as FormationState
 		var desired_target := _commander_card_target(commander, unit_card, deployed_cards.size(), index, command.target_position, formation)
 		var radius := _commander_task_radius(commander, TaskState.Kind.SCOUT_AREA if unit_card.definition.role_key == &"UNIT_CARD_ROLE_RECON" else TaskState.Kind.DEFEND_AREA)
@@ -949,6 +1001,11 @@ func _validate_pending_unit_card_deployment(command: DeployUnitCardCommand) -> C
 			pending_supply += get_support_cost(queued_support.support_kind)
 			if queued_support.support_kind == SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT:
 				pending_population += _field_reinforcement_count(unit_cards.get(queued_support.unit_card_id) as UnitCardState)
+			continue
+		if queued_command is TacticalAbilityCommand and queued_command.issuer_id == unit_card.faction_id:
+			var tactical_card := unit_cards.get(queued_command.unit_card_id) as UnitCardState
+			if tactical_card != null and tactical_card.definition.tactical_ability != null:
+				pending_supply += tactical_card.definition.tactical_ability.supply_cost
 			continue
 		if not queued_command is DeployUnitCardCommand:
 			continue
@@ -1034,6 +1091,10 @@ func _validate_pending_support_order(command: SupportOrderCommand) -> CommandVal
 			pending_supply += get_support_cost(queued_support.support_kind)
 			if queued_support.support_kind == SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT:
 				pending_population += _field_reinforcement_count(unit_cards.get(queued_support.unit_card_id) as UnitCardState)
+		elif queued_command is TacticalAbilityCommand:
+			var tactical_card := unit_cards.get(queued_command.unit_card_id) as UnitCardState
+			if tactical_card != null and tactical_card.definition.tactical_ability != null:
+				pending_supply += tactical_card.definition.tactical_ability.supply_cost
 	var faction := factions.get(command.issuer_id) as FactionState
 	if faction == null or faction.supply - pending_supply < get_support_cost(command.support_kind):
 		return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.INSUFFICIENT_SUPPLY)
@@ -1413,6 +1474,7 @@ func advance_tick() -> WorldSnapshot:
 	refresh_knowledge_before_agents = refresh_knowledge_before_agents or units.size() != unit_count_before_deployments
 	_advance_support_effects()
 	_update_grey_ridge_terrain_effects()
+	tactical_ability_system.advance(self)
 	if refresh_knowledge_before_agents:
 		_update_faction_knowledge()
 	if is_card_battle():
@@ -1421,6 +1483,8 @@ func advance_tick() -> WorldSnapshot:
 	for agent in agents:
 		agent.advance(self)
 	strategic_task_system.advance(self)
+	if is_card_battle():
+		tactical_ability_system.propose_commands(self)
 	if scenario_kind == ScenarioKind.LEGACY_RTS:
 		_advance_friendly_autonomy()
 		enemy_raid_agent.advance(self)
@@ -1433,8 +1497,11 @@ func advance_tick() -> WorldSnapshot:
 	_drop_hidden_attack_targets()
 	_update_worker_self_defense()
 	_update_commander_combat_coordination()
+	profile_started_usec = _record_tick_profile_section(&"movement_coordination", profile_started_usec)
 	_update_shared_formation_responses()
+	profile_started_usec = _record_tick_profile_section(&"movement_shared_response", profile_started_usec)
 	_update_combat_orders()
+	profile_started_usec = _record_tick_profile_section(&"movement_orders", profile_started_usec)
 	formation_movement.advance(formations, units, events, current_tick)
 	var entity_ids := units.keys()
 	entity_ids.sort()
@@ -1447,6 +1514,7 @@ func advance_tick() -> WorldSnapshot:
 	profile_started_usec = _record_tick_profile_section(&"movement", profile_started_usec)
 	_update_grey_ridge_terrain_effects(false)
 	engineering_system.advance(units, buildings, BUILDING_CATALOG, events, current_tick)
+	tactical_ability_system.prepare_weapons(self)
 	_next_projectile_id = combat_system.advance(units, buildings, projectiles, _next_projectile_id, events, current_tick)
 	_advance_unit_card_organization()
 	_cleanup_expired_wrecks()
@@ -1508,7 +1576,7 @@ func _apply_unit_card_deployment(command: DeployUnitCardCommand) -> void:
 		current_tick,
 		SimulationEvent.Kind.SUPPLY_CHANGED,
 		unit_card.faction_id,
-		"supply=%d;delta=-%d" % [faction.supply, supply_cost]
+		"supply=%d;delta=-%d;source=deployment;card=%s" % [faction.supply, supply_cost, unit_card.definition.definition_id]
 	))
 	_refresh_battle_population()
 
@@ -1559,6 +1627,7 @@ func _apply_support_order(command: SupportOrderCommand) -> void:
 					for y in range(rect.position.y, rect.end.y):
 						logic_grid.set_blocked(Vector2i(x, y), false)
 			opened_engineering_routes[route.route_id] = current_tick
+			faction.opened_engineering_route_ids.append(route.route_id)
 			var route_position := _engineering_route_center(route)
 			events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.ENGINEERING_ROUTE_OPENED, command.issuer_id, "route=%s;region=%s;engineer_card=%s;grid_revision=%d;position=%.1f,%.1f" % [route.route_id, route.linked_region_id, command.unit_card_id, logic_grid.revision, route_position.x, route_position.y]))
 		SupportOrderCommand.SupportKind.FIRE_SUPPORT:
@@ -1573,7 +1642,7 @@ func _apply_support_order(command: SupportOrderCommand) -> void:
 			var logistics_card := unit_cards[command.unit_card_id] as UnitCardState
 			var restored := _apply_frontline_logistics(logistics_card, support_definition)
 			events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.SUPPORT_STARTED, command.issuer_id, "frontline_logistics=%s;restored=%.1f" % [command.unit_card_id, restored]))
-	events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.SUPPLY_CHANGED, command.issuer_id, "supply=%d;delta=-%d;source=support" % [faction.supply, supply_cost]))
+	events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.SUPPLY_CHANGED, command.issuer_id, "supply=%d;delta=-%d;source=support;support_kind=%d;card=%s" % [faction.supply, supply_cost, command.support_kind, command.unit_card_id]))
 
 
 func _apply_fire_support(issuer_id: int, region: StrategicRegionState, damage: float) -> int:
@@ -1625,20 +1694,29 @@ func _apply_field_reinforcement(unit_card: UnitCardState) -> Array[int]:
 	var formation := formations[unit_card.formation_id] as FormationState
 	_prune_disabled_formation_members(formation)
 	var reinforcement_count := _field_reinforcement_count(unit_card)
-	var definition := UNIT_CATALOG.get_unit(unit_card.definition.unit_definition_id)
-	if reinforcement_count <= 0 or definition == null:
+	if reinforcement_count <= 0:
 		return reinforced_ids
-	for _index in range(reinforcement_count):
-		var entity_id := _next_unit_id
-		_next_unit_id += 1
-		formation.add_member(entity_id)
-		unit_card.member_entity_ids.append(entity_id)
-		reinforced_ids.append(entity_id)
+	var ordered_entries: Array[UnitCardCompositionState] = unit_card.composition.duplicate()
+	ordered_entries.sort_custom(func(a: UnitCardCompositionState, b: UnitCardCompositionState) -> bool:
+		return a.replacement_priority < b.replacement_priority if a.replacement_priority != b.replacement_priority else String(a.entry_id) < String(b.entry_id)
+	)
+	var reinforced_entries: Array[UnitCardCompositionState] = []
+	for entry in ordered_entries:
+		var missing := entry.authorized_strength - entry.active_count(units)
+		for _index in range(mini(missing, reinforcement_count - reinforced_ids.size())):
+			var entity_id := _next_unit_id
+			_next_unit_id += 1
+			formation.add_member(entity_id)
+			unit_card.member_entity_ids.append(entity_id)
+			reinforced_ids.append(entity_id)
+			reinforced_entries.append(entry)
 	var tangent := formation.initial_path_direction
 	if tangent.is_zero_approx():
 		tangent = Vector2.RIGHT
 	var lateral := Vector2(-tangent.y, tangent.x)
 	for entity_id in reinforced_ids:
+		var entry := reinforced_entries[reinforced_ids.find(entity_id)]
+		var definition := UNIT_CATALOG.get_unit(entry.unit_definition_id)
 		var slot_id := formation.get_slot_id(entity_id)
 		var offset := formation.get_wide_offset(slot_id)
 		var spawn_position := formation.anchor_position + tangent * offset.x + lateral * offset.y
@@ -1646,6 +1724,7 @@ func _apply_field_reinforcement(unit_card: UnitCardState) -> Array[int]:
 			spawn_position = formation.anchor_position
 		var unit := UnitState.new(entity_id, spawn_position, definition.move_speed, unit_card.faction_id)
 		_apply_unit_definition(unit, definition)
+		unit.composition_entry_id = entry.entry_id
 		unit.formation_id = formation.formation_id
 		unit.formation_slot_id = slot_id
 		unit.following_formation = true
@@ -1829,8 +1908,8 @@ func _advance_unit_card_deployments() -> void:
 		unit_card.deployment_ticks_remaining = maxi(0, unit_card.deployment_ticks_remaining - 1)
 		if unit_card.deployment_ticks_remaining > 0:
 			continue
-		var definition := UNIT_CATALOG.get_unit(unit_card.definition.unit_definition_id)
-		if definition == null:
+		var composition_members := UnitCardCompositionCompiler.expand(unit_card.definition, unit_card)
+		if composition_members.is_empty():
 			unit_card.deployment_state = UnitCardState.DeploymentState.DISABLED
 			continue
 		var formation_id := _next_formation_id
@@ -1839,11 +1918,11 @@ func _advance_unit_card_deployments() -> void:
 		var member_ids := _create_scenario_formation(
 			formation_id,
 			unit_card.faction_id,
-			definition.definition_id,
-			unit_card.available_strength,
+			composition_members[0].unit_definition_id,
+			composition_members.size(),
 			unit_card.deployment_position,
 			first_entity_id,
-			Vector2.UP
+			Vector2.UP, 0, 0, composition_members
 		)
 		_next_unit_id += member_ids.size()
 		unit_card.member_entity_ids = member_ids
@@ -1913,6 +1992,9 @@ func _advance_strategic_regions() -> void:
 		var occupying_factions: Dictionary = {}
 		for unit_variant in units.values():
 			var unit := unit_variant as UnitState
+			var card := unit_cards.get(unit.unit_card_id) as UnitCardState
+			if card != null and card.uses_tactical_organization() and card.organization <= 0.0 and region.controller_faction_id != unit.faction_id:
+				continue
 			if unit.enabled and unit.tactical_role != UnitState.TacticalRole.SCOUT and unit.definition_id != &"supply_truck" and unit.position.distance_to(region.position) <= region.radius:
 				occupying_factions[unit.faction_id] = int(occupying_factions.get(unit.faction_id, 0)) + 1
 		var previous_controller := region.controller_faction_id
@@ -2113,6 +2195,8 @@ func _advance_unit_card_organization() -> void:
 		if card == null or not card.organization_enabled or card.deployment_state != UnitCardState.DeploymentState.DEPLOYED:
 			continue
 		var total_health := 0.0
+		var suppression := 0.0
+		var suppression_events: Array[SimulationEvent] = []
 		var active_strength := 0
 		var position_sum := Vector2.ZERO
 		for entity_id in card.member_entity_ids:
@@ -2120,14 +2204,23 @@ func _advance_unit_card_organization() -> void:
 			if unit == null or not unit.enabled:
 				continue
 			total_health += unit.health
+			suppression += unit.pending_suppression
+			suppression_events.append_array(unit.pending_suppression_events)
+			unit.pending_suppression_events.clear()
+			unit.pending_suppression = 0.0
 			active_strength += 1
 			position_sum += unit.position
 		var previous_band := _organization_band(card.organization)
+		var suppression_budget := minf(card.organization, suppression) if active_strength > 0 else 0.0
+		for suppression_event in suppression_events:
+			suppression_event.applied_amount = minf(suppression_event.applied_amount, suppression_budget)
+			suppression_budget -= suppression_event.applied_amount
 		var health_loss := maxf(0.0, card.last_total_health - total_health)
 		var member_loss := maxi(0, card.last_active_strength - active_strength)
 		if active_strength <= 0:
 			card.organization = 0.0
-		elif health_loss > 0.0 or member_loss > 0:
+		elif health_loss > 0.0 or member_loss > 0 or suppression > 0.0:
+			card.organization -= suppression
 			card.organization -= health_loss * battle_definition.organization_damage_factor
 			card.organization -= float(member_loss) * battle_definition.organization_member_loss
 			card.last_damage_tick = current_tick
@@ -2153,6 +2246,12 @@ func _advance_unit_card_organization() -> void:
 				_card_leader_entity_id(card),
 				"card=%s;organization=%.2f;band=%d" % [card.definition.definition_id, card.organization, current_band]
 			))
+	# Impacts on disabled or non-organized cards cannot contribute organization loss.
+	for unit_variant in units.values():
+		var unit := unit_variant as UnitState
+		for suppression_event in unit.pending_suppression_events:
+			suppression_event.applied_amount = 0.0
+		unit.pending_suppression_events.clear()
 
 
 func _unit_card_organization_recovery_multiplier(card: UnitCardState) -> float:
@@ -2207,6 +2306,9 @@ func _complete_unit_card_withdrawal(card: UnitCardState, survivors: Array[int]) 
 	card.withdrawn_strength = survivors.size()
 	card.withdrawn_tick = current_tick
 	card.available_strength = survivors.size()
+	for entry in card.composition:
+		entry.withdrawn_strength = entry.active_count(units)
+		entry.available_strength = entry.withdrawn_strength
 	card.deployment_state = UnitCardState.DeploymentState.WITHDRAWN
 	card.control_state = UnitCardState.ControlState.UNASSIGNED
 	card.assigned_task_id = 0
@@ -2768,7 +2870,11 @@ func _update_faction_knowledge() -> void:
 		for unit_variant in units.values():
 			var unit := unit_variant as UnitState
 			if unit.enabled and unit.faction_id == faction_id:
-				knowledge.reveal(logic_grid.world_to_cell(unit.position), ceili(unit.sight_range / LogicGrid.CELL_SIZE))
+				var sensor_range := unit.sight_range
+				var sensor_card := unit_cards.get(unit.unit_card_id) as UnitCardState
+				if sensor_card != null:
+					sensor_range = maxf(sensor_range, tactical_ability_system.observation_range(sensor_card, current_tick))
+				knowledge.reveal(logic_grid.world_to_cell(unit.position), ceili(sensor_range / LogicGrid.CELL_SIZE))
 		for building_variant in buildings.values():
 			var building := building_variant as BuildingState
 			if building.enabled and building.faction_id == faction_id:
@@ -2781,6 +2887,7 @@ func _update_faction_knowledge() -> void:
 				var region := strategic_regions[region_id] as StrategicRegionState
 				knowledge.reveal(logic_grid.world_to_cell(region.position), ceili(region.radius / LogicGrid.CELL_SIZE))
 		_update_contacts(knowledge)
+		tactical_ability_system.update_identification(self, knowledge)
 		_prune_expired_contacts(knowledge)
 	var local_knowledge := faction_knowledge.get(LOCAL_PLAYER_ID) as FactionKnowledge
 	if local_knowledge != null:
@@ -3280,8 +3387,14 @@ func _select_visible_target_in_formation_weapon_range(formation: FormationState,
 	var best_health_fraction := INF
 	var best_distance := INF
 	var member_ids: Dictionary = {}
+	var firing_members: Array[UnitState] = []
 	for member_id in formation.member_entity_ids:
 		member_ids[member_id] = true
+		var member := units.get(member_id) as UnitState
+		if member != null and member.enabled and member.can_attack and member.can_accept_attack_orders:
+			firing_members.append(member)
+	if firing_members.is_empty() and engagement_radius <= 0.0:
+		return 0
 	var candidate_ids: Array[int] = []
 	var knowledge := faction_knowledge.get(faction_id) as FactionKnowledge
 	if knowledge != null:
@@ -3300,10 +3413,7 @@ func _select_visible_target_in_formation_weapon_range(formation: FormationState,
 			continue
 		var target_position := get_entity_position(entity_id)
 		var nearest_firing_distance := INF
-		for member_id in formation.member_entity_ids:
-			var member := units.get(member_id) as UnitState
-			if member == null or not member.enabled or not member.can_attack or not member.can_accept_attack_orders:
-				continue
+		for member in firing_members:
 			var distance := member.position.distance_to(target_position)
 			if distance <= member.attack_range:
 				nearest_firing_distance = minf(nearest_firing_distance, distance)
@@ -3484,6 +3594,11 @@ func _begin_player_takeover(unit: UnitState, command: GameCommand, preserve_form
 
 func _apply_commander_order(command: CommanderOrderCommand) -> void:
 	var commander := commanders[command.commander_id] as CommanderState
+	if command.issuer_kind == GameCommand.IssuerKind.PLAYER and command.order_kind != CommanderOrderCommand.OrderKind.CANCEL_INTENT and (command.hand_back_control or command.order_kind == CommanderOrderCommand.OrderKind.ASSIGN_INTENT):
+		for card_id in commander.subordinate_unit_card_ids:
+			var card := unit_cards.get(card_id) as UnitCardState
+			if card != null and card.faction_id == commander.faction_id and card.deployment_state == UnitCardState.DeploymentState.DEPLOYED:
+				_release_card_for_commander(card, "PLAYER_EXECUTION_ORDER")
 	if command.order_kind == CommanderOrderCommand.OrderKind.SET_POSTURE:
 		commander.posture = command.posture
 		if commander.posture == CommanderState.Posture.DISENGAGE:
@@ -3611,7 +3726,8 @@ func _commander_card_target(
 		if not toward_base.is_zero_approx():
 			doctrine_target += toward_base * doctrine_offset
 	var offset_index := float(card_index) - float(deployed_card_count - 1) * 0.5
-	var spacing := 48.0 if commander.has_doctrine(&"concentrated_breakthrough") else (72.0 if commander.has_doctrine(&"mutual_support") else 112.0)
+	var narrow := _commander_effect(commander, DoctrineActionDefinition.Kind.NARROW_FRONTAGE)
+	var spacing := narrow.effect.formation_spacing if narrow != null else (72.0 if commander.has_doctrine(&"mutual_support") else 112.0)
 	return doctrine_target + Vector2(offset_index * spacing, 0.0)
 
 
@@ -3661,8 +3777,9 @@ func _assign_unit_card_task(
 	task.target_radius = _commander_task_radius(commander, kind)
 	var resolved_target := find_formation_deployment_position(formation, target_position, task.target_radius, task.planned_route)
 	task.target_position = resolved_target if resolved_target.is_finite() else target_position
-	if commander.has_doctrine(&"covert_search") and kind == TaskState.Kind.SCOUT_AREA and formation.anchor_position.distance_to(target_position) > 320.0:
-		var staged_target := formation.anchor_position.lerp(target_position, 0.5)
+	var recon := _commander_effect(commander, DoctrineActionDefinition.Kind.CAUTIOUS_RECON)
+	if recon != null and kind == TaskState.Kind.SCOUT_AREA and formation.anchor_position.distance_to(target_position) > recon.effect.staging_distance:
+		var staged_target := formation.anchor_position.lerp(target_position, recon.effect.staging_fraction)
 		var resolved_stage := find_formation_deployment_position(formation, staged_target, task.target_radius, task.planned_route)
 		task.final_target_position = task.target_position
 		task.target_position = resolved_stage if resolved_stage.is_finite() else staged_target
@@ -3670,12 +3787,21 @@ func _assign_unit_card_task(
 	task.priority = 60
 	task.accepted_tick = current_tick
 	task.persistent_order = true
-	if commander.has_doctrine(&"alternating_cover"):
-		var card_index := _deployed_unit_card_index(commander, unit_card.definition.definition_id)
-		task.activation_tick = current_tick + maxi(0, card_index) * 20
-	elif commander.has_doctrine(&"fire_preparation") and unit_card.definition.role_key == &"UNIT_CARD_ROLE_FIREPOWER":
-		task.activation_tick = current_tick + 40
-		task.requires_observed_contact = true
+	var equipped_definitions: Array[DoctrineDefinition] = []
+	for doctrine_id in commander.equipped_doctrine_ids:
+		var definition := doctrine_definitions.get(doctrine_id) as DoctrineDefinition
+		if definition != null and not definition.effects.is_empty():
+			equipped_definitions.append(definition)
+	var effect_parameters: DoctrineTaskParameters
+	if not equipped_definitions.is_empty():
+		effect_parameters = _doctrine_effect_registry.create_task_parameters(
+			create_faction_snapshot(commander.faction_id), commander.faction_id,
+			commander.definition.definition_id, unit_card.definition.definition_id, equipped_definitions
+		)
+	if effect_parameters != null and effect_parameters.applied:
+		task.doctrine_effect = effect_parameters.duplicate_value()
+		task.activation_tick = effect_parameters.activation_tick
+		task.requires_observed_contact = effect_parameters.requires_observed_contact
 	elif commander.has_doctrine(&"overwatch_lattice") and unit_card.definition.role_key == &"UNIT_CARD_ROLE_FIREPOWER":
 		task.activation_tick = current_tick + 30
 	elif commander.has_doctrine(&"reserve_commitment"):
@@ -3806,19 +3932,25 @@ func _commander_targets_engineering_route(commander: CommanderState, route: Batt
 func _deployed_engineering_card_for_commander(commander: CommanderState) -> UnitCardState:
 	for unit_card_id in commander.subordinate_unit_card_ids:
 		var unit_card := unit_cards.get(unit_card_id) as UnitCardState
-		if unit_card != null and unit_card.deployment_state == UnitCardState.DeploymentState.DEPLOYED and unit_card.definition.unit_definition_id == &"engineer_vehicle":
+		if unit_card != null and unit_card.deployment_state == UnitCardState.DeploymentState.DEPLOYED and unit_card.has_active_unit_type(&"engineer_vehicle", units):
 			return unit_card
 	return null
+
+
+func _commander_effect(commander: CommanderState, kind: DoctrineActionDefinition.Kind) -> DoctrineEffectDefinition:
+	return _doctrine_effect_registry.find_effect(commander.equipped_doctrine_ids, doctrine_definitions, kind)
 
 
 func _commander_task_radius(commander: CommanderState, kind: TaskState.Kind) -> float:
 	var posture := commander.posture
 	if kind == TaskState.Kind.SCOUT_AREA:
-		if commander.has_doctrine(&"covert_search"):
-			return 96.0
+		var recon := _commander_effect(commander, DoctrineActionDefinition.Kind.CAUTIOUS_RECON)
+		if recon != null:
+			return recon.effect.task_radius
 		return 176.0 if posture == CommanderState.Posture.CAUTIOUS else 128.0
-	if commander.has_doctrine(&"concentrated_breakthrough"):
-		return 64.0
+	var narrow := _commander_effect(commander, DoctrineActionDefinition.Kind.NARROW_FRONTAGE)
+	if narrow != null:
+		return narrow.effect.task_radius
 	if commander.has_doctrine(&"elastic_defense"):
 		return 224.0
 	if commander.has_doctrine(&"fighting_withdrawal") and battle_definition != null and commander.target_region_id == battle_definition.withdrawal_region_id:
@@ -3924,7 +4056,7 @@ func is_cautious_commander_agent(agent_id: int) -> bool:
 	for commander_variant in commanders.values():
 		var commander := commander_variant as CommanderState
 		if commander.agent_id == agent_id:
-			return commander.posture == CommanderState.Posture.CAUTIOUS or commander.has_doctrine(&"covert_search")
+			return commander.posture == CommanderState.Posture.CAUTIOUS or (_commander_effect(commander, DoctrineActionDefinition.Kind.CAUTIOUS_RECON) != null)
 	return false
 
 
@@ -4005,7 +4137,7 @@ func _update_commander_outlook(commander: CommanderState) -> void:
 		commander.exit_condition_key = &"COMMANDER_EXIT_SAFE_RALLY"
 	elif commander.posture == CommanderState.Posture.HOLD:
 		commander.exit_condition_key = &"COMMANDER_EXIT_HOLD_OR_REORDER"
-	elif commander.posture == CommanderState.Posture.CAUTIOUS or commander.has_doctrine(&"covert_search"):
+	elif commander.posture == CommanderState.Posture.CAUTIOUS or (_commander_effect(commander, DoctrineActionDefinition.Kind.CAUTIOUS_RECON) != null):
 		commander.exit_condition_key = &"COMMANDER_EXIT_CONTACT_OR_REORDER"
 	else:
 		commander.exit_condition_key = &"COMMANDER_EXIT_OBJECTIVE_OR_REORDER"
@@ -4187,9 +4319,9 @@ func _apply_task_feedback_to_commander(commander: CommanderState, task: TaskStat
 			commander.set_behavior(&"COMMANDER_BEHAVIOR_PREPARING", &"COMMANDER_REASON_RAPID_BRIDGING_AXIS", current_tick)
 		elif current_tick < task.activation_tick and commander.has_doctrine(&"overwatch_lattice") and _task_has_role(task, &"UNIT_CARD_ROLE_FIREPOWER"):
 			commander.set_behavior(&"COMMANDER_BEHAVIOR_PREPARING", &"COMMANDER_REASON_OVERWATCH_LATTICE_STAGING", current_tick)
-		elif current_tick < task.activation_tick and commander.has_doctrine(&"alternating_cover"):
-			commander.set_behavior(&"COMMANDER_BEHAVIOR_PREPARING", &"COMMANDER_REASON_ALTERNATING_COVER_TIMING", current_tick)
-		elif task.has_staged_target and commander.has_doctrine(&"covert_search"):
+		elif current_tick < task.activation_tick and task.doctrine_effect != null and task.doctrine_effect.applied:
+			commander.set_behavior(&"COMMANDER_BEHAVIOR_PREPARING", task.doctrine_effect.waiting_reason_key, current_tick)
+		elif task.has_staged_target and (_commander_effect(commander, DoctrineActionDefinition.Kind.CAUTIOUS_RECON) != null):
 			commander.set_behavior(&"COMMANDER_BEHAVIOR_PREPARING", &"COMMANDER_REASON_COVERT_SEARCH_STAGING", current_tick)
 		else:
 			commander.set_behavior(&"COMMANDER_BEHAVIOR_PREPARING", &"COMMANDER_REASON_OBJECTIVE_COORDINATION", current_tick)
@@ -4204,7 +4336,7 @@ func _apply_task_feedback_to_commander(commander: CommanderState, task: TaskStat
 		TaskState.Phase.SCOUTING:
 			commander.set_behavior(
 				&"COMMANDER_BEHAVIOR_OBSERVING",
-				&"COMMANDER_REASON_COVERT_SEARCH_OBSERVATION" if commander.has_doctrine(&"covert_search") else &"COMMANDER_REASON_RECON_OBSERVATION",
+				&"COMMANDER_REASON_COVERT_SEARCH_OBSERVATION" if (_commander_effect(commander, DoctrineActionDefinition.Kind.CAUTIOUS_RECON) != null) else &"COMMANDER_REASON_RECON_OBSERVATION",
 				current_tick
 			)
 		TaskState.Phase.HOLDING:
@@ -4226,15 +4358,10 @@ func _commander_posture_reason_key(posture: CommanderState.Posture) -> StringNam
 
 
 func _commander_doctrine_reason_key(doctrine_id: StringName) -> StringName:
+	var definition := doctrine_definitions.get(doctrine_id) as DoctrineDefinition
+	if definition != null and not definition.effects.is_empty():
+		return definition.effects[0].reason.waiting_reason_key
 	match doctrine_id:
-		&"alternating_cover":
-			return &"COMMANDER_REASON_ALTERNATING_COVER_TIMING"
-		&"fire_preparation":
-			return &"COMMANDER_REASON_FIRE_PREPARATION_VISION"
-		&"covert_search":
-			return &"COMMANDER_REASON_COVERT_SEARCH_STAGING"
-		&"concentrated_breakthrough":
-			return &"COMMANDER_REASON_CONCENTRATED_BREAKTHROUGH"
 		&"rapid_bridging":
 			return &"COMMANDER_REASON_RAPID_BRIDGING_AXIS"
 		&"overwatch_lattice":
@@ -4308,11 +4435,7 @@ func _apply_unit_card_control(command: UnitCardControlCommand) -> void:
 				var formation := formations[unit_card.formation_id] as FormationState
 				_apply_stop(StopCommand.new(allocate_command_id(), command.issuer_id, GameCommand.IssuerKind.PLAYER, current_tick, formation.leader_entity_id, formation.formation_id))
 		UnitCardControlCommand.Action.RETURN_TO_COMMANDER:
-			unit_card.control_state = UnitCardState.ControlState.RETURNING
-			for entity_id in unit_card.member_entity_ids:
-				var unit := units.get(entity_id) as UnitState
-				if unit != null and unit.enabled:
-					_start_rejoin(unit, unit_card.return_formation_id, unit_card.return_task_id)
+			_return_card_to_commander(unit_card)
 		UnitCardControlCommand.Action.STAY_MANUAL:
 			unit_card.control_state = UnitCardState.ControlState.PLAYER_CONTROLLED
 			unit_card.assigned_agent_id = 0
@@ -4332,6 +4455,64 @@ func _apply_unit_card_control(command: UnitCardControlCommand) -> void:
 		current_tick, SimulationEvent.Kind.UNIT_CONTROL_CHANGED, 0,
 		"UNIT_CARD_%s;%s" % [unit_card.definition.definition_id, UnitCardState.ControlState.keys()[unit_card.control_state]]
 	))
+
+
+func _release_card_for_commander(card: UnitCardState, reason: String) -> bool:
+	if card.control_state not in [UnitCardState.ControlState.PLAYER_OVERRIDDEN, UnitCardState.ControlState.PLAYER_CONTROLLED, UnitCardState.ControlState.RETURNING]:
+		return false
+	card.control_state = UnitCardState.ControlState.UNASSIGNED
+	card.return_task_id = 0
+	card.return_formation_id = 0
+	card.takeover_reason = ""
+	var formation := formations.get(card.formation_id) as FormationState
+	if formation != null:
+		_apply_stop(StopCommand.new(allocate_command_id(), card.faction_id, GameCommand.IssuerKind.AGENT, current_tick, formation.leader_entity_id, formation.formation_id))
+	for entity_id in card.member_entity_ids:
+		var unit := units.get(entity_id) as UnitState
+		if unit == null or not unit.enabled:
+			continue
+		unit.rejoin_pending = false
+		unit.return_task_id = 0
+		unit.takeover_reason = ""
+		unit.control_state = UnitState.ControlState.UNASSIGNED
+	events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.UNIT_CONTROL_CHANGED, 0, "UNIT_CARD_%s;AI_HANDOFF;reason=%s" % [card.definition.definition_id, reason]))
+	return true
+
+
+func _return_card_to_commander(card: UnitCardState) -> void:
+	var commander := commanders[card.commander_definition_id] as CommanderState
+	var previous_task := tasks.get(card.return_task_id) as TaskState
+	var valid_previous := previous_task != null and previous_task.unit_card_id == card.definition.definition_id and previous_task.agent_id == commander.agent_id and previous_task.lifecycle not in [TaskState.Lifecycle.COMPLETED, TaskState.Lifecycle.FAILED, TaskState.Lifecycle.CANCELLED]
+	if valid_previous and card.return_formation_id == card.formation_id and formations.has(card.return_formation_id):
+		card.control_state = UnitCardState.ControlState.RETURNING
+		var reachable := true
+		for entity_id in card.member_entity_ids:
+			var unit := units.get(entity_id) as UnitState
+			if unit != null and unit.enabled:
+				_start_rejoin(unit, card.return_formation_id, card.return_task_id)
+				reachable = reachable and unit.rejoin_pending
+		if reachable:
+			return
+	_release_card_for_commander(card, "PLAYER_RETURN")
+	var deployed_count := 0
+	for card_id in commander.subordinate_unit_card_ids:
+		var subordinate := unit_cards.get(card_id) as UnitCardState
+		if subordinate != null and subordinate.deployment_state == UnitCardState.DeploymentState.DEPLOYED:
+			deployed_count += 1
+	var target := _commander_card_target(commander, card, deployed_count, _deployed_unit_card_index(commander, card.definition.definition_id), commander.target_position, formations.get(card.formation_id) as FormationState)
+	var route := commander.planned_route
+	if commander.current_task_ids.is_empty() and commander.active_intent_id.is_empty():
+		target = (formations[card.formation_id] as FormationState).anchor_position
+		route = PackedVector2Array()
+	var task := _assign_unit_card_task(commander, card, target, route)
+	var task_ids: Array[int] = []
+	for task_id in commander.current_task_ids:
+		var existing := tasks.get(task_id) as TaskState
+		if existing != null and existing.unit_card_id != card.definition.definition_id:
+			task_ids.append(task_id)
+	if task != null:
+		task_ids.append(task.task_id)
+	commander.set_task_ids(task_ids)
 
 
 func _apply_disposition(command: UnitDispositionCommand) -> void:
@@ -4459,6 +4640,11 @@ func _refresh_unit_card_control_states() -> void:
 
 
 func _apply_command(command: GameCommand) -> void:
+	if _is_direct_player_order(command) or command is UnitCardControlCommand or command is CommanderOrderCommand:
+		tactical_ability_system.cancel_for_order(self, command)
+	if command is TacticalAbilityCommand:
+		tactical_ability_system.start(self, command as TacticalAbilityCommand)
+		return
 	if command is EquipDoctrineCommand:
 		_apply_equip_doctrine(command as EquipDoctrineCommand)
 		return

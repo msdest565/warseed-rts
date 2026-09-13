@@ -8,6 +8,7 @@ func run() -> Array[String]:
 	_test_rejection_and_value_copy(failures)
 	_test_live_host_capture(failures)
 	_test_hidden_building_event_filter(failures)
+	_test_tactical_contribution_localization(failures)
 	return failures
 
 
@@ -81,7 +82,7 @@ func _test_live_host_capture(failures: Array[String]) -> void:
 	_expect(validation.is_accepted(), "live capture fixture intent should pass the real command pipeline", failures)
 	_expect(bool(report.get("legal_observation_only", false)) and int(report.get("observer_faction_id", 0)) == SimulationWorld.LOCAL_PLAYER_ID, "live host capture should use the player's legal faction snapshot", failures)
 	_expect(not (report.get("first_high_level_order", {}) as Dictionary).is_empty(), "live host capture should preserve accepted high-level intent", failures)
-	_expect((report.get("cards", []) as Array).size() == 4 and (report.get("exception_summary", {}) as Dictionary).has("unique"), "live host capture should preserve card facts and sampled exception state", failures)
+	_expect((report.get("cards", []) as Array).size() == 6 and (report.get("exception_summary", {}) as Dictionary).has("unique"), "live host capture should preserve card facts and sampled exception state", failures)
 	host.free()
 
 
@@ -111,6 +112,25 @@ func _test_hidden_building_event_filter(failures: Array[String]) -> void:
 	var losses: Array = turning_points.filter(func(point: Dictionary) -> bool: return String(point.get("reason_key", "")) == "unit_card_loss")
 	_expect(destroyed.size() == 1 and String((destroyed[0] as Dictionary).get("result", "")) == str(SimulationWorld.PLAYER_COMMAND_CENTER_ID), "after-action capture should exclude destruction of buildings unknown to the observer", failures)
 	_expect(losses.size() == 1 and String((losses[0] as Dictionary).get("actor_id", "")) == "0", "after-action capture should not identify an attacker absent from the observer's legal knowledge", failures)
+
+
+func _test_tactical_contribution_localization(failures: Array[String]) -> void:
+	var source := _signed_source_report()
+	(source["cards"][0] as Dictionary).merge({"tactical_started": 3, "tactical_completed": 2, "tactical_interrupted": 1, "supply_spent": 9, "contacts_identified": 4, "routes_opened": 1, "suppression_applied": 5.5, "ammunition_restored": 7, "organization_restored": 8.5}, true)
+	_resign(source)
+	var debrief := BattleDebrief.new()
+	debrief._review = AfterActionReviewProjector.new().project(source, 1)
+	var previous_locale := TranslationServer.get_locale()
+	for locale in ["en", "zh_CN"]:
+		TranslationServer.set_locale(locale)
+		var row := debrief._create_card_row(&"ironwall_assault_group", {"authorized_strength": 12, "available_strength": 9})
+		var text := (row.get_child(1) as Label).text
+		_expect(text.contains("3 / 2 / 1") and text.contains("5.5") and text.contains("8.5") and not text.contains("AFTER_ACTION_"), "both locales must render measured tactical values in the actual debrief row", failures)
+		var point := AfterActionTurningPoint.new(&"fixture", 1, 1, "1", &"ironwall_assault_group", 0, &"tactical_action_interrupted", &"tactical_action_interrupted", "TACTICAL_MOVED", 1, 40)
+		_expect(debrief._turning_point_text(point).contains(GameText.t(&"TACTICAL_MOVED")), "interruption timeline must show the localized actual reason", failures)
+		row.free()
+	TranslationServer.set_locale(previous_locale)
+	debrief.free()
 
 
 func _signed_source_report() -> Dictionary:

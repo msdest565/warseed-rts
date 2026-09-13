@@ -8,6 +8,8 @@ func run() -> Array[String]:
 	_test_strategy_knowledge_boundary(failures)
 	_test_strategy_headquarters_target_requires_visible_snapshot(failures)
 	_test_rejection_contract(failures)
+	_test_tactical_event_contributions(failures)
+	_test_same_tick_supply_attribution(failures)
 	return failures
 
 
@@ -29,7 +31,7 @@ func _test_report_contract_and_determinism(failures: Array[String]) -> void:
 	var control_summary := first.get("control_summary", {}) as Dictionary
 	_expect(int(control_summary.get("takeovers", 0)) == 1, "gameplay report should preserve whole-card takeover sessions", failures)
 	var cards := first.get("cards", []) as Array
-	_expect(cards.size() == 4 and _has_card_contribution_fields(cards), "gameplay report should preserve a contribution record for every friendly card", failures)
+	_expect(cards.size() == 6 and _has_card_contribution_fields(cards), "gameplay report should preserve a contribution record for every Grey Ridge tactical card", failures)
 	for point_variant in first.get("causal_turning_points", []):
 		var point := point_variant as Dictionary
 		_expect(_has_required_causal_fields(point), "every causal turning point should carry tick, actor/card/task, reason, source, and result", failures)
@@ -137,6 +139,87 @@ func _test_rejection_contract(failures: Array[String]) -> void:
 	_expect(strategy.decide(&"unknown", world.create_snapshot(), {}).is_empty() and strategy.last_rejection_reason == "UNKNOWN_STRATEGY_ID", "unknown baseline strategy ids must fail explicitly", failures)
 	var wrong_observer := world.create_faction_snapshot(SimulationWorld.ENEMY_PLAYER_ID)
 	_expect(strategy.decide(&"split_axis", wrong_observer, {}).is_empty() and strategy.last_rejection_reason == "WRONG_OBSERVER_FACTION", "player baseline strategy must reject another faction's observation", failures)
+
+
+func _test_tactical_event_contributions(failures: Array[String]) -> void:
+	var world := SimulationWorld.new(true, false, SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var snapshot := world.create_faction_snapshot(1)
+	var report := GameplayObservabilityReport.new()
+	report.start(snapshot)
+	var id := "falcon_recon_group"
+	var member: int = snapshot.get_unit_card(StringName(id)).active_member_entity_ids[0]
+	var suppression := SimulationEvent.new(1, SimulationEvent.Kind.SUPPRESSION_APPLIED, member, "target=1001;amount=12.0")
+	suppression.applied_amount = 3.0
+	report.observe(snapshot, [
+		SimulationEvent.new(1, SimulationEvent.Kind.TACTICAL_ACTION_STARTED, 1, "card=%s;ability=renamed_action;reason=TACTICAL_PREPARING" % id),
+		SimulationEvent.new(1, SimulationEvent.Kind.TACTICAL_ACTION_COMPLETED, 1, "card=%s;reason=TACTICAL_ACTIVE" % id),
+		SimulationEvent.new(1, SimulationEvent.Kind.TACTICAL_ACTION_INTERRUPTED, 1, "card=%s;reason=TACTICAL_MOVED" % id),
+		SimulationEvent.new(1, SimulationEvent.Kind.TACTICAL_IDENTIFIED, 1001, "faction=1;card=%s" % id),
+		SimulationEvent.new(1, SimulationEvent.Kind.ENGINEERING_ROUTE_OPENED, 1, "engineer_card=%s;route=fixture" % id),
+		SimulationEvent.new(1, SimulationEvent.Kind.AMMUNITION_RESTORED, 1, "card=%s;rounds=7;organization_restored=5.5" % id),
+		suppression,
+	])
+	var source := report.create_report()
+	var review := AfterActionReviewProjector.new().project(source, 1)
+	var card: AfterActionCardContribution
+	for entry in review.card_contributions:
+		if entry.unit_card_id == StringName(id):
+			card = entry
+	_expect(card != null, "the measured card must exist in the review", failures)
+	if card == null:
+		return
+	_expect(card.unit_card_id == StringName(id) and card.tactical_started == 1 and card.tactical_completed == 1 and card.tactical_interrupted == 1, "tactical event kinds, not ability names, must drive after-action counts", failures)
+	_expect(card.contacts_identified == 1 and card.routes_opened == 1 and card.ammunition_restored == 7 and card.organization_restored == 5.5, "after-action DTO must preserve measured identification, routes and restoration", failures)
+	_expect(card.suppression_applied == 3.0 and card.damage_dealt == 0.0 and card.kills == 0, "effective suppression must stay separate from attempted pressure, HP damage and kills", failures)
+	var copied := card.duplicate_entry()
+	card.organization_restored = 999
+	_expect(copied.organization_restored == 5.5, "new contribution fields must be value copies", failures)
+	var old := AfterActionCardContribution.new({"card_id": id})
+	_expect(old.tactical_started == 0 and old.suppression_applied == 0 and old.supply_spent == 0, "old reports must default new metrics to zero", failures)
+	var before := report.fingerprint()
+	report.observe(snapshot, [
+		SimulationEvent.new(1, SimulationEvent.Kind.TACTICAL_ACTION_STARTED, 2, "card=%s;ability=secret" % id),
+		SimulationEvent.new(1, SimulationEvent.Kind.TACTICAL_ACTION_COMPLETED, 2, "card=grey_ridge_enemy_assault;reason=secret"),
+		SimulationEvent.new(1, SimulationEvent.Kind.TACTICAL_ACTION_INTERRUPTED, 2, "card=%s;reason=secret" % id),
+		SimulationEvent.new(1, SimulationEvent.Kind.TACTICAL_IDENTIFIED, 987654, "faction=2;card=%s" % id),
+		SimulationEvent.new(1, SimulationEvent.Kind.ENGINEERING_ROUTE_OPENED, 2, "engineer_card=%s;route=secret" % id),
+		SimulationEvent.new(1, SimulationEvent.Kind.AMMUNITION_RESTORED, 2, "card=%s;rounds=999;organization_restored=99" % id),
+		SimulationEvent.new(1, SimulationEvent.Kind.SUPPLY_CHANGED, 2, "delta=-99;source=tactical;card=%s" % id),
+		SimulationEvent.new(1, SimulationEvent.Kind.SUPPRESSION_APPLIED, 987654, "target=%d;amount=99" % member),
+	])
+	_expect(report.fingerprint() == before, "hidden enemy events must not change local contributions, costs or reasons", failures)
+
+
+func _test_same_tick_supply_attribution(failures: Array[String]) -> void:
+	var world := SimulationWorld.new(true, false, SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var snapshot := world.create_faction_snapshot(1)
+	var events: Array[SimulationEvent] = [
+		SimulationEvent.new(1, SimulationEvent.Kind.SUPPORT_STARTED, 1, "reinforce=ironwall_assault_group"),
+		SimulationEvent.new(1, SimulationEvent.Kind.SUPPLY_CHANGED, 1, "delta=-3;source=support;support_kind=2;card=ironwall_assault_group"),
+		SimulationEvent.new(1, SimulationEvent.Kind.SUPPLY_CHANGED, 1, "delta=-2;source=tactical;card=falcon_recon_group"),
+		SimulationEvent.new(1, SimulationEvent.Kind.SUPPLY_CHANGED, 1, "delta=-4;source=deployment;card=thunder_fire_group"),
+		SimulationEvent.new(1, SimulationEvent.Kind.SUPPLY_CHANGED, 1, "delta=-1"),
+	]
+	var expected: Dictionary = {}
+	for reverse in [false, true]:
+		var report := GameplayObservabilityReport.new()
+		report.start(snapshot)
+		if reverse:
+			events.reverse()
+		report.observe(snapshot, events)
+		var source := report.create_report()
+		var costs: Dictionary = {}
+		for item in source["supply_commitments"]:
+			costs[item["category"]] = item["total_supply"]
+		_expect(costs == {"support.field_reinforcement": 3, "tactical": 2, "deployment": 4, "other": 1}, "same-tick costs require explicit sources; missing source must remain other", failures)
+		if reverse:
+			_expect(source["cards"] == expected["cards"], "cost attribution must not depend on event ordering in the tick", failures)
+		else:
+			expected = source
+		var review := AfterActionReviewProjector.new().project(source, 1)
+		for contribution in review.card_contributions:
+			if contribution.unit_card_id == &"falcon_recon_group":
+				_expect(contribution.supply_spent == 2, "tactical cost must belong to the acting card", failures)
 
 
 func _event_slice(events: Array[SimulationEvent], start: int) -> Array[SimulationEvent]:

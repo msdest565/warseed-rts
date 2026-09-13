@@ -88,6 +88,14 @@ function Invoke-UnfilteredFullMatchMatrix {
 }
 
 $repositoryRoot = Split-Path $PSScriptRoot -Parent
+$verificationProfile = Join-Path $repositoryRoot "artifacts\verification-profile"
+$verificationRoaming = Join-Path $verificationProfile "AppData\Roaming"
+$verificationLocal = Join-Path $verificationProfile "AppData\Local"
+[IO.Directory]::CreateDirectory($verificationRoaming) | Out-Null
+[IO.Directory]::CreateDirectory($verificationLocal) | Out-Null
+# Keep Godot's user:// and editor caches inside the writable workspace during CI/headless runs.
+$env:APPDATA = $verificationRoaming
+$env:LOCALAPPDATA = $verificationLocal
 $requestedGodot = $GodotConsolePath
 if ([string]::IsNullOrWhiteSpace($requestedGodot)) {
     $requestedGodot = [Environment]::GetEnvironmentVariable("WARSEED_GODOT_CONSOLE")

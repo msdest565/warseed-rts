@@ -19,10 +19,14 @@ var decision_preview_route := PackedVector2Array()
 var decision_preview_target := Vector2.ZERO
 var decision_preview_radius := 0.0
 var decision_preview_label := ""
+var _fog_fill_batch: MultiMeshInstance2D
+var _fog_hatch_batch: MultiMeshInstance2D
+var _fog_zones: Array[Dictionary] = []
 
 
 func set_situation(new_situation: BattlefieldSituationSnapshot) -> void:
 	situation = new_situation
+	_update_fog_batches()
 	queue_redraw()
 
 
@@ -38,6 +42,7 @@ func set_layer_visibility(frontlines: bool, tasks: bool, threats: bool, intellig
 	show_tasks = tasks
 	show_threats = threats
 	show_intelligence = intelligence
+	_update_fog_batches()
 	queue_redraw()
 
 
@@ -62,8 +67,6 @@ func clear_decision_preview() -> void:
 func _draw() -> void:
 	if situation == null:
 		return
-	if show_intelligence:
-		_draw_uncertainty()
 	if show_threats:
 		_draw_threats()
 	if show_frontlines:
@@ -74,14 +77,45 @@ func _draw() -> void:
 	_draw_decision_preview()
 
 
-func _draw_uncertainty() -> void:
-	for zone in situation.uncertainty_zones:
+func _update_fog_batches() -> void:
+	if _fog_fill_batch == null:
+		_fog_fill_batch = _create_fog_batch()
+		_fog_hatch_batch = _create_fog_batch()
+	_fog_fill_batch.visible = show_intelligence and situation != null
+	_fog_hatch_batch.visible = _fog_fill_batch.visible
+	if situation == null or _fog_zones == situation.uncertainty_zones:
+		return
+	_fog_zones.assign(situation.uncertainty_zones.duplicate(true))
+	var fill := _fog_fill_batch.multimesh
+	var hatch := _fog_hatch_batch.multimesh
+	fill.instance_count = _fog_zones.size()
+	hatch.instance_count = _fog_zones.size()
+	var hatch_count := 0
+	for index in range(_fog_zones.size()):
+		var zone := _fog_zones[index]
 		var rect := zone["rect"] as Rect2
 		var unexplored := int(zone["state"]) == FactionKnowledge.CellState.UNEXPLORED
-		draw_rect(rect, COLOR_UNKNOWN if unexplored else COLOR_EXPLORED, true)
+		fill.set_instance_transform_2d(index, Transform2D(Vector2(rect.size.x, 0), Vector2(0, rect.size.y), rect.get_center()))
+		fill.set_instance_color(index, COLOR_UNKNOWN if unexplored else COLOR_EXPLORED)
 		if unexplored and rect.size.x >= LogicGrid.CELL_SIZE * 3.0:
-			var hatch_y := rect.position.y + rect.size.y * 0.5
-			draw_line(Vector2(rect.position.x, hatch_y), Vector2(rect.end.x, hatch_y), Color(0.23, 0.31, 0.31, 0.16), 1.0)
+			hatch.set_instance_transform_2d(hatch_count, Transform2D(Vector2(rect.size.x, 0), Vector2(0, 1), rect.get_center()))
+			hatch.set_instance_color(hatch_count, Color(0.23, 0.31, 0.31, 0.16))
+			hatch_count += 1
+	hatch.visible_instance_count = hatch_count
+
+
+func _create_fog_batch() -> MultiMeshInstance2D:
+	var batch := MultiMeshInstance2D.new()
+	batch.show_behind_parent = true
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2.ONE
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_2D
+	multimesh.use_colors = true
+	multimesh.mesh = mesh
+	batch.multimesh = multimesh
+	add_child(batch)
+	return batch
 
 
 func _draw_threats() -> void:

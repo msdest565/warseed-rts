@@ -3,7 +3,7 @@ extends PanelContainer
 
 @onready var title_label: Label = $Margin/Layout/Header/Title
 @onready var hint_label: Label = $Margin/Layout/Header/Hint
-@onready var commander_row: VBoxContainer = $Margin/Layout/Scroll/CommanderRow
+@onready var commander_row: BoxContainer = $Margin/Layout/Scroll/CommanderRow
 
 @export var input_controller: InputController
 
@@ -29,6 +29,11 @@ var _reserve_drag_id: StringName
 var _reserve_drop_commander_id: StringName
 var _narrow_layout: bool = false
 var _commander_only: bool = false
+var _tactical_cards: bool = false
+var _posture_menus: Dictionary = {}
+var _overview_card_columns: int = 1
+var _overview_card_height: float = 40.0
+var _handoff_button: Button
 
 
 func _ready() -> void:
@@ -120,11 +125,17 @@ func _rebuild_if_needed() -> void:
 			unit_card.deployment_state,
 			unit_card.control_state,
 		])
+	if _tactical_cards:
+		signature_parts.clear()
+		signature_parts.append("overview:%d:%s" % [_overview_card_columns, _overview_card_height])
+		for commander in _snapshot.commanders:
+			signature_parts.append("%s:%s" % [commander.definition_id, commander.subordinate_unit_card_ids])
 	var signature := "%s:%s:%s" % ["|".join(signature_parts), TranslationServer.get_locale(), _commander_only]
 	if signature == _content_signature:
 		return
 	_content_signature = signature
 	for child in commander_row.get_children():
+		commander_row.remove_child(child)
 		child.queue_free()
 	_unit_card_buttons.clear()
 	_unit_card_control_buttons.clear()
@@ -137,10 +148,12 @@ func _rebuild_if_needed() -> void:
 	_commander_route_submit_buttons.clear()
 	_commander_route_undo_buttons.clear()
 	_commander_status_labels.clear()
+	_posture_menus.clear()
 	for commander in _snapshot.commanders:
-		if _commander_only and commander.faction_id != SimulationWorld.LOCAL_PLAYER_ID:
+		if (_commander_only or _tactical_cards) and commander.faction_id != SimulationWorld.LOCAL_PLAYER_ID:
 			continue
-		commander_row.add_child(_create_commander_column(commander))
+		commander_row.add_child(_create_tactical_column(commander) if _tactical_cards else _create_commander_column(commander))
+	_update_dynamic_content()
 
 
 func _create_commander_column(commander: CommanderSnapshot) -> VBoxContainer:
@@ -252,7 +265,7 @@ func _create_commander_column(commander: CommanderSnapshot) -> VBoxContainer:
 		card_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		card_button.clip_text = true
 		card_button.text = _unit_card_body(unit_card)
-		card_button.tooltip_text = _unit_card_tooltip(unit_card, commander)
+		card_button.tooltip_text = "" if _tactical_cards else _unit_card_tooltip(unit_card, commander) + "\n" + CompositionText.from_snapshot(unit_card)
 		card_button.disabled = unit_card.deployment_state in [
 			UnitCardState.DeploymentState.WITHDRAWN,
 			UnitCardState.DeploymentState.DISABLED,
@@ -318,6 +331,8 @@ func _update_dynamic_content() -> void:
 		var status_label := _commander_status_labels.get(commander.definition_id) as Label
 		if status_label != null:
 			_apply_commander_status(status_label, commander)
+		if _tactical_cards:
+			_update_tactical_commander(commander)
 	for unit_card in _snapshot.unit_cards:
 		var card_button := _unit_card_buttons.get(unit_card.definition_id) as Button
 		if card_button == null:
@@ -325,7 +340,7 @@ func _update_dynamic_content() -> void:
 		card_button.text = _unit_card_body(unit_card)
 		var commander := _snapshot.get_commander(unit_card.commander_definition_id)
 		if commander != null:
-			card_button.tooltip_text = _unit_card_tooltip(unit_card, commander)
+			card_button.tooltip_text = "" if _tactical_cards else _unit_card_tooltip(unit_card, commander) + "\n" + CompositionText.from_snapshot(unit_card)
 		card_button.disabled = unit_card.deployment_state in [
 			UnitCardState.DeploymentState.WITHDRAWN,
 			UnitCardState.DeploymentState.DISABLED,
@@ -336,6 +351,10 @@ func _update_dynamic_content() -> void:
 		var deploy_button := _unit_card_deploy_buttons.get(unit_card.definition_id) as Button
 		if deploy_button != null:
 			_update_deploy_button(deploy_button, unit_card)
+	if _handoff_button != null:
+		_handoff_button.text = GameText.t(&"CONTROL_AI_BOARD")
+		_handoff_button.tooltip_text = GameText.t(&"CONTROL_AI_HELP")
+		_handoff_button.disabled = input_controller == null or input_controller.get_handoff_card_ids().is_empty()
 
 
 func _apply_commander_status(label: Label, commander: CommanderSnapshot) -> void:
@@ -343,7 +362,7 @@ func _apply_commander_status(label: Label, commander: CommanderSnapshot) -> void
 		GameText.t(commander.behavior_state_key), GameText.t(commander.behavior_reason_key),
 	]
 	var eta_text := _commander_eta_text(commander)
-	label.text = "%s\n%s" % [behavior_text, GameText.t(&"COMMANDER_OUTLOOK_LINE") % [
+	var status_text := "%s\n%s" % [behavior_text, GameText.t(&"COMMANDER_OUTLOOK_LINE") % [
 		eta_text, GameText.t(commander.risk_key), GameText.t(commander.exit_condition_key),
 	]]
 	label.tooltip_text = GameText.t(&"COMMANDER_OUTLOOK_TOOLTIP") % [
@@ -356,6 +375,13 @@ func _apply_commander_status(label: Label, commander: CommanderSnapshot) -> void
 		GameText.t(commander.risk_reason_key),
 		GameText.t(commander.exit_condition_key),
 	]
+	if _tactical_cards:
+		var state := _tactical_activity(commander)
+		status_text = GameText.t([&"CONTROL_STATE_IDLE", &"CONTROL_STATE_WORKING", &"CONTROL_STATE_CONTACT"][state])
+		var status_color: Color = [Color("80dba0"), Color("eed16a"), Color("ff807a")][state]
+		if label.get_theme_color("font_color") != status_color:
+			label.add_theme_color_override("font_color", status_color)
+	label.text = status_text
 
 
 func _commander_eta_text(commander: CommanderSnapshot) -> String:
@@ -404,8 +430,8 @@ func _create_control_button(unit_card: UnitCardSnapshot) -> Button:
 			button.text = GameText.t(&"UNIT_CARD_ACTION_RETURNING") % unit_card.returning_member_count
 			button.disabled = true
 		UnitCardState.ControlState.PLAYER_CONTROLLED:
-			button.text = GameText.t(&"UNIT_CARD_ACTION_MANUAL")
-			button.disabled = true
+			button.text = GameText.t(&"UNIT_CARD_ACTION_RETURN")
+			button.pressed.connect(_set_unit_card_control.bind(unit_card.definition_id, UnitCardControlCommand.Action.RETURN_TO_COMMANDER))
 		_:
 			button.text = GameText.t(&"UNIT_CARD_ACTION_UNASSIGNED")
 			button.disabled = true
@@ -708,7 +734,21 @@ func _update_selection_state() -> void:
 		))
 
 
+func set_handoff_available(available: bool) -> void:
+	if _handoff_button != null:
+		_handoff_button.disabled = not available
+
+
 func _unit_card_body(unit_card: UnitCardSnapshot) -> String:
+	if _tactical_cards:
+		var badge := ""
+		if unit_card.deployment_state == UnitCardState.DeploymentState.RESERVE:
+			badge = GameText.t(&"TACTICAL_RESERVE_CARD")
+		elif unit_card.control_state in [UnitCardState.ControlState.PLAYER_CONTROLLED, UnitCardState.ControlState.PLAYER_OVERRIDDEN]:
+			badge = GameText.t(&"CONTROL_MANUAL_BADGE")
+		elif unit_card.control_state == UnitCardState.ControlState.RETURNING:
+			badge = GameText.t(&"CONTROL_RETURNING_BADGE")
+		return "%s\n%d / %d%s" % [GameText.t(unit_card.display_name_key), _display_strength(unit_card), unit_card.authorized_strength, " · " + badge if not badge.is_empty() else ""]
 	match unit_card.deployment_state:
 		UnitCardState.DeploymentState.RESERVE:
 			return GameText.t(&"UNIT_CARD_RESERVE_BODY") % [
@@ -793,4 +833,200 @@ func _ensure_node_bindings() -> void:
 	if hint_label == null:
 		hint_label = get_node_or_null("Margin/Layout/Header/Hint") as Label
 	if commander_row == null:
-		commander_row = get_node_or_null("Margin/Layout/Scroll/CommanderRow") as VBoxContainer
+		commander_row = get_node_or_null("Margin/Layout/Scroll/CommanderRow") as BoxContainer
+
+
+func set_tactical_cards(enabled: bool) -> void:
+	_ensure_node_bindings()
+	if _tactical_cards == enabled:
+		return
+	_tactical_cards = enabled
+	_commander_only = false
+	if commander_row != null:
+		commander_row.vertical = not enabled
+	var scroll := get_node_or_null("Margin/Layout/Scroll") as ScrollContainer
+	if scroll != null:
+		scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED if enabled else ScrollContainer.SCROLL_MODE_AUTO
+	if enabled and _handoff_button == null:
+		_handoff_button = Button.new()
+		_handoff_button.custom_minimum_size.y = 32.0
+		_handoff_button.custom_minimum_size.x = 210.0
+		_handoff_button.clip_text = true
+		_handoff_button.add_theme_font_size_override("font_size", 11)
+		_handoff_button.pressed.connect(func() -> void: input_controller.return_selected_cards_to_ai())
+		get_node("Margin/Layout/Header").add_child(_handoff_button)
+		title_label.visible = true
+	_content_signature = ""
+	_rebuild_if_needed()
+
+
+func is_tactical_cards() -> bool:
+	return _tactical_cards
+
+
+func get_overview_height(available_width: float) -> float:
+	if _snapshot == null:
+		return 220.0
+	var local_commanders: Array[CommanderSnapshot] = []
+	for commander in _snapshot.commanders:
+		if commander.faction_id == SimulationWorld.LOCAL_PLAYER_ID:
+			local_commanders.append(commander)
+	var group_width := (available_width - 20.0 - maxf(0.0, local_commanders.size() - 1) * 8.0) / maxi(1, local_commanders.size())
+	var card_columns := maxi(1, floori(group_width / 110.0))
+	var card_height := 40.0 if group_width / card_columns >= 110.0 else 48.0
+	if card_columns != _overview_card_columns or card_height != _overview_card_height:
+		_overview_card_columns = card_columns
+		_overview_card_height = card_height
+		_content_signature = ""
+		_rebuild_if_needed()
+	var content_height := 0.0
+	for commander in local_commanders:
+		var card_rows := ceili(float(commander.subordinate_unit_card_ids.size()) / card_columns)
+		var cards_height := float(card_rows) * card_height + maxi(0, card_rows - 1) * 4.0
+		content_height = maxf(content_height, 72.0 + cards_height)
+	return content_height + 52.0
+
+
+func _create_tactical_column(commander: CommanderSnapshot) -> BoxContainer:
+	var column := BoxContainer.new()
+	column.vertical = true
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_theme_constant_override("separation", 4)
+	var details := VBoxContainer.new()
+	details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_child(details)
+	var button := Button.new()
+	button.clip_text = true
+	button.custom_minimum_size.y = 32.0
+	button.add_theme_font_size_override("font_size", 11)
+	button.pressed.connect(_select_commander.bind(commander.definition_id))
+	button.gui_input.connect(_handle_commander_button_input.bind(commander.definition_id))
+	details.add_child(button)
+	_commander_buttons[commander.definition_id] = button
+	var controls := HBoxContainer.new()
+	controls.add_theme_constant_override("separation", 2)
+	details.add_child(controls)
+	var status := Label.new()
+	status.add_theme_font_size_override("font_size", 10)
+	status.custom_minimum_size.x = 24.0
+	status.clip_text = true
+	controls.add_child(status)
+	_commander_status_labels[commander.definition_id] = status
+	var posture := OptionButton.new()
+	posture.fit_to_longest_item = false
+	posture.custom_minimum_size.y = 32.0
+	posture.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	posture.add_theme_font_size_override("font_size", 11)
+	for value in range(CommanderState.Posture.size()):
+		posture.add_item(GameText.enum_name("COMMANDER_POSTURE", CommanderState.Posture.keys()[value]), value)
+	posture.select(commander.posture)
+	posture.item_selected.connect(_set_commander_posture.bind(commander.definition_id))
+	controls.add_child(posture)
+	_posture_menus[commander.definition_id] = posture
+	var cards := GridContainer.new()
+	cards.columns = _overview_card_columns
+	cards.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cards.add_theme_constant_override("v_separation", 4)
+	cards.add_theme_constant_override("h_separation", 4)
+	column.add_child(cards)
+	for card_id in commander.subordinate_unit_card_ids:
+		var card := _snapshot.get_unit_card(card_id)
+		if card == null:
+			continue
+		var card_button := Button.new()
+		card_button.custom_minimum_size.y = _overview_card_height
+		card_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		card_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		card_button.clip_text = true
+		card_button.toggle_mode = true
+		card_button.add_theme_font_size_override("font_size", 11)
+		card_button.pressed.connect(_select_unit_card.bind(card_id))
+		cards.add_child(card_button)
+		_unit_card_buttons[card_id] = card_button
+	return column
+
+
+func _display_strength(card: UnitCardSnapshot) -> int:
+	return card.available_strength if card.deployment_state in [UnitCardState.DeploymentState.RESERVE, UnitCardState.DeploymentState.DEPLOYING] else card.current_strength
+
+
+func _update_tactical_commander(commander: CommanderSnapshot) -> void:
+	var button := _commander_buttons.get(commander.definition_id) as Button
+	if button == null:
+		return
+	var menu := _posture_menus.get(commander.definition_id) as OptionButton
+	if menu != null and menu.selected != commander.posture and not menu.get_popup().visible and (input_controller == null or input_controller.simulation_host == null or input_controller.simulation_host.get_queue_size() == 0):
+		menu.select(commander.posture)
+	var strength := 0
+	var capacity := 0
+	for card_id in commander.subordinate_unit_card_ids:
+		var card := _snapshot.get_unit_card(card_id)
+		if card != null:
+			strength += _display_strength(card)
+			capacity += card.authorized_strength
+	button.text = "%s %d/%d\n%s" % [GameText.t(commander.display_name_key), strength, capacity, GameText.t(commander.personality_key)]
+
+
+func _tactical_activity(commander: CommanderSnapshot) -> int:
+	var working := false
+	for card_id in commander.subordinate_unit_card_ids:
+		var card := _snapshot.get_unit_card(card_id)
+		if card == null:
+			continue
+		working = working or card.deployment_state == UnitCardState.DeploymentState.DEPLOYING
+		working = working or not card.tactical_ability_id.is_empty() and card.tactical_status_key in [&"TACTICAL_PREPARING", &"TACTICAL_ACTIVE"]
+		for unit_id in card.active_member_entity_ids:
+			var unit := _snapshot.get_unit(unit_id)
+			if unit == null:
+				continue
+			if unit.is_attacking:
+				return 2
+			var task := _snapshot.get_task(unit.assigned_task_id)
+			working = working or unit.is_moving or (task != null and task.lifecycle in [TaskState.Lifecycle.PREPARING, TaskState.Lifecycle.EXECUTING])
+			for enemy in _snapshot.units:
+				if enemy.enabled and enemy.faction_id != commander.faction_id and enemy.is_visible_to_local_player and unit.position.distance_squared_to(enemy.position) <= unit.sight_range * unit.sight_range:
+					return 2
+	if commander.behavior_state_key == &"COMMANDER_BEHAVIOR_ENGAGING":
+		return 2
+	return 1 if working or not commander.active_intent_id.is_empty() else 0
+
+
+func get_hover_context(mouse_position: Vector2) -> Dictionary:
+	if not _tactical_cards or _snapshot == null:
+		return {}
+	var open_menu: OptionButton
+	for candidate in _posture_menus.values():
+		if candidate.get_popup().visible:
+			open_menu = candidate
+	for commander_id in _posture_menus:
+		var menu := _posture_menus[commander_id] as OptionButton
+		if open_menu != null and menu != open_menu:
+			continue
+		var popup := menu.get_popup()
+		var index := menu.selected
+		if popup.visible:
+			if not Rect2(Vector2.ZERO, Vector2(popup.size)).has_point(popup.get_mouse_position()):
+				return {}
+			index = popup.get_focused_item()
+		elif not menu.get_global_rect().has_point(mouse_position):
+			continue
+		if index >= 0:
+			return {"key": "army-posture:%s:%d:%s" % [commander_id, index, popup.visible], "text": TacticalHelp.posture(menu.get_item_id(index)), "avoid": Rect2(popup.position, popup.size) if popup.visible else Rect2(), "anchor": Vector2(popup.position) + Vector2(-18, popup.size.y) if popup.visible else mouse_position}
+	for commander_id in _commander_buttons:
+		var button := _commander_buttons[commander_id] as Button
+		if button.get_global_rect().has_point(mouse_position):
+			var commander := _snapshot.get_commander(commander_id)
+			return {"key": "army-personality:%s" % commander_id, "text": button.text + "\n" + TacticalHelp.personality(commander.personality_key)}
+	for card_id in _unit_card_buttons:
+		var button := _unit_card_buttons[card_id] as Button
+		if button.get_global_rect().has_point(mouse_position):
+			var card := _snapshot.get_unit_card(card_id)
+			return {"key": "army-card:%s" % card_id, "text": button.text + "\n" + _unit_card_tooltip(card, _snapshot.get_commander(card.commander_definition_id)) + "\n" + CompositionText.from_snapshot(card)}
+	return {}
+
+
+func has_open_help_popup() -> bool:
+	for menu in _posture_menus.values():
+		if menu.get_popup().visible:
+			return true
+	return false

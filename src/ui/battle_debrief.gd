@@ -17,6 +17,7 @@ var rows: VBoxContainer
 var fight_again_button: Button
 var return_to_operations_button: Button
 var feedback_button: Button
+var roster_status: RosterStatusPanel
 
 var simulation_host: SimulationHost
 var _record: Dictionary = {}
@@ -39,6 +40,13 @@ func _ready() -> void:
 func configure(host: SimulationHost) -> void:
 	_resolve_nodes()
 	simulation_host = host
+	if roster_status == null:
+		roster_status = RosterStatusPanel.new()
+		summary_label.get_parent().add_child(roster_status)
+		summary_label.get_parent().move_child(roster_status, summary_label.get_index() + 1)
+	roster_status.configure(host)
+	if not host.campaign_persistence_changed.is_connected(_refresh):
+		host.campaign_persistence_changed.connect(_refresh)
 	refresh_locale()
 	if not simulation_host.campaign_concluded.is_connected(show_debrief):
 		simulation_host.campaign_concluded.connect(show_debrief)
@@ -107,6 +115,11 @@ func _resolve_nodes() -> void:
 func _refresh() -> void:
 	if _record.is_empty():
 		return
+	if roster_status != null:
+		roster_status.refresh()
+	if simulation_host != null:
+		fight_again_button.disabled = simulation_host.has_campaign_error()
+		return_to_operations_button.disabled = simulation_host.has_campaign_error()
 	_apply_responsive_layout()
 	var result_key := String(_record.get("last_result", "defeat"))
 	if result_key == "victory":
@@ -246,6 +259,8 @@ func _turning_point_text(entry: AfterActionTurningPoint) -> String:
 			return GameText.t(&"AFTER_ACTION_EVENT_EXCEPTION_ACTION") % entry.result
 		"supply_committed":
 			return GameText.t(&"AFTER_ACTION_EVENT_SUPPLY") % entry.result
+		"tactical_action_started", "tactical_action_completed", "tactical_action_interrupted":
+			return GameText.t(StringName("AFTER_ACTION_" + String(entry.reason_key).to_upper())) % GameText.t(StringName(entry.result))
 		"unit_card_takeover":
 			return GameText.t(&"AFTER_ACTION_EVENT_TAKEOVER") % _card_display_name(entry.unit_card_id)
 		"unit_card_return_result":
@@ -378,6 +393,11 @@ func _create_card_row(card_id: StringName, card_record: Dictionary) -> Control:
 		strength_label.text += "\n" + GameText.t(&"AFTER_ACTION_CARD_METRICS") % [
 			roundi(contribution.damage_dealt), contribution.kills,
 			contribution.tasks_completed, contribution.tasks_blocked,
+		]
+		strength_label.text += "\n" + GameText.t(&"AFTER_ACTION_TACTICAL_METRICS") % [
+			contribution.tactical_started, contribution.tactical_completed, contribution.tactical_interrupted, contribution.supply_spent,
+			contribution.contacts_identified, contribution.routes_opened, contribution.suppression_applied,
+			contribution.ammunition_restored, contribution.organization_restored,
 		]
 	strength_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	strength_label.add_theme_color_override("font_color", Color(0.72, 0.79, 0.76))

@@ -27,7 +27,6 @@ var _turning_points: Array[Dictionary] = []
 var _entity_card_ids: Dictionary = {}
 var _entity_faction_ids: Dictionary = {}
 var _last_damage_source_by_target: Dictionary = {}
-var _pending_supply_context_by_tick: Dictionary = {}
 var _outcome: Dictionary = {}
 var _exceptions: Dictionary = {}
 var _active_exception_ids: Dictionary = {}
@@ -66,10 +65,10 @@ func record_command(command: GameCommand, validation: CommandValidationResult, d
 	if command == null or validation == null:
 		return
 	var accepted := validation.is_accepted()
-	var actor_id := String(descriptor.get("actor_id", descriptor.get("subject", "")))
-	var card_id := String(descriptor.get("card_id", ""))
+	var actor_id := str(descriptor.get("actor_id", descriptor.get("subject", "")))
+	var card_id := str(descriptor.get("card_id", ""))
 	var task_id := int(descriptor.get("task_id", 0))
-	var reason_key := String(descriptor.get("reason_key", "strategy_intent"))
+	var reason_key := str(descriptor.get("reason_key", "strategy_intent"))
 	var record := {
 		"tick": command.issued_tick,
 		"command_id": command.command_id,
@@ -84,20 +83,20 @@ func record_command(command: GameCommand, validation: CommandValidationResult, d
 	_commands.append(record)
 	if not accepted:
 		return
-	var category := String(descriptor.get("category", ""))
-	var action := String(descriptor.get("action", ""))
+	var category := str(descriptor.get("category", ""))
+	var action := str(descriptor.get("action", ""))
 	if _first_high_level_order.is_empty() and category == "commander" and action in ["objective", "intent"]:
 		_first_high_level_order = record.duplicate(true)
 		_append_turning_point(command.issued_tick, actor_id, card_id, task_id, "first_high_level_order", "command_accepted", action)
 	if bool(descriptor.get("is_correction", false)):
 		var correction := record.duplicate(true)
-		correction["correction_reason"] = String(descriptor.get("correction_reason", reason_key))
+		correction["correction_reason"] = str(descriptor.get("correction_reason", reason_key))
 		_player_corrections.append(correction)
 		_append_turning_point(command.issued_tick, actor_id, card_id, task_id, "player_correction", "command_accepted", correction["correction_reason"])
 	if action == "card_control" and int(descriptor.get("control_action", -1)) == UnitCardControlCommand.Action.RETURN_TO_COMMANDER and _active_control_sessions.has(card_id):
 		(_active_control_sessions[card_id] as Dictionary)["return_started_tick"] = command.issued_tick
 	if descriptor.has("exception_id"):
-		record_exception_action(StringName(descriptor["exception_id"]), String(descriptor.get("exception_action", action)), command.issued_tick, accepted)
+		record_exception_action(StringName(descriptor["exception_id"]), str(descriptor.get("exception_action", action)), command.issued_tick, accepted)
 
 
 func observe(snapshot: WorldSnapshot, new_events: Array[SimulationEvent] = []) -> bool:
@@ -236,7 +235,7 @@ func _report_without_fingerprint() -> Dictionary:
 			task_counts["blocked"] = int(task_counts["blocked"]) + 1
 		if bool(task.get("entered_retreat", false)):
 			task_counts["retreated"] = int(task_counts["retreated"]) + 1
-		match String(task.get("final_lifecycle", "")):
+		match str(task.get("final_lifecycle", "")):
 			"COMPLETED": task_counts["completed"] = int(task_counts["completed"]) + 1
 			"FAILED": task_counts["failed"] = int(task_counts["failed"]) + 1
 			"CANCELLED": task_counts["cancelled"] = int(task_counts["cancelled"]) + 1
@@ -346,6 +345,15 @@ func _observe_cards(snapshot: WorldSnapshot) -> void:
 				"kills": 0,
 				"tasks_completed": 0,
 				"tasks_blocked": 0,
+				"supply_spent": 0,
+				"tactical_started": 0,
+				"tactical_completed": 0,
+				"tactical_interrupted": 0,
+				"contacts_identified": 0,
+				"routes_opened": 0,
+				"suppression_applied": 0.0,
+				"ammunition_restored": 0,
+				"organization_restored": 0.0,
 				"final_deployment_state": UnitCardState.DeploymentState.keys()[card_snapshot.deployment_state],
 				"final_control_state": UnitCardState.ControlState.keys()[card_snapshot.control_state],
 			}
@@ -466,21 +474,24 @@ func _observe_events(new_events: Array[SimulationEvent]) -> void:
 		var event_name: String = String(SimulationEvent.Kind.keys()[event.kind]).to_lower()
 		var detail := _parse_detail(event.detail)
 		match event.kind:
-			SimulationEvent.Kind.UNIT_CARD_DEPLOYMENT_STARTED:
-				_pending_supply_context_by_tick[event.tick] = {
-					"category": "deployment",
-					"actor_id": str(observer_faction_id),
-					"card_id": String(detail.get("card", "")),
-					"source_event": event_name,
-				}
-			SimulationEvent.Kind.SUPPORT_STARTED:
-				var support_action := event.detail.get_slice("=", 0)
-				_pending_supply_context_by_tick[event.tick] = {
-					"category": "support.%s" % support_action,
-					"actor_id": str(event.entity_id),
-					"card_id": String(detail.get(support_action, "")) if support_action in ["fortify", "reinforce", "rapid_mobility", "frontline_logistics"] else "",
-					"source_event": event_name,
-				}
+			SimulationEvent.Kind.TACTICAL_ACTION_STARTED, SimulationEvent.Kind.TACTICAL_ACTION_COMPLETED, SimulationEvent.Kind.TACTICAL_ACTION_INTERRUPTED:
+				if event.entity_id != observer_faction_id or not _cards.has(str(detail.get("card", ""))):
+					continue
+				var metric := "tactical_started" if event.kind == SimulationEvent.Kind.TACTICAL_ACTION_STARTED else ("tactical_completed" if event.kind == SimulationEvent.Kind.TACTICAL_ACTION_COMPLETED else "tactical_interrupted")
+				_increment_card_metric(str(detail["card"]), metric, 1)
+				_append_turning_point(event.tick, str(observer_faction_id), str(detail["card"]), 0, event_name, event_name, str(detail.get("reason", "")))
+			SimulationEvent.Kind.TACTICAL_IDENTIFIED:
+				if int(detail.get("faction", 0)) == observer_faction_id:
+					_increment_card_metric(str(detail.get("card", "")), "contacts_identified", 1)
+			SimulationEvent.Kind.ENGINEERING_ROUTE_OPENED:
+				if event.entity_id == observer_faction_id:
+					_increment_card_metric(str(detail.get("engineer_card", "")), "routes_opened", 1)
+			SimulationEvent.Kind.AMMUNITION_RESTORED:
+				if event.entity_id == observer_faction_id:
+					_increment_card_metric(str(detail.get("card", "")), "ammunition_restored", int(detail.get("rounds", 0)))
+					_increment_card_metric(str(detail.get("card", "")), "organization_restored", float(detail.get("organization_restored", 0.0)))
+			SimulationEvent.Kind.SUPPRESSION_APPLIED:
+				_increment_card_metric(str(_entity_card_ids.get(event.entity_id, "")), "suppression_applied", event.applied_amount)
 			SimulationEvent.Kind.SUPPLY_CHANGED:
 				var delta := int(detail.get("delta", 0))
 				if event.entity_id == observer_faction_id and delta < 0:
@@ -499,23 +510,31 @@ func _observe_events(new_events: Array[SimulationEvent]) -> void:
 
 
 func _record_supply_commitment(event: SimulationEvent, amount: int) -> void:
-	var context := _pending_supply_context_by_tick.get(event.tick, {}) as Dictionary
-	var category := String(context.get("category", "other"))
+	var detail := _parse_detail(event.detail)
+	var category := str(detail.get("source", "other"))
+	if category == "support":
+		var kind := int(detail.get("support_kind", -1))
+		if kind >= 0 and kind < SupportOrderCommand.SupportKind.size():
+			category += "." + String(SupportOrderCommand.SupportKind.keys()[kind]).to_lower()
+	var card_id := str(detail.get("card", ""))
+	if not card_id.is_empty() and not _cards.has(card_id):
+		return
 	var record := _supply_commitments.get(category, {}) as Dictionary
 	if record.is_empty():
 		record = {"category": category, "count": 0, "total_supply": 0}
 		_supply_commitments[category] = record
 	record["count"] = int(record["count"]) + 1
 	record["total_supply"] = int(record["total_supply"]) + amount
-	_append_turning_point(event.tick, String(context.get("actor_id", observer_faction_id)), String(context.get("card_id", "")), 0, "supply_committed", String(context.get("source_event", "supply_changed")), "%s:%d" % [category, amount])
+	_increment_card_metric(card_id, "supply_spent", amount)
+	_append_turning_point(event.tick, str(observer_faction_id), card_id, 0, "supply_committed", "supply_changed", "%s:%d" % [category, amount])
 
 
 func _observe_damage(event: SimulationEvent, detail: Dictionary) -> void:
 	var target_id := int(detail.get("target", 0))
 	var amount := float(detail.get("amount", 0.0))
 	_last_damage_source_by_target[target_id] = event.entity_id
-	var source_card := String(_entity_card_ids.get(event.entity_id, ""))
-	var target_card := String(_entity_card_ids.get(target_id, ""))
+	var source_card := str(_entity_card_ids.get(event.entity_id, ""))
+	var target_card := str(_entity_card_ids.get(target_id, ""))
 	if not source_card.is_empty():
 		_increment_card_metric(source_card, "damage_dealt", amount)
 	if not target_card.is_empty():
@@ -523,13 +542,13 @@ func _observe_damage(event: SimulationEvent, detail: Dictionary) -> void:
 
 
 func _observe_unit_destroyed(event: SimulationEvent) -> void:
-	var target_card := String(_entity_card_ids.get(event.entity_id, ""))
+	var target_card := str(_entity_card_ids.get(event.entity_id, ""))
 	var source_id := int(_last_damage_source_by_target.get(event.entity_id, 0))
 	var observable_source_id := source_id if _entity_faction_ids.has(source_id) else 0
 	if not target_card.is_empty():
 		_increment_card_metric(target_card, "losses", 1)
 		_append_turning_point(event.tick, str(observable_source_id), target_card, 0, "unit_card_loss", "unit_destroyed", str(event.entity_id))
-	var source_card := String(_entity_card_ids.get(source_id, ""))
+	var source_card := str(_entity_card_ids.get(source_id, ""))
 	if not source_card.is_empty():
 		_increment_card_metric(source_card, "kills", 1)
 

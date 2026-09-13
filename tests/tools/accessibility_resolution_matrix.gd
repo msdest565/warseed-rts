@@ -33,7 +33,14 @@ func _initialize() -> void:
 
 
 func _run_resolution(resolution: Vector2i) -> void:
+	# Update the owning Window before the native size so a pending resize from
+	# the previous scene cannot reapply its old size between matrix entries.
+	root.content_scale_size = resolution
+	root.size = resolution
 	DisplayServer.window_set_size(resolution)
+	# Keep the right-side options physically reachable when testing a window wider than the monitor.
+	var screen_rect := DisplayServer.screen_get_usable_rect()
+	DisplayServer.window_set_position(Vector2i(mini(screen_rect.position.x, screen_rect.end.x - resolution.x), screen_rect.position.y))
 	DisplayServer.window_move_to_foreground()
 	root.content_scale_size = resolution
 	_mouse_position = Vector2.ZERO
@@ -91,6 +98,9 @@ func _run_resolution(resolution: Vector2i) -> void:
 		return
 
 	await _validate_battlefield(game, viewport_rect)
+	await _verify_tactical_planning(game, resolution)
+	await _verify_contextual_card_decisions(game, resolution, viewport_rect)
+	await _verify_control_handoff(game, resolution)
 	var zoom_report := await _verify_map_wheel_scope(game)
 	await _save_screenshot(resolution, "battlefield")
 	resolution_report["screens"]["battlefield"] = {
@@ -101,6 +111,7 @@ func _run_resolution(resolution: Vector2i) -> void:
 		"commander_board": _rect_array(game.army_board.get_global_rect()),
 	}
 
+	await _position_physical_pointer(game.pause_button.get_global_rect().get_center())
 	_send_motion(game.pause_button.get_global_rect().get_center(), 0)
 	await process_frame
 	var pause_hover := root.gui_get_hovered_control()
@@ -181,6 +192,15 @@ func _run_resolution(resolution: Vector2i) -> void:
 	game.playtest_feedback_dialog.visible = false
 	game.battle_debrief.visible = false
 	await _wait_frames(4)
+	# A tall test window extends below the physical monitor. Bring the real
+	# bottom-right history target onto the monitor before holding/clicking it.
+	DisplayServer.window_set_position(Vector2i(mini(screen_rect.position.x, screen_rect.end.x - resolution.x), mini(screen_rect.position.y, screen_rect.end.y - resolution.y)))
+	await _wait_frames(4)
+	await _position_physical_pointer(game.command_desk.history_button.get_global_rect().get_center())
+	_send_motion(game.command_desk.history_button.get_global_rect().get_center(), 0)
+	await _wait_frames(2)
+	if root.gui_get_hovered_control() != game.command_desk.history_button:
+		_fail("%s history button hover was covered by %s" % [resolution, root.gui_get_hovered_control()])
 	await _click_control(game.command_desk.history_button)
 	await _wait_frames(5)
 	if not game.command_desk.history_popup.visible or game.command_desk.get_decision_history_count() <= 0:
@@ -198,11 +218,279 @@ func _run_resolution(resolution: Vector2i) -> void:
 		_fail("%s decision failure dialog is wider than the viewport" % resolution)
 	else:
 		await _save_screenshot(resolution, "decision_failure")
-	_reports.append(resolution_report)
 	print("WARSEED_ACCESSIBILITY_STAGE resolution=%s map=%s" % [resolution, game.get_grey_ridge_map_rect()])
 	game.queue_free()
 	await _wait_frames(5)
 	current_scene = null
+	resolution_report["screens"]["twelve_card_overview"] = await _verify_twelve_card_overview(resolution)
+	resolution_report["screens"]["composition_persistence"] = await _verify_composition_persistence(resolution)
+	resolution_report["screens"]["tactical_cards"] = await _verify_tactical_cards(resolution)
+	_reports.append(resolution_report)
+
+
+func _click_physical_control(control: Control) -> void:
+	await _click_control(control)
+
+
+func _position_physical_pointer(point: Vector2) -> void:
+	DisplayServer.window_move_to_foreground()
+	await _wait_frames(2)
+	var usable := DisplayServer.screen_get_usable_rect()
+	var position := Vector2(DisplayServer.window_get_position())
+	var physical_point := position + point
+	var visible_point := physical_point.clamp(Vector2(usable.position) + Vector2(8, 8), Vector2(usable.end) - Vector2(8, 8))
+	if not physical_point.is_equal_approx(visible_point):
+		DisplayServer.window_set_position(Vector2i(position + visible_point - physical_point))
+		await _wait_frames(4)
+	root.warp_mouse(point)
+	await _wait_frames(2)
+
+
+func _verify_control_handoff(game: GameRoot, resolution: Vector2i) -> void:
+	var host := game.simulation_host
+	var original_window_position := DisplayServer.window_get_position()
+	host.set_process(false)
+	for _tick in range(3):
+		host.advance_tick()
+	var card_id: StringName = &"ironwall_assault_group"
+	game.input_controller.select_unit_card(card_id)
+	host.submit_command(host.create_unit_card_control_command(card_id, UnitCardControlCommand.Action.STAY_MANUAL))
+	host.advance_tick()
+	await _wait_frames(6)
+	var card_button := game.army_board._unit_card_buttons[card_id] as Button
+	await _click_physical_control(card_button)
+	await _press_key(KEY_SPACE)
+	var frozen_tick := host.current_snapshot.tick
+	var text_input := LineEdit.new()
+	game.get_node("HUDLayer").add_child(text_input)
+	text_input.grab_focus()
+	var queue_before_text := host.get_queue_size()
+	await _press_key(KEY_R)
+	if host.get_queue_size() != queue_before_text:
+		_fail("R in a text input must not submit a control handoff")
+	text_input.queue_free()
+	await _wait_frames(2)
+	var popup := (game.army_board._posture_menus[&"di_tian"] as OptionButton).get_popup()
+	popup.popup()
+	await _wait_frames(3)
+	await _press_key(KEY_R)
+	if not popup.visible or host.get_queue_size() != queue_before_text:
+		_fail("R in an open posture menu must not reach the battlefield")
+	popup.hide()
+	card_button.grab_focus()
+	if not game.control_handoff_button.visible or not game.control_handoff_button.text.contains(GameText.t(&"CONTROL_AI_HINT") % 1):
+		_fail("manual control must expose the top-left R handoff reminder")
+	await _press_key(KEY_R)
+	var queued := host.get_queue_size()
+	var echo_key := InputEventKey.new()
+	echo_key.keycode = KEY_R
+	echo_key.pressed = true
+	echo_key.echo = true
+	Input.parse_input_event(echo_key)
+	await _wait_frames(3)
+	if queued != queue_before_text + 1 or host.get_queue_size() != queued or host.current_snapshot.tick != frozen_tick or host.current_snapshot.get_unit_card(card_id).control_state != UnitCardState.ControlState.PLAYER_CONTROLLED:
+		_fail("focused R must queue exactly one handoff while tactical pause preserves authoritative state")
+	await _save_screenshot(resolution, "manual_control_handoff_queued")
+	await _press_key(KEY_SPACE)
+	host.advance_tick()
+	await _wait_frames(6)
+	if host.current_snapshot.get_unit_card(card_id).control_state != UnitCardState.ControlState.AGENT_ASSIGNED:
+		_fail("R must restore AI control even without an old return task")
+	host.submit_command(host.create_unit_card_control_command(card_id, UnitCardControlCommand.Action.STAY_MANUAL))
+	host.advance_tick()
+	await _wait_frames(6)
+	var queue_before_button := host.get_queue_size()
+	await _click_physical_control(game.army_board._handoff_button)
+	if host.get_queue_size() != queue_before_button + 1:
+		_fail("visible army handoff button must submit one return command")
+	host.advance_tick()
+	await _wait_frames(6)
+	if host.current_snapshot.get_unit_card(card_id).control_state != UnitCardState.ControlState.AGENT_ASSIGNED:
+		_fail("visible handoff button must restore AI control")
+	host.submit_command(host.create_unit_card_control_command(card_id, UnitCardControlCommand.Action.TAKEOVER))
+	host.advance_tick()
+	await _wait_frames(6)
+	game.command_desk._select_metadata(game.command_desk.commander_selector, &"di_tian")
+	await _click_physical_control(game.command_desk.apply_button)
+	host.advance_tick()
+	await _wait_frames(6)
+	if host.current_snapshot.get_unit_card(card_id).control_state != UnitCardState.ControlState.AGENT_ASSIGNED:
+		_fail("real decision approval must restore its commander's AI control")
+	await _save_screenshot(resolution, "decision_handoff_confirmed")
+	DisplayServer.window_set_position(original_window_position)
+	host.set_process(true)
+
+
+func _verify_twelve_card_overview(resolution: Vector2i) -> Dictionary:
+	var game := (load("res://scenes/game/black_well.tscn") as PackedScene).instantiate() as GameRoot
+	root.add_child(game)
+	current_scene = game
+	await _wait_frames(12)
+	await _click_physical_control(game.prebattle_planner.start_button)
+	await _wait_frames(12)
+	var board := game.army_board
+	var board_rect := board.get_global_rect()
+	var viewport_rect := Rect2(Vector2.ZERO, Vector2(resolution))
+	_expect_control_in_viewport(board, viewport_rect, "twelve-card army overview")
+	if board.get_commander_card_count() != 5 or board.get_unit_card_button_count() != 12:
+		_fail("Black Well must show five commanders and twelve cards")
+	var scroll := board.get_node("Margin/Layout/Scroll") as ScrollContainer
+	if scroll.get_v_scroll_bar().visible or scroll.get_h_scroll_bar().visible:
+		_fail("the complete army overview must not require a scrollbar")
+	for button in board._unit_card_buttons.values():
+		if not board_rect.encloses(button.get_global_rect()) or not viewport_rect.encloses(button.get_global_rect()):
+			_fail("all twelve card rectangles must fit inside the visible army overview")
+		_expect_minimum_target(button, "whole-card selection")
+		if not button.disabled:
+			await _click_physical_control(button)
+			if not button.button_pressed:
+				_fail("every displayed troop card must accept a real selection click")
+	for button in board._commander_buttons.values():
+		if not board_rect.encloses(button.get_global_rect()):
+			_fail("every commander summary must fit inside the army overview")
+	await _save_screenshot(resolution, "twelve_card_overview")
+	var report := {"commanders": board.get_commander_card_count(), "cards": board.get_unit_card_button_count(), "board": _rect_array(board_rect), "map": _rect_array(game.get_grey_ridge_map_rect()), "scroll_required": false}
+	game.queue_free()
+	await _wait_frames(5)
+	current_scene = null
+	return report
+
+
+func _verify_composition_persistence(resolution: Vector2i) -> Dictionary:
+	var game := (load("res://scenes/game/black_well.tscn") as PackedScene).instantiate() as GameRoot
+	root.add_child(game)
+	current_scene = game
+	await _wait_frames(12)
+	var host := game.simulation_host
+	host.set_process(false)
+	host.world = TestCompositionPersistence.mixed_world()
+	host._grey_ridge_army_plan = host.world.grey_ridge_army_plan.duplicate_plan()
+	host.current_snapshot = host.world.create_snapshot()
+	host.previous_snapshot = host.current_snapshot
+	game._on_scenario_restarted(host.current_snapshot)
+	game.prebattle_planner.configure(host)
+	await _wait_frames(8)
+	var planner := game.prebattle_planner
+	var readiness := planner._readiness_labels[TestCompositionPersistence.MIXED_ID] as Label
+	var stats := readiness.get_parent().get_node("Stats") as Label
+	var scroll := planner.get_node("Backdrop/Margin/Layout/Scroll") as ScrollContainer
+	scroll.ensure_control_visible(stats)
+	await _wait_frames(6)
+	var viewport_rect := Rect2(Vector2.ZERO, Vector2(resolution))
+	_expect_control_in_viewport(stats, viewport_rect, "mixed prebattle composition")
+	if not stats.text.contains("8/8") or not stats.text.contains("4/4"):
+		_fail("mixed prebattle must disclose each unit type and strength")
+	await _save_screenshot(resolution, "mixed_prebattle")
+	host._campaign_load_failed = true
+	host._set_campaign_error(&"ROSTER_LOAD_FAILED", "SIMULATED: invalid roster field")
+	scroll.ensure_control_visible(planner.roster_status.message)
+	await _wait_frames(6)
+	_expect_control_in_viewport(planner.roster_status.message, viewport_rect, "roster load failure")
+	if not planner.start_button.disabled or planner.roster_status.retry_button.visible:
+		_fail("invalid roster must visibly prevent starting without offering save retry")
+	await _save_screenshot(resolution, "roster_load_failure")
+	host._campaign_load_failed = false
+	host._set_campaign_error(&"", "")
+	planner.visible = false
+	host._grey_ridge_battle_started = true
+	game._on_scenario_restarted(host.current_snapshot)
+	await _wait_frames(10)
+	var button := game.army_board._unit_card_buttons[TestCompositionPersistence.MIXED_ID] as Button
+	await _position_physical_pointer(button.get_global_rect().get_center())
+	_send_motion(button.get_global_rect().get_center(), 0)
+	await create_timer(1.25).timeout
+	var tooltip := game.hover_tooltip
+	if not tooltip.panel.visible or not tooltip.label.text.contains("8/8") or not tooltip.label.text.contains("4/4"):
+		_fail("mixed battlefield delayed help must show both composition entries")
+	_expect_control_in_viewport(tooltip.panel, viewport_rect, "mixed composition tooltip")
+	await _save_screenshot(resolution, "mixed_composition_help")
+	host._campaign_record = ArmyRosterStore.build_battle_record(host.current_snapshot)
+	host._campaign_save_pending = true
+	host._set_campaign_error(&"ROSTER_SAVE_FAILED", "SIMULATED: atomic replacement failed")
+	game.battle_debrief.show_debrief(host.get_campaign_record())
+	await _wait_frames(10)
+	var status := game.battle_debrief.roster_status
+	_expect_control_in_viewport(status.message, viewport_rect, "roster save failure")
+	_expect_control_in_viewport(status.retry_button, viewport_rect, "roster save retry")
+	if not game.battle_debrief.fight_again_button.disabled or not game.battle_debrief.return_to_operations_button.disabled:
+		_fail("unsaved battle must prevent leaving the retained result")
+	await _save_screenshot(resolution, "roster_save_failure")
+	var original := host.get_campaign_record()
+	await _click_control(status.retry_button)
+	await _wait_frames(6)
+	if host.has_campaign_error() or host._campaign_save_pending or host.get_campaign_record() != original or game.battle_debrief.return_to_operations_button.disabled:
+		_fail("save retry must clear the error without duplicating the battle reward")
+	game.queue_free()
+	await _wait_frames(5)
+	current_scene = null
+	return {"entries": 2, "prebattle_details": true, "delayed_help": true, "load_blocked": true, "save_retry": true}
+
+
+func _verify_tactical_cards(resolution: Vector2i) -> Dictionary:
+	var game := (load("res://scenes/game/black_well.tscn") as PackedScene).instantiate() as GameRoot
+	root.add_child(game)
+	current_scene = game
+	await _wait_frames(12)
+	var host := game.simulation_host
+	host.set_process(false)
+	host.world = TestTacticalCards.sample_world()
+	TestTacticalCards._quiet(host.world)
+	host._grey_ridge_army_plan = host.world.grey_ridge_army_plan.duplicate_plan()
+	host._grey_ridge_battle_started = true
+	host.current_snapshot = host.world.create_snapshot()
+	host.previous_snapshot = host.current_snapshot
+	game.prebattle_planner.visible = false
+	game._on_scenario_restarted(host.current_snapshot)
+	await _wait_frames(12)
+	var viewport := Rect2(Vector2.ZERO, Vector2(resolution))
+	var board := game.army_board
+	if board.get_unit_card_button_count() != 5:
+		_fail("five tactical sample cards must be simultaneously selectable")
+	for button in board._unit_card_buttons.values():
+		_expect_control_in_viewport(button, board.get_global_rect(), "tactical overview card")
+	var observer := board._unit_card_buttons[&"forward_observers"] as Button
+	await _position_physical_pointer(observer.get_global_rect().get_center())
+	_send_motion(observer.get_global_rect().get_center(), 0)
+	await create_timer(1.25).timeout
+	if not game.hover_tooltip.panel.visible or not game.hover_tooltip.label.text.contains(GameText.t(&"TACTICAL_OBSERVERS_HELP")):
+		_fail("tactical card delayed help must explain cost and counterplay")
+	_expect_control_in_viewport(game.hover_tooltip.panel, viewport, "tactical card tooltip")
+	await _save_screenshot(resolution, "tactical_card_help")
+	var desk := game.command_desk
+	desk.show_card_actions(CardActionSnapshot.TACTICAL + TacticalAbilityDefinition.Kind.OBSERVE)
+	await _wait_frames(6)
+	var action := _first_card_decision_button(desk, CardActionSnapshot.TACTICAL + TacticalAbilityDefinition.Kind.OBSERVE)
+	if action == null:
+		_fail("observation action must be reachable in the normal decision panel")
+	else:
+		var scroll := desk.get_node("Exceptions/Scroll") as ScrollContainer
+		scroll.ensure_control_visible(action)
+		await _wait_frames(5)
+		await _click_control(action)
+		host.current_snapshot = host.world.advance_tick()
+		await _wait_frames(5)
+		if host.current_snapshot.get_unit_card(&"forward_observers").tactical_status_key != &"TACTICAL_PREPARING":
+			_fail("real tactical action click must enter authoritative preparation")
+		if board._tactical_activity(host.current_snapshot.get_commander(&"bai_jiuyang")) != 1:
+			_fail("preparing a tactical action must mark its commander as working")
+		await _save_screenshot(resolution, "tactical_card_preparing")
+		for tick in range(22):
+			host.current_snapshot = host.world.advance_tick()
+		await _wait_frames(5)
+		if host.current_snapshot.get_unit_card(&"forward_observers").tactical_status_key != &"TACTICAL_ACTIVE":
+			_fail("tactical action must complete preparation through simulation ticks")
+	TranslationServer.set_locale("en")
+	game._on_language_changed("en")
+	await _wait_frames(6)
+	var english := CompositionText.from_snapshot(host.current_snapshot.get_unit_card(&"suppression_battery"))
+	if not english.contains("Specialist ammunition") or english.contains("TACTICAL_BATTERY_HELP"):
+		_fail("English tactical ammunition and counterplay help must resolve")
+	TranslationServer.set_locale("zh_CN")
+	game._on_language_changed("zh_CN")
+	game.queue_free()
+	await _wait_frames(5)
+	current_scene = null
+	return {"cards": 5, "real_action_click": true, "preparation": true, "delayed_help": true, "bilingual": true}
 
 
 func _validate_selector(selector: BattleSelector, viewport_rect: Rect2) -> void:
@@ -255,7 +543,7 @@ func _validate_prebattle(planner: PrebattlePlanner, viewport_rect: Rect2) -> voi
 
 func _validate_battlefield(game: GameRoot, viewport_rect: Rect2) -> void:
 	var map_rect := game.get_grey_ridge_map_rect()
-	if not viewport_rect.encloses(map_rect) or map_rect.size.x < 440.0 or map_rect.size.y < 240.0:
+	if not viewport_rect.encloses(map_rect) or map_rect.size.x < (700.0 if viewport_rect.size.x >= 900.0 else 200.0) or map_rect.size.y < 240.0:
 		_fail("battlefield map is too small or outside viewport: %s" % map_rect)
 	var minimum_decision_height := 220.0 if viewport_rect.size.x >= 900.0 else 250.0
 	if game.task_panel.size.y + 1.0 < minimum_decision_height:
@@ -284,9 +572,13 @@ func _validate_battlefield(game: GameRoot, viewport_rect: Rect2) -> void:
 	_expect_minimum_target(game.pause_button, "battlefield pause")
 	if not game.pause_button.pressed.is_connected(game._open_pause_menu):
 		_fail("visible pause button is not connected to the shared PauseMenu")
-	if not game.army_board.is_commander_only() or game.army_board.get_commander_card_count() != 3 or game.army_board.get_unit_card_button_count() != 0:
-		_fail("right-hand board is not limited to the three friendly commander cards")
-	var lower_panels: Array[Control] = [game.support_panel, game.minimap, game.army_board]
+	if not game.army_board.is_tactical_cards() or game.army_board.get_commander_card_count() != 4 or game.army_board.get_unit_card_button_count() != 6:
+		_fail("bottom board must expose all four Grey Ridge commanders and six unit cards")
+	if game.task_panel.position.x <= map_rect.end.x or game.army_board.position.y < map_rect.end.y:
+		_fail("decisions must be right of the map and cards below it")
+	if game.command_desk.exception_rows.get_parent().size.y < 180.0:
+		_fail("right-side decisions must retain at least 180px of visible scrolling space")
+	var lower_panels: Array[Control] = [game.support_panel, game.minimap, game.army_board, game.task_panel]
 	for left_index in range(lower_panels.size()):
 		for right_index in range(left_index + 1, lower_panels.size()):
 			if lower_panels[left_index].get_global_rect().intersection(lower_panels[right_index].get_global_rect()).get_area() > 4.0:
@@ -330,7 +622,8 @@ func _validate_battlefield(game: GameRoot, viewport_rect: Rect2) -> void:
 	else:
 		_expect_control_in_viewport(game.command_desk.guide_text, viewport_rect, "command guide content")
 	game.command_desk.guide_popup.hide()
-	await _click_control(game.command_desk.apply_button)
+	await _wait_frames(3)
+	await _click_physical_control(game.command_desk.apply_button)
 	await _wait_frames(12)
 	var selected_commander_id := game.command_desk.commander_selector.get_item_metadata(game.command_desk.commander_selector.selected) as StringName
 	var commander := game.simulation_host.current_snapshot.get_commander(selected_commander_id)
@@ -619,10 +912,12 @@ func _click_control(control: Control) -> void:
 
 
 func _activate_debrief_button(button: Button) -> void:
+	var point := button.get_global_rect().get_center()
+	await _position_physical_pointer(point)
 	_send_motion(button.get_global_rect().get_center(), 0)
-	await process_frame
+	await _wait_frames(2)
 	if root.gui_get_hovered_control() != button:
-		_fail("debrief mouse hover did not resolve to %s" % button.name)
+		_fail("debrief mouse hover did not resolve to %s at %s; actual=%s" % [button.name, button.get_global_rect(), root.gui_get_hovered_control()])
 	button.grab_focus()
 	await process_frame
 	if root.gui_get_focus_owner() != button:
@@ -631,6 +926,7 @@ func _activate_debrief_button(button: Button) -> void:
 
 
 func _click_position(position: Vector2) -> void:
+	await _position_physical_pointer(position)
 	_send_motion(position, 0)
 	await process_frame
 	_send_button(position, true)
@@ -644,9 +940,11 @@ func _send_motion(position: Vector2, button_mask: int) -> void:
 	event.position = position
 	event.global_position = position
 	event.relative = position - _mouse_position
+	event.velocity = event.relative * 60.0
 	event.button_mask = button_mask
 	_mouse_position = position
 	Input.parse_input_event(event)
+	Input.flush_buffered_events()
 
 
 func _send_button(position: Vector2, pressed: bool) -> void:
@@ -657,6 +955,7 @@ func _send_button(position: Vector2, pressed: bool) -> void:
 	event.pressed = pressed
 	event.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
 	Input.parse_input_event(event)
+	Input.flush_buffered_events()
 
 
 func _send_wheel(position: Vector2, button_index: MouseButton) -> void:
@@ -667,12 +966,14 @@ func _send_wheel(position: Vector2, button_index: MouseButton) -> void:
 	event.button_index = button_index
 	event.pressed = true
 	Input.parse_input_event(event)
+	Input.flush_buffered_events()
 	event = InputEventMouseButton.new()
 	event.position = position
 	event.global_position = position
 	event.button_index = button_index
 	event.pressed = false
 	Input.parse_input_event(event)
+	Input.flush_buffered_events()
 
 
 func _press_key(keycode: Key) -> void:
@@ -680,11 +981,13 @@ func _press_key(keycode: Key) -> void:
 	event.keycode = keycode
 	event.pressed = true
 	Input.parse_input_event(event)
+	Input.flush_buffered_events()
 	await process_frame
 	event = InputEventKey.new()
 	event.keycode = keycode
 	event.pressed = false
 	Input.parse_input_event(event)
+	Input.flush_buffered_events()
 	await process_frame
 
 
@@ -694,12 +997,14 @@ func _press_modified_key(keycode: Key, alt_pressed: bool) -> void:
 	event.alt_pressed = alt_pressed
 	event.pressed = true
 	Input.parse_input_event(event)
+	Input.flush_buffered_events()
 	await process_frame
 	event = InputEventKey.new()
 	event.keycode = keycode
 	event.alt_pressed = alt_pressed
 	event.pressed = false
 	Input.parse_input_event(event)
+	Input.flush_buffered_events()
 	await _wait_frames(4)
 
 
@@ -719,3 +1024,229 @@ func _finish(scene: Node) -> void:
 		scene.queue_free()
 	await process_frame
 	quit(1 if _failed else 0)
+
+
+func _verify_contextual_card_decisions(game: GameRoot, resolution: Vector2i, viewport_rect: Rect2) -> void:
+	var host := game.simulation_host
+	var desk := game.command_desk
+	# Freeze only automatic ticking; clicks still travel through the real UI/command path.
+	host.set_process(false)
+	game.set_process(false)
+	var faction := host.world.factions[SimulationWorld.LOCAL_PLAYER_ID] as FactionState
+	faction.supply = faction.supply_capacity
+	var card := host.world.unit_cards[&"ironwall_assault_group"] as UnitCardState
+	(host.world.units[card.member_entity_ids.back()] as UnitState).enabled = false
+	var other_card := host.world.unit_cards[&"falcon_recon_group"] as UnitCardState
+	(host.world.units[other_card.member_entity_ids.back()] as UnitState).enabled = false
+	host.current_snapshot = host.world.advance_tick()
+	var situation := CommandSituationSnapshot.new(host.current_snapshot.tick, SimulationWorld.LOCAL_PLAYER_ID, [], [])
+	desk.update_command_situation(host.current_snapshot, situation)
+	game.support_panel.update_snapshot(host.current_snapshot)
+	var support_scroll := game.support_panel.get_node("Margin/Scroll") as ScrollContainer
+	support_scroll.ensure_control_visible(game.support_panel.reinforcement_button)
+	await _wait_frames(5)
+	var support_presses: Array[int] = []
+	game.support_panel.reinforcement_button.pressed.connect(func() -> void: support_presses.append(1), CONNECT_ONE_SHOT)
+	await _click_control(game.support_panel.reinforcement_button)
+	print("CARD_UI support presses=%d filter=%d hover=%s" % [support_presses.size(), desk._card_action_filter, root.gui_get_hovered_control()])
+	await _wait_frames(5)
+	var scroll := desk.get_node("Exceptions/Scroll") as ScrollContainer
+	_expect_no_horizontal_scroll(scroll, "contextual card decisions")
+	var decision_id := "card:ironwall_assault_group:%d:" % SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT
+	var action := desk.exception_rows.get_node_or_null(NodePath(decision_id.validate_node_name() + "/Action")) as Button
+	if action == null:
+		_fail("%s support click did not expose the damaged card decision" % resolution)
+		return
+	scroll.ensure_control_visible(action)
+	await _wait_frames(5)
+	_expect_control_in_viewport(action, viewport_rect, "field reinforcement action")
+	var strength_before := host.current_snapshot.get_unit_card(card.definition.definition_id).current_strength
+	var history_before := desk.get_decision_history_count()
+	var action_presses: Array[int] = []
+	action.pressed.connect(func() -> void: action_presses.append(1), CONNECT_ONE_SHOT)
+	await _save_screenshot(resolution, "card_reinforcement")
+	var action_point := action.get_global_rect().get_center()
+	await _position_physical_pointer(action_point)
+	_send_motion(action_point, 0)
+	await process_frame
+	_send_button(action_point, true)
+	await process_frame
+	# A UI snapshot arriving between mouse-down and mouse-up must not destroy the button.
+	host.current_snapshot = host.world.advance_tick()
+	desk.update_command_situation(host.current_snapshot, situation)
+	await _wait_frames(3)
+	_send_button(action_point, false)
+	await _wait_frames(3)
+	host.current_snapshot = host.world.advance_tick()
+	desk.update_command_situation(host.current_snapshot, situation)
+	await _wait_frames(4)
+	print("CARD_UI reinforcement presses=%d strength=%d before=%d history=%d before=%d receipt=%s" % [action_presses.size(), host.current_snapshot.get_unit_card(card.definition.definition_id).current_strength, strength_before, desk.get_decision_history_count(), history_before, desk.intent_status.text])
+	if host.current_snapshot.get_unit_card(card.definition.definition_id).current_strength != strength_before + 1 or desk.get_decision_history_count() != history_before + 1:
+		_fail("%s real reinforcement button did not replenish its bound card once" % resolution)
+	game.support_panel.update_snapshot(host.current_snapshot)
+	var cooldown_text := game.support_panel.reinforcement_button.text
+	var cooldown_faction := host.current_snapshot.get_faction(SimulationWorld.LOCAL_PLAYER_ID)
+	var cooldown_seconds := ceili(maxi(0, cooldown_faction.reinforcement_cooldown_until_tick - host.current_snapshot.tick) * SimulationWorld.TICK_SECONDS)
+	if cooldown_seconds <= 0 or not cooldown_text.ends_with(GameText.t(&"SUPPORT_COOLDOWN_REMAINING") % cooldown_seconds):
+		_fail("the left support card must expose its real post-command cooldown")
+	var other_action := _first_card_decision_button(desk, SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT)
+	if not game.support_panel.reinforcement_button.disabled or other_action == null or not other_action.disabled:
+		_fail("reinforcement must grey both the left entry and the other damaged card's decision")
+	if other_action != null:
+		if not other_action.text.ends_with(GameText.t(&"SUPPORT_COOLDOWN_REMAINING") % cooldown_seconds):
+			_fail("reinforcement decisions must display the same countdown as the left entry")
+		scroll.ensure_control_visible(other_action)
+		await _wait_frames(5)
+		_expect_control_in_viewport(other_action, viewport_rect, "shared reinforcement cooldown")
+		var queued_before := host.get_queue_size()
+		await _click_position(other_action.get_global_rect().get_center())
+		if host.get_queue_size() != queued_before:
+			_fail("a disabled reinforcement decision must not enqueue another command")
+	support_scroll.ensure_control_visible(game.support_panel.reinforcement_button)
+	await _wait_frames(5)
+	_expect_control_in_viewport(game.support_panel.reinforcement_button, viewport_rect, "left support cooldown")
+	await _save_screenshot(resolution, "left_support_cooldown")
+	host.set_tactical_paused(true)
+	await create_timer(0.25).timeout
+	game.support_panel.update_snapshot(host.current_snapshot)
+	if game.support_panel.reinforcement_button.text != cooldown_text:
+		_fail("tactical pause must freeze the visible support countdown")
+	host.set_tactical_paused(false)
+	desk.show_card_actions(CardActionSnapshot.DEPLOY)
+	await _wait_frames(5)
+	action = _first_card_decision_button(desk, CardActionSnapshot.DEPLOY)
+	if action == null:
+		_fail("%s reserve decision was not reachable" % resolution)
+		return
+	scroll.ensure_control_visible(action)
+	await _wait_frames(4)
+	await _click_control(action)
+	await _wait_frames(4)
+	if desk._targeting_decision == null or game.battlefield_overlay.decision_preview_radius != host.world.battle_definition.deployment_radius:
+		_fail("%s reserve click did not enter targeting with a persistent HQ area preview" % resolution)
+		return
+	var reserve_id := desk._targeting_decision.unit_card_id
+	await _save_screenshot(resolution, "reserve_targeting")
+	var position := desk._targeting_decision.position + Vector2(0, -192)
+	var screen := game.world_presentation.get_global_transform_with_canvas() * position
+	if not game.get_grey_ridge_map_rect().has_point(screen):
+		_fail("%s HQ reserve point is outside the usable map" % resolution)
+		return
+	_send_motion(screen, 0)
+	_send_button(screen, true)
+	await process_frame
+	_send_button(screen, false)
+	await _wait_frames(3)
+	if desk._pending_responses.is_empty():
+		_fail("%s real map click did not submit the reserve command" % resolution)
+	for tick in range(host.current_snapshot.get_unit_card(reserve_id).deployment_ticks + 5):
+		host.current_snapshot = host.world.advance_tick()
+		desk.update_command_situation(host.current_snapshot, situation)
+		if tick % 10 == 0:
+			await process_frame
+	if host.current_snapshot.get_unit_card(reserve_id).deployment_state != UnitCardState.DeploymentState.DEPLOYED or not desk._pending_responses.is_empty():
+		_fail("%s reserve command did not confirm real members" % resolution)
+	for locale in ["en", "zh_CN"]:
+		TranslationServer.set_locale(locale)
+		desk.refresh_locale()
+		desk.show_card_actions(-2)
+		await _wait_frames(4)
+		_expect_no_horizontal_scroll(scroll, "localized card decisions")
+	await _save_screenshot(resolution, "card_decisions_confirmed")
+	host.set_process(true)
+	game.set_process(true)
+
+
+func _first_card_decision_button(desk: CommandDesk, kind: int) -> Button:
+	for row in desk.exception_rows.get_children():
+		if row.is_queued_for_deletion() or not row.has_meta(&"card_decision_id"):
+			continue
+		for decision in desk.card_actions:
+			if decision.decision_id == row.get_meta(&"card_decision_id") and decision.action_kind == kind:
+				return row.get_node("Action") as Button
+	return null
+
+
+func _verify_tactical_planning(game: GameRoot, resolution: Vector2i) -> void:
+	var host := game.simulation_host
+	game.command_desk.apply_button.grab_focus()
+	var history_count := game.command_desk.get_decision_history_count()
+	await _press_key(KEY_SPACE)
+	var frozen_tick := host.current_snapshot.tick
+	if game.command_desk.apply_button.text != GameText.t(&"TACTICAL_APPROVE_QUEUE"):
+		_fail("paused approval must say it queues the order")
+	await create_timer(0.25).timeout
+	if not host.is_tactical_paused() or paused or host.current_snapshot.tick != frozen_tick:
+		_fail("Space must freeze only simulation time")
+	if game.command_desk.get_decision_history_count() != history_count:
+		_fail("Space activated the focused approval button")
+	await _position_physical_pointer(game.get_grey_ridge_map_rect().get_center())
+	_send_motion(game.get_grey_ridge_map_rect().get_center(), 0)
+	await _wait_frames(3)
+	var selector := game.command_desk.reserve_selector
+	await _position_physical_pointer(selector.get_global_rect().get_center())
+	_send_motion(selector.get_global_rect().get_center(), 0)
+	await create_timer(0.7).timeout
+	if not game.hover_tooltip.progress.visible or game.hover_tooltip.panel.visible:
+		print("HOVER_DIAGNOSTIC mouse=%s wanted=%s key=%s elapsed=%s process=%s paused=%s context=%s" % [root.get_mouse_position(), selector.get_global_rect(), game.hover_tooltip._candidate_key, game.hover_tooltip._hover_seconds, game.is_processing(), paused, game.command_desk.get_hover_context(root.get_mouse_position())])
+		_fail("hover must show progress after 0.5 seconds before showing text")
+	await _save_screenshot(resolution, "tactical_hover_progress")
+	await create_timer(0.5).timeout
+	if not game.hover_tooltip.panel.visible or game.hover_tooltip.label.text.length() < 50:
+		_fail("reserve policy must explain actual behavior after progress completes")
+	await _save_screenshot(resolution, "tactical_reserve_help")
+	await _click_control(game.command_desk.risk_selector)
+	var popup := game.command_desk.risk_selector.get_popup()
+	await _wait_frames(3)
+	var popup_point := Vector2(popup.position) + Vector2(popup.size.x * 0.5, 18)
+	root.warp_mouse(popup_point)
+	_send_motion(popup_point, 0)
+	await create_timer(1.2).timeout
+	if not popup.visible or not game.hover_tooltip.panel.visible or not game.hover_tooltip._candidate_key.begins_with("intent-help:Risk"):
+		_fail("open posture candidates must expose their own delayed tooltip")
+	await _save_screenshot(resolution, "tactical_posture_help")
+	popup.hide()
+	var previous_window_position := DisplayServer.window_get_position()
+	var screen_rect := DisplayServer.screen_get_usable_rect()
+	DisplayServer.window_set_position(Vector2i(previous_window_position.x, mini(screen_rect.position.y, screen_rect.end.y - resolution.y)))
+	var army_option := game.army_board._posture_menus[&"di_tian"] as OptionButton
+	await _click_control(army_option)
+	var army_popup := army_option.get_popup()
+	await _wait_frames(3)
+	var army_point := Vector2(army_popup.position) + Vector2(army_popup.size.x * 0.5, 18)
+	root.warp_mouse(army_point)
+	_send_motion(army_point, 0)
+	await create_timer(1.2).timeout
+	if not game.hover_tooltip.panel.visible or not game.hover_tooltip._candidate_key.begins_with("army-posture:di_tian"):
+		_fail("bottom commander posture must expose a delayed explanation")
+	if game.hover_tooltip.panel.get_global_rect().intersects(Rect2(army_popup.position, army_popup.size)):
+		_fail("bottom posture explanation must avoid the open menu")
+	_expect_control_in_viewport(game.hover_tooltip.panel, Rect2(Vector2.ZERO, root.get_visible_rect().size), "bottom posture help")
+	await _save_screenshot(resolution, "tactical_bottom_posture_help")
+	army_popup.hide()
+	DisplayServer.window_set_position(previous_window_position)
+	_send_motion(game.get_grey_ridge_map_rect().get_center(), 0)
+	await _wait_frames(2)
+	game.command_desk._select_metadata(game.command_desk.axis_selector, &"")
+	await _click_control(game.command_desk.apply_button)
+	if host.get_queue_size() <= 0 or host.current_snapshot.tick != frozen_tick:
+		_fail("paused approval must queue without advancing the battlefield")
+	game.input_controller.begin_commander_route(&"bai_jiuyang")
+	await _wait_frames(2)
+	if game.input_controller.command_mode != InputController.CommandMode.COMMANDER_ROUTE_TARGETING:
+		_fail("tactical pause must allow route planning")
+	for pause_control in [game.pause_button, game.tactical_pause_button]:
+		if game.route_mode_hint.get_global_rect().intersects(pause_control.get_global_rect()):
+			_fail("route planning guidance must not overlap pause controls")
+	await _save_screenshot(resolution, "tactical_route_planning")
+	await _press_key(KEY_C)
+	await _press_key(KEY_ESCAPE)
+	if not paused:
+		_fail("Esc menu must still open during tactical pause")
+	game.pause_menu.close()
+	if not host.is_tactical_paused():
+		_fail("closing Esc menu must retain tactical pause")
+	await _press_key(KEY_SPACE)
+	await _wait_frames(15)
+	if host.is_tactical_paused() or host.current_snapshot.tick <= frozen_tick:
+		_fail("Space must resume queued orders and simulation")

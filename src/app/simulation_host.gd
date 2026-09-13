@@ -8,6 +8,8 @@ signal campaign_concluded(record: Dictionary)
 signal scenario_restarted(snapshot: WorldSnapshot)
 signal grey_ridge_prebattle_opened(plan: ArmyPlan)
 signal grey_ridge_battle_started(snapshot: WorldSnapshot)
+signal tactical_pause_changed(paused: bool)
+signal campaign_persistence_changed
 
 const TICK_SECONDS := SimulationWorld.TICK_SECONDS
 
@@ -17,11 +19,16 @@ var world := SimulationWorld.new()
 var previous_snapshot: WorldSnapshot
 var current_snapshot: WorldSnapshot
 var _accumulator: float = 0.0
+var _tactical_paused: bool = false
 var _timed_tick_count: int = 0
 var _last_tick_usec: int = 0
 var _total_tick_usec: int = 0
 var _max_tick_usec: int = 0
 var _campaign_record: Dictionary = {}
+var campaign_error_key: StringName
+var campaign_error_detail: String = ""
+var _campaign_load_failed := false
+var _campaign_save_pending := false
 var _campaign_saved: bool = false
 var _playtest_recorder := PlaytestSessionRecorder.new()
 var _gameplay_report: GameplayObservabilityReport
@@ -41,7 +48,9 @@ func _ready() -> void:
 	_campaign_record_path = ArmyRosterStore.campaign_record_path_for_session(_playtest_session_id, get_scenario_id())
 	_playtest_record_directory = ArmyRosterStore.playtest_record_directory_for_session(_playtest_session_id)
 	if world.scenario_kind != scenario_kind:
-		_campaign_record = ArmyRosterStore.load_record(_campaign_record_path) if _is_card_battle() and ArmyRosterStore.runtime_persistence_allowed() else {}
+		_campaign_record = {}
+		if _is_card_battle() and ArmyRosterStore.runtime_persistence_allowed():
+			_load_campaign_roster(_campaign_record_path)
 		world = SimulationWorld.new(true, false, scenario_kind, _campaign_record, &"", _grey_ridge_army_plan)
 	if _is_card_battle():
 		_grey_ridge_army_plan = world.grey_ridge_army_plan.duplicate_plan()
@@ -53,12 +62,27 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _tactical_paused:
+		return
 	if _is_card_battle() and not _grey_ridge_battle_started:
 		return
 	_accumulator += delta
 	while _accumulator >= TICK_SECONDS:
 		_accumulator -= TICK_SECONDS
 		advance_tick()
+
+
+func is_tactical_paused() -> bool:
+	return _tactical_paused
+
+
+func set_tactical_paused(paused: bool) -> void:
+	if paused and (not _grey_ridge_battle_started or current_snapshot == null or (current_snapshot.outcome != null and current_snapshot.outcome.is_terminal())):
+		return
+	if _tactical_paused == paused:
+		return
+	_tactical_paused = paused
+	tactical_pause_changed.emit(paused)
 
 
 func submit_command(command: GameCommand) -> CommandValidationResult:
@@ -145,11 +169,13 @@ func create_commander_objective_command(
 	route_points: PackedVector2Array = PackedVector2Array()
 ) -> CommanderOrderCommand:
 	var target_region_id := _strategic_region_at(target_position)
-	return CommanderOrderCommand.new(
+	var command := CommanderOrderCommand.new(
 		world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, world.current_tick,
 		commander_id, CommanderOrderCommand.OrderKind.ASSIGN_OBJECTIVE, target_position,
 		target_region_id, CommanderState.Posture.BALANCED, route_points
 	)
+	command.hand_back_control = true
+	return command
 
 
 func _strategic_region_at(world_position: Vector2) -> StringName:
@@ -173,10 +199,12 @@ func create_commander_posture_command(
 	commander_id: StringName,
 	posture: CommanderState.Posture
 ) -> CommanderOrderCommand:
-	return CommanderOrderCommand.new(
+	var command := CommanderOrderCommand.new(
 		world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, world.current_tick,
 		commander_id, CommanderOrderCommand.OrderKind.SET_POSTURE, Vector2.ZERO, &"", posture
 	)
+	command.hand_back_control = true
+	return command
 
 
 func create_high_level_intent_command(
@@ -435,6 +463,8 @@ func create_task_control_command(task_id: int, action: TaskControlCommand.Action
 
 
 func advance_tick() -> WorldSnapshot:
+	if _tactical_paused:
+		return current_snapshot
 	if _is_card_battle() and not _grey_ridge_battle_started:
 		return current_snapshot
 	previous_snapshot = current_snapshot
@@ -497,15 +527,27 @@ func record_gameplay_exception_action(exception_id: StringName, action: String, 
 
 
 func replenish_unit_card(unit_card_id: StringName) -> bool:
-	if not ArmyRosterStore.replenish_card(_campaign_record, unit_card_id):
+	if has_campaign_error():
 		return false
+	var next_record := _campaign_record.duplicate(true)
+	if not ArmyRosterStore.replenish_card(next_record, unit_card_id):
+		return false
+	if not _write_campaign_record(next_record):
+		return false
+	_campaign_record = next_record
 	_campaign_record_updated()
 	return true
 
 
 func replenish_unit_card_as_much_as_possible(unit_card_id: StringName) -> int:
-	var restored := ArmyRosterStore.replenish_card_as_much_as_possible(_campaign_record, unit_card_id)
+	if has_campaign_error():
+		return 0
+	var next_record := _campaign_record.duplicate(true)
+	var restored := ArmyRosterStore.replenish_card_as_much_as_possible(next_record, unit_card_id)
 	if restored > 0:
+		if not _write_campaign_record(next_record):
+			return 0
+		_campaign_record = next_record
 		_campaign_record_updated()
 	return restored
 
@@ -517,6 +559,9 @@ func reset_grey_ridge_campaign_record() -> bool:
 		if ArmyRosterStore.archive_record(_campaign_record_path).is_empty():
 			return false
 	_campaign_record = {}
+	_campaign_load_failed = false
+	_campaign_save_pending = false
+	_set_campaign_error(&"", "")
 	world = SimulationWorld.new(true, false, scenario_kind, {}, &"", _grey_ridge_army_plan)
 	current_snapshot = world.create_snapshot()
 	previous_snapshot = current_snapshot
@@ -537,8 +582,14 @@ func install_reinforced_side_skirts(unit_card_id: StringName) -> bool:
 
 
 func apply_unit_card_growth(unit_card_id: StringName, growth_id: StringName) -> bool:
-	if not ArmyRosterStore.apply_growth(_campaign_record, unit_card_id, growth_id):
+	if has_campaign_error():
 		return false
+	var next_record := _campaign_record.duplicate(true)
+	if not ArmyRosterStore.apply_growth(next_record, unit_card_id, growth_id):
+		return false
+	if not _write_campaign_record(next_record):
+		return false
+	_campaign_record = next_record
 	_campaign_record_updated()
 	var descriptor := {
 		"category": "growth",
@@ -552,8 +603,9 @@ func apply_unit_card_growth(unit_card_id: StringName, growth_id: StringName) -> 
 
 
 func restart_grey_ridge() -> bool:
-	if not _is_card_battle():
+	if not _is_card_battle() or has_campaign_error():
 		return false
+	set_tactical_paused(false)
 	_playtest_recorder.mark_second_battle_requested(world.current_tick)
 	_persist_playtest_summary()
 	_grey_ridge_battle_started = false
@@ -578,6 +630,7 @@ func start_grey_ridge(plan: ArmyPlan, prebattle_metrics: Dictionary = {}) -> boo
 		return false
 	if not get_grey_ridge_army_plan_errors(plan).is_empty():
 		return false
+	set_tactical_paused(false)
 	_grey_ridge_army_plan = plan.duplicate_plan()
 	world = SimulationWorld.new(true, false, scenario_kind, _campaign_record, &"", _grey_ridge_army_plan)
 	current_snapshot = world.create_snapshot()
@@ -604,13 +657,14 @@ func get_grey_ridge_army_plan() -> ArmyPlan:
 
 
 func get_grey_ridge_army_plan_errors(plan: ArmyPlan) -> Array[StringName]:
+	if has_campaign_error():
+		return [campaign_error_key]
 	if not _is_card_battle() or plan == null:
 		return [&"ARMY_PLAN_ERROR_UNAVAILABLE"]
 	return world.get_grey_ridge_army_plan_errors(plan)
 
 
 func _campaign_record_updated() -> void:
-	_persist_campaign_record()
 	ArmyRosterStore.apply_to_world(world, _campaign_record)
 	current_snapshot = world.create_snapshot()
 	previous_snapshot = current_snapshot
@@ -618,8 +672,51 @@ func _campaign_record_updated() -> void:
 
 
 func _persist_campaign_record() -> void:
+	_campaign_save_pending = not _write_campaign_record(_campaign_record)
+
+
+func _write_campaign_record(record: Dictionary) -> bool:
+	if _campaign_load_failed:
+		return false
 	if ArmyRosterStore.runtime_persistence_allowed():
-		ArmyRosterStore.save_record(_campaign_record, _campaign_record_path)
+		var saved := ArmyRosterStore.save_record_result(record, _campaign_record_path)
+		if not saved.is_success():
+			_set_campaign_error(&"ROSTER_SAVE_FAILED", "; ".join(saved.errors))
+			return false
+	_set_campaign_error(&"", "")
+	return true
+
+
+func has_campaign_error() -> bool:
+	return not campaign_error_key.is_empty()
+
+
+func _load_campaign_roster(path: String) -> bool:
+	var loaded := ArmyRosterStore.load_record_result(path, ArmyRosterStore.runtime_persistence_allowed())
+	if loaded.status == ArmyRosterResult.Status.FAILED:
+		_campaign_load_failed = true
+		_set_campaign_error(&"ROSTER_LOAD_FAILED", "; ".join(loaded.errors))
+		return false
+	_campaign_load_failed = false
+	_campaign_record = loaded.record
+	_set_campaign_error(&"", "")
+	return true
+
+
+func retry_campaign_save() -> bool:
+	if _campaign_load_failed:
+		return false
+	if _campaign_save_pending:
+		_persist_campaign_record()
+		return not _campaign_save_pending
+	# A failed prebattle purchase left both memory and disk unchanged.
+	return _write_campaign_record(_campaign_record)
+
+
+func _set_campaign_error(key: StringName, detail: String) -> void:
+	campaign_error_key = key
+	campaign_error_detail = detail
+	campaign_persistence_changed.emit()
 
 
 func _start_playtest_session(prebattle_metrics: Dictionary = {}) -> void:

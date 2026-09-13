@@ -1,6 +1,8 @@
-[gd_resource type="Resource" script_class="DoctrineDefinition" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="DoctrineDefinition" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://src/data/doctrine_definition.gd" id="1_doctrine"]
+
+[ext_resource type="Resource" path="res://data/army/effects/fire_preparation.tres" id="2_effect"]
 
 [resource]
 script = ExtResource("1_doctrine")
@@ -8,3 +10,4 @@ definition_id = &"fire_preparation"
 display_name_key = &"DOCTRINE_FIRE_PREPARATION"
 behavior_key = &"DOCTRINE_FIRE_PREPARATION_BEHAVIOR"
 tradeoff_key = &"DOCTRINE_FIRE_PREPARATION_TRADEOFF"
+effects = Array[ExtResource("2_effect")]([ExtResource("2_effect")])

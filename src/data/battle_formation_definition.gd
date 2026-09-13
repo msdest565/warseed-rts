@@ -12,3 +12,4 @@ extends Resource
 @export var agent_id: int
 @export var task_id: int
 @export var tactical_role: int
+@export var unit_card_definition: UnitCardDefinition

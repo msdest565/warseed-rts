@@ -1,7 +1,7 @@
 class_name ArmyRosterStore
 extends RefCounted
 
-const FORMAT_VERSION := 3
+const FORMAT_VERSION := 4
 const GROWTH_CATALOG = preload("res://data/army/growth_catalog.tres")
 const GROWTH_KIND_HONOR := 0
 const GROWTH_KIND_EQUIPMENT := 1
@@ -27,23 +27,45 @@ const EQUIPMENT_REINFORCED_SIDE_SKIRTS := "reinforced_side_skirts"
 
 
 static func build_battle_record(snapshot: WorldSnapshot, previous_record: Dictionary = {}, scenario_id: StringName = &"grey_ridge") -> Dictionary:
+	var had_previous := not previous_record.is_empty()
 	previous_record = _normalize_record(previous_record)
+	if had_previous and previous_record.is_empty():
+		return {}
 	var previous_cards := previous_record.get("cards", {}) as Dictionary
 	var cards: Dictionary = previous_cards.duplicate(true)
 	for card in snapshot.unit_cards:
 		if card.faction_id != SimulationWorld.LOCAL_PLAYER_ID:
 			continue
 		var previous := previous_cards.get(String(card.definition_id), {}) as Dictionary
-		var starting_strength := int(previous.get("available_strength", card.authorized_strength))
-		var available_strength := card.current_strength
-		if card.deployment_state in [UnitCardState.DeploymentState.RESERVE, UnitCardState.DeploymentState.DEPLOYING]:
-			available_strength = starting_strength
-		var battle_losses := maxi(0, starting_strength - available_strength)
+		var entry_records: Dictionary = {}
+		var available_strength := 0
+		var battle_losses := 0
+		var cumulative_losses := 0
+		var old_entries: Dictionary = previous.get("composition", {})
+		for entry in card.composition:
+			var old_entry: Dictionary = old_entries.get(String(entry.entry_id), {})
+			var entry_available := entry.current_strength
+			if card.deployment_state in [UnitCardState.DeploymentState.RESERVE, UnitCardState.DeploymentState.DEPLOYING]:
+				entry_available = entry.available_strength
+			var losses := maxi(0, int(old_entry.get("available_strength", entry.authorized_strength)) - entry_available)
+			var cumulative := int(old_entry.get("cumulative_losses", 0)) + losses
+			entry_records[String(entry.entry_id)] = {
+				"unit_definition_id": String(entry.unit_definition_id),
+				"authorized_strength": entry.authorized_strength,
+				"available_strength": entry_available,
+				"last_battle_losses": losses,
+				"cumulative_losses": cumulative,
+				"replacement_priority": entry.replacement_priority,
+			}
+			available_strength += entry_available
+			battle_losses += losses
+			cumulative_losses += cumulative
 		cards[String(card.definition_id)] = {
 			"authorized_strength": card.authorized_strength,
 			"available_strength": available_strength,
 			"last_battle_losses": battle_losses,
-			"cumulative_losses": int(previous.get("cumulative_losses", 0)) + battle_losses,
+			"cumulative_losses": cumulative_losses,
+			"composition": entry_records,
 			"battles_survived": int(previous.get("battles_survived", 0)) + 1,
 			"honor_id": String(previous.get("honor_id", "")),
 			"equipment_id": String(previous.get("equipment_id", "")),
@@ -70,6 +92,8 @@ static func build_battle_record(snapshot: WorldSnapshot, previous_record: Dictio
 		merit_award = ORDERED_WITHDRAWAL_MERIT_AWARD
 	return {
 		"format_version": FORMAT_VERSION,
+		"content_version": ArmyRosterMigration.CONTENT_VERSION,
+		"migrated_from_version": int(previous_record.get("migrated_from_version", FORMAT_VERSION)),
 		"scenario_id": String(scenario_id),
 		"last_scenario_id": String(scenario_id),
 		"battle_count": int(previous_record.get("battle_count", 0)) + 1,
@@ -85,10 +109,23 @@ static func build_battle_record(snapshot: WorldSnapshot, previous_record: Dictio
 	}
 
 
-static func apply_to_world(world: SimulationWorld, record: Dictionary) -> void:
+static func apply_to_world(world: SimulationWorld, record: Dictionary) -> bool:
 	if record.is_empty():
-		return
+		return true
+	var normalized := ArmyRosterMigration.normalize(record, false)
+	if not normalized.is_success():
+		push_error("Roster apply refused: " + "; ".join(normalized.errors))
+		return false
+	record = normalized.record
 	var records := record.get("cards", {}) as Dictionary
+	# Validate every affected card before changing any authority state.
+	for card_id in world.unit_cards:
+		var candidate := world.unit_cards[card_id] as UnitCardState
+		if candidate.faction_id == SimulationWorld.LOCAL_PLAYER_ID and records.has(String(card_id)):
+			var mismatch := ArmyRosterMigration.definition_mismatch(records[String(card_id)], candidate.definition)
+			if not mismatch.is_empty():
+				push_error("Roster apply refused: %s: %s" % [card_id, mismatch])
+				return false
 	for unit_card_id in world.unit_cards:
 		var card := world.unit_cards[unit_card_id] as UnitCardState
 		if card.faction_id != SimulationWorld.LOCAL_PLAYER_ID:
@@ -108,9 +145,14 @@ static func apply_to_world(world: SimulationWorld, record: Dictionary) -> void:
 			card.definition.authorized_strength
 		)
 		card.available_strength = available_strength
-		_prune_card_to_strength(world, card, available_strength)
+		for entry in card.composition:
+			var entry_record: Dictionary = card_record.composition[String(entry.entry_id)]
+			entry.available_strength = int(entry_record.available_strength)
+			entry.cumulative_losses = int(entry_record.get("cumulative_losses", 0))
+			_prune_entry_to_strength(world, card, entry, entry.available_strength)
 		world.apply_unit_card_persistent_modifiers(card)
 		world.refresh_unit_card_organization_baseline(card)
+	return true
 
 
 static func replacement_cost(record: Dictionary, unit_card_id: StringName) -> int:
@@ -133,6 +175,24 @@ static func replenish_card(record: Dictionary, unit_card_id: StringName) -> bool
 	var authorized := int(card.get("authorized_strength", 0))
 	var cost := replacement_cost(record, unit_card_id)
 	if available >= authorized or cost <= 0 or int(record.get("replacement_points", 0)) < cost:
+		return false
+	var entries: Dictionary = card.get("composition", {})
+	if entries.is_empty():
+		return false
+	var entry_ids := entries.keys()
+	entry_ids.sort_custom(func(a: String, b: String) -> bool:
+		var left := int(entries[a].get("replacement_priority", 0))
+		var right := int(entries[b].get("replacement_priority", 0))
+		return left < right if left != right else a < b
+	)
+	var restored := false
+	for entry_id in entry_ids:
+		var entry: Dictionary = entries[entry_id]
+		if int(entry.available_strength) < int(entry.authorized_strength):
+			entry["available_strength"] = int(entry.available_strength) + 1
+			restored = true
+			break
+	if not restored:
 		return false
 	card["available_strength"] = available + 1
 	card["last_refit_days"] = int(card.get("last_refit_days", 0)) + 1
@@ -207,16 +267,16 @@ static func _get_card_record(record: Dictionary, unit_card_id: StringName) -> Di
 	return cards.get(String(unit_card_id), {}) as Dictionary
 
 
-static func _prune_card_to_strength(world: SimulationWorld, card: UnitCardState, available_strength: int) -> void:
+static func _prune_entry_to_strength(world: SimulationWorld, card: UnitCardState, entry: UnitCardCompositionState, available_strength: int) -> void:
 	var surviving_ids: Array[int] = []
-	for entity_id in card.member_entity_ids:
+	for entity_id in entry.member_entity_ids:
 		var unit := world.units.get(entity_id) as UnitState
 		if unit != null and unit.enabled:
 			surviving_ids.append(entity_id)
 	surviving_ids.sort()
 	while surviving_ids.size() > available_strength:
 		surviving_ids.pop_back()
-	for entity_id in card.member_entity_ids:
+	for entity_id in entry.member_entity_ids:
 		if surviving_ids.has(entity_id):
 			continue
 		world.units.erase(entity_id)
@@ -230,52 +290,85 @@ static func _prune_card_to_strength(world: SimulationWorld, card: UnitCardState,
 
 
 static func save_record(record: Dictionary, path: String = DEFAULT_PATH) -> bool:
-	record = _normalize_record(record)
-	var absolute_directory := ProjectSettings.globalize_path(path.get_base_dir())
-	if DirAccess.make_dir_recursive_absolute(absolute_directory) != OK:
-		return false
-	var file := FileAccess.open(path, FileAccess.WRITE)
-	if file == null:
-		return false
-	file.store_string(JSON.stringify(record, "\t"))
-	return file.get_error() == OK
+	return save_record_result(record, path).is_success()
 
 
 static func load_record(path: String = DEFAULT_PATH) -> Dictionary:
+	var result := load_record_result(path)
+	if result.status == ArmyRosterResult.Status.FAILED:
+		push_error("Roster load refused: " + "; ".join(result.errors))
+	return result.record.duplicate(true)
+
+
+static func load_record_result(path: String = DEFAULT_PATH, migrate_file: bool = true, operations: RosterFileOperations = null) -> ArmyRosterResult:
+	var result := ArmyRosterResult.new()
 	if not FileAccess.file_exists(path):
-		return {}
+		if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(path)):
+			return result.fail("roster path is a directory: " + path)
+		result.status = ArmyRosterResult.Status.MISSING
+		return result
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
-		return {}
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
-	if not parsed is Dictionary:
-		return {}
-	var record := parsed as Dictionary
-	if int(record.get("format_version", 0)) not in [1, 2, FORMAT_VERSION]:
-		return {}
-	return _normalize_record(record)
+		return result.fail("cannot read roster: " + path)
+	var parser := JSON.new()
+	var error := parser.parse(file.get_as_text())
+	file.close()
+	if error != OK or not parser.data is Dictionary:
+		return result.fail("invalid JSON at line %d: %s" % [parser.get_error_line(), parser.get_error_message()])
+	result = ArmyRosterMigration.normalize(parser.data)
+	if result.status == ArmyRosterResult.Status.MIGRATED and migrate_file:
+		var written := save_record_result(result.record, path, operations)
+		if not written.is_success():
+			written.source_version = result.source_version
+			return written
+		result.backup_path = written.backup_path
+	return result
+
+
+static func save_record_result(record: Dictionary, path: String = DEFAULT_PATH, operations: RosterFileOperations = null) -> ArmyRosterResult:
+	var result := ArmyRosterMigration.normalize(record)
+	if not result.is_success():
+		return result
+	if operations == null:
+		operations = RosterFileOperations.new()
+	if DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path.get_base_dir())) != OK:
+		return result.fail("cannot create roster directory: " + path.get_base_dir())
+	var existing := load_record_result(path, false)
+	if existing.status == ArmyRosterResult.Status.FAILED:
+		return result.fail("existing roster is invalid; refusing overwrite: " + "; ".join(existing.errors))
+	var had_original := FileAccess.file_exists(path)
+	var original_hash := FileAccess.get_sha256(path) if had_original else ""
+	var suffix := "%.0f-%d-%d" % [Time.get_unix_time_from_system() * 1000.0, OS.get_process_id(), Time.get_ticks_usec()]
+	var temporary := path + ".pending-" + suffix
+	var backup := path.trim_suffix(".json") + ".backup-" + suffix + ".json"
+	if FileAccess.file_exists(temporary) or FileAccess.file_exists(backup):
+		return result.fail("temporary or backup path collision")
+	var payload := JSON.stringify(result.record, "\t")
+	if operations.write_text(temporary, payload) != OK or FileAccess.get_sha256(temporary) != payload.sha256_text():
+		operations.remove_file(temporary)
+		return result.fail("temporary roster write failed")
+	if had_original:
+		if FileAccess.get_sha256(path) != original_hash or operations.copy_file(path, backup) != OK or FileAccess.get_sha256(backup) != original_hash:
+			operations.remove_file(temporary)
+			return result.fail("roster backup failed or original changed")
+		result.backup_path = backup
+	if (had_original and FileAccess.get_sha256(path) != original_hash) or (not had_original and FileAccess.file_exists(path)):
+		operations.remove_file(temporary)
+		return result.fail("roster changed before replacement")
+	if operations.replace_file(temporary, path) != OK:
+		operations.remove_file(temporary)
+		return result.fail("atomic roster replacement failed")
+	result.status = ArmyRosterResult.Status.SAVED
+	return result
 
 
 static func _normalize_record(source: Dictionary) -> Dictionary:
-	var record := source.duplicate(true)
-	if record.is_empty():
-		return record
-	record["format_version"] = FORMAT_VERSION
-	record["replacement_points"] = maxi(0, int(record.get("replacement_points", 0)))
-	record["merit"] = maxi(0, int(record.get("merit", 0)))
-	record["campaign_days"] = maxi(0, int(record.get("campaign_days", 0)))
-	record["last_replacement_award"] = maxi(0, int(record.get("last_replacement_award", 0)))
-	record["last_merit_award"] = maxi(0, int(record.get("last_merit_award", 0)))
-	var cards := record.get("cards", {}) as Dictionary
-	for key in cards:
-		var card := cards[key] as Dictionary
-		card["honor_id"] = String(card.get("honor_id", ""))
-		card["equipment_id"] = String(card.get("equipment_id", ""))
-		card["last_refit_days"] = maxi(0, int(card.get("last_refit_days", 0)))
-		card["organization"] = clampf(float(card.get("organization", 100.0)), 0.0, 100.0)
-		card["last_status"] = String(card.get("last_status", "unknown"))
-		card["last_scenario_id"] = String(card.get("last_scenario_id", record.get("scenario_id", "")))
-	return record
+	if source.is_empty():
+		return {}
+	var result := ArmyRosterMigration.normalize(source, false)
+	if not result.is_success():
+		push_error("Roster normalization refused: " + "; ".join(result.errors))
+	return result.record
 
 
 static func runtime_persistence_allowed() -> bool:

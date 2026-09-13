@@ -81,6 +81,7 @@ var requires_proactive_authorization: bool = false
 var unit_card_id: StringName
 var persistent_order: bool = false
 var activation_tick: int = 0
+var doctrine_effect: DoctrineTaskParameters
 var final_target_position: Vector2
 var has_staged_target: bool = false
 var requires_observed_contact: bool = false

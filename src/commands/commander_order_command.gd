@@ -17,6 +17,8 @@ var route_points: PackedVector2Array = PackedVector2Array()
 var intent_id: StringName
 var main_axis_region_id: StringName
 var reserve_policy: CommanderState.ReservePolicy = CommanderState.ReservePolicy.HOLD
+# Explicit player execution orders may also hand manual cards back to this commander.
+var hand_back_control: bool = false
 
 
 func _init(

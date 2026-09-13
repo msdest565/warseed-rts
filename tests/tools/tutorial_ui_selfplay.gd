@@ -125,8 +125,8 @@ func _initialize() -> void:
 			_fail("battle debrief did not satisfy tutorial T6")
 		await _click_control(game.battle_debrief.cards_button)
 		await _wait_frames(3)
-		if cards.size() != 4 or game.battle_debrief.rows.get_child_count() != 4:
-			_fail("battle debrief did not create four persistent unit-card records")
+		if cards.size() != 6 or game.battle_debrief.rows.get_child_count() != 6:
+			_fail("battle debrief did not create six Grey Ridge tactical unit-card records")
 		await _save_screenshot(T6_OUTPUT_PATH)
 		print("WARSEED_TUTORIAL_UI_SELFPLAY_T6 result=%s ticks=%d cards=%d events=%d output=%s" % [
 			String(record.get("last_result", "unknown")), host.current_snapshot.tick,

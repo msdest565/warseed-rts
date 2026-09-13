@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://src/data/unit_definition.gd" id="1"]
+[ext_resource type="Script" path="res://src/data/combat_definition.gd" id="2"]
+[ext_resource type="Script" path="res://src/data/tactical_weapon_definition.gd" id="3"]
+
+[sub_resource type="Resource" id="Combat"]
+script = ExtResource("2")
+max_health = 120.0
+armor = 4.0
+attack_power = 0.0
+attack_range = 600.0
+attacks_per_second = 0.5
+projectile_speed = 700.0
+
+[sub_resource type="Resource" id="Weapon"]
+script = ExtResource("3")
+damage_tag = 3
+target_tag = 0
+ammunition_capacity = 4
+minimum_range = 140.0
+suppression = 9.0
+identification_required = true
+preparation_ticks = 20
+
+[resource]
+script = ExtResource("1")
+definition_id = &"suppression_vehicle"
+display_name = "suppression_vehicle"
+move_speed = 110.0
+production_cost = 300
+production_ticks = 40
+sight_range = 260.0
+combat = SubResource("Combat")
+tactical_weapon = SubResource("Weapon")
+

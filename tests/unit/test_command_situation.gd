@@ -4,6 +4,7 @@ extends RefCounted
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_card_action_projection(failures)
 	_test_high_level_intent_command_pipeline(failures)
 	_test_intent_validation_and_cancel(failures)
 	_test_five_exception_contracts(failures)
@@ -229,3 +230,67 @@ func _project_situation(world: SimulationWorld, snapshot: WorldSnapshot) -> Batt
 func _expect(condition: bool, message: String, failures: Array[String]) -> void:
 	if not condition:
 		failures.append(message)
+
+
+func _test_card_action_projection(failures: Array[String]) -> void:
+	var world := SimulationWorld.new(true, false, SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var snapshot := world.create_faction_snapshot(SimulationWorld.LOCAL_PLAYER_ID)
+	var projector := CardActionProjector.new()
+	var card := snapshot.get_unit_card(&"ironwall_assault_group")
+	card.current_strength = card.authorized_strength - 1
+	var actions := projector.project(snapshot, world.battle_definition)
+	var reinforcement: CardActionSnapshot
+	var reserve: CardActionSnapshot
+	for action in actions:
+		if action.unit_card_id == card.definition_id and action.action_kind == SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT:
+			reinforcement = action
+		if action.action_kind == CardActionSnapshot.DEPLOY:
+			reserve = action
+	_expect(reinforcement != null, "even one casualty must create a named reinforcement decision without selecting a card", failures)
+	_expect(reserve != null and reserve.radius == world.battle_definition.deployment_radius and reserve.population_required > 0, "reserve decisions must expose real available strength and the HQ targeting radius", failures)
+	if reinforcement == null:
+		return
+	var original_strength := reinforcement.current_strength
+	card.current_strength = 0
+	_expect(reinforcement.current_strength == original_strength, "card decisions must copy values rather than retain mutable source cards", failures)
+	var faction := snapshot.get_faction(SimulationWorld.LOCAL_PLAYER_ID)
+	faction.supply = 0
+	for action in projector.project(snapshot, world.battle_definition):
+		_expect(action.reason == CommandValidationResult.Reason.INSUFFICIENT_SUPPLY, "unaffordable card decisions must remain visible with a Supply reason", failures)
+	faction.supply = 100
+	faction.population = faction.population_capacity
+	for action in projector.project(snapshot, world.battle_definition):
+		if action.action_kind in [CardActionSnapshot.DEPLOY, SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT]:
+			_expect(action.reason == CommandValidationResult.Reason.POPULATION_FULL, "full population must explain blocked reserve and reinforcement decisions", failures)
+	faction.population = 0
+	faction.reinforcement_cooldown_until_tick = snapshot.tick + 40
+	for action in projector.project(snapshot, world.battle_definition):
+		if action.action_kind == SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT:
+			_expect(action.cooldown_ticks == 40 and action.reason == CommandValidationResult.Reason.SUPPORT_COOLDOWN, "reinforcement decisions must show the exact remaining cooldown", failures)
+	snapshot.is_true_state = true
+	_expect(projector.project(snapshot, world.battle_definition).is_empty(), "card decisions must reject true-state snapshots", failures)
+	snapshot.is_true_state = false
+	snapshot.observer_faction_id = SimulationWorld.ENEMY_PLAYER_ID
+	_expect(projector.project(snapshot, world.battle_definition).is_empty(), "card decisions must reject mismatched faction knowledge", failures)
+	var black := SimulationWorld.new(true, false, SimulationWorld.ScenarioKind.BLACK_WELL)
+	var black_snapshot := black.create_faction_snapshot(SimulationWorld.LOCAL_PLAYER_ID)
+	var deployed: UnitCardSnapshot
+	for candidate in black_snapshot.unit_cards:
+		if candidate.deployment_state == UnitCardState.DeploymentState.DEPLOYED:
+			deployed = candidate
+			break
+	if deployed != null:
+		var member := black_snapshot.get_unit(deployed.active_member_entity_ids[0])
+		member.health -= 1.0
+		var logistics := false
+		var mobility := false
+		for action in projector.project(black_snapshot, black.battle_definition):
+			if action.unit_card_id == deployed.definition_id:
+				logistics = logistics or action.action_kind == SupportOrderCommand.SupportKind.FRONTLINE_LOGISTICS
+				mobility = mobility or action.action_kind == SupportOrderCommand.SupportKind.RAPID_MOBILITY
+		_expect(logistics and mobility, "Black Well must expose logistics for wounded surviving members and mobility without hidden selection", failures)
+	var private_faction := black.factions[SimulationWorld.LOCAL_PLAYER_ID] as FactionState
+	private_faction.opened_engineering_route_ids.append(&"own_route")
+	var old_snapshot := FactionSnapshot.new(private_faction)
+	private_faction.opened_engineering_route_ids.append(&"later_route")
+	_expect(old_snapshot.opened_engineering_route_ids == [&"own_route"] and FactionSnapshot.new(private_faction, false).opened_engineering_route_ids.is_empty(), "engineering route receipts must be copied and excluded from other factions' private snapshots", failures)

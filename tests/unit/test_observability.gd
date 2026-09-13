@@ -259,6 +259,7 @@ func _test_isolated_playtest_paths(failures: Array[String]) -> void:
 	var isolated_test_path := "user://warseed_test_playtest_runs/nested/grey_ridge_roster.json"
 	var isolated_record := {
 		"format_version": ArmyRosterStore.FORMAT_VERSION,
+		"content_version": ArmyRosterMigration.CONTENT_VERSION,
 		"battle_count": 2,
 		"replacement_points": 4,
 		"merit": 1,

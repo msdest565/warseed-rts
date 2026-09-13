@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="UnitCardDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/data/unit_card_definition.gd" id="1"]
+[ext_resource type="Script" path="res://src/data/tactical_ability_definition.gd" id="2"]
+
+[sub_resource type="Resource" id="Ability"]
+script = ExtResource("2")
+ability_id = &"grey_engineer_action"
+kind = 1
+name_key = &"TACTICAL_ENGINEERS_ACTION"
+help_key = &"TACTICAL_ENGINEERS_HELP"
+required_unit_id = &"engineer_vehicle"
+supply_cost = 2
+preparation_ticks = 30
+duration_ticks = 1
+cooldown_ticks = 120
+range = 280.0
+organization_cost = 0.0
+
+[resource]
+script = ExtResource("1")
+definition_id = &"bridge_engineer_group"
+display_name_key = &"UNIT_CARD_BRIDGE_ENGINEERS"
+role_key = &"UNIT_CARD_ROLE_ENGINEERING"
+commander_definition_id = &"lu_zheng"
+command_cost = 2
+authorized_strength = 6
+unit_definition_id = &"engineer_vehicle"
+supply_cost = 2
+tactical_ability = SubResource("Ability")
+deployment_ticks = 80
+starts_in_reserve = true

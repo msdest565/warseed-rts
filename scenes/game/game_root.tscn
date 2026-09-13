@@ -394,7 +394,7 @@ theme_override_constants/margin_bottom = 6
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="Header" type="VBoxContainer" parent="HUDLayer/ArmyBoard/Margin/Layout"]
+[node name="Header" type="HBoxContainer" parent="HUDLayer/ArmyBoard/Margin/Layout"]
 layout_mode = 2
 
 [node name="Title" type="Label" parent="HUDLayer/ArmyBoard/Margin/Layout/Header"]
@@ -416,8 +416,9 @@ layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="CommanderRow" type="VBoxContainer" parent="HUDLayer/ArmyBoard/Margin/Layout/Scroll"]
+[node name="CommanderRow" type="BoxContainer" parent="HUDLayer/ArmyBoard/Margin/Layout/Scroll"]
 layout_mode = 2
+vertical = true
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
 
@@ -560,7 +561,7 @@ autowrap_mode = 2
 [node name="Separator" type="HSeparator" parent="HUDLayer/TaskPanel/Margin/Layout/Tutorial"]
 layout_mode = 2
 
-[node name="CommandDesk" type="HBoxContainer" parent="HUDLayer/TaskPanel/Margin/Layout"]
+[node name="CommandDesk" type="VBoxContainer" parent="HUDLayer/TaskPanel/Margin/Layout"]
 visible = false
 layout_mode = 2
 size_flags_horizontal = 3
@@ -680,13 +681,14 @@ autowrap_mode = 2
 max_lines_visible = 2
 text_overrun_behavior = 3
 
-[node name="Separator" type="VSeparator" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk"]
+[node name="Separator" type="HSeparator" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk"]
 layout_mode = 2
 
 [node name="Exceptions" type="VBoxContainer" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk"]
-custom_minimum_size = Vector2(300, 0)
+custom_minimum_size = Vector2(0, 0)
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_vertical = 3
 theme_override_constants/separation = 3
 
 [node name="Header" type="HBoxContainer" parent="HUDLayer/TaskPanel/Margin/Layout/CommandDesk/Exceptions"]
@@ -1193,7 +1195,6 @@ text = "No delegated task"
 text_overrun_behavior = 3
 
 [node name="Minimap" type="Control" parent="HUDLayer"]
-custom_minimum_size = Vector2(232, 188)
 layout_mode = 3
 anchors_preset = 2
 anchor_top = 1.0

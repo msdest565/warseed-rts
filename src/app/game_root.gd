@@ -36,6 +36,9 @@ extends Node
 @onready var command_desk: CommandDesk = $HUDLayer/TaskPanel/Margin/Layout/CommandDesk
 @onready var pause_button: Button = $HUDLayer/PauseButton
 
+var tactical_pause_button: Button
+var control_handoff_button: Button
+
 var _last_ui_snapshot_tick: int = -1
 var _visible_hostile_ids: Dictionary = {}
 var _last_contact_alert_tick: Dictionary = {}
@@ -73,6 +76,12 @@ func _ready() -> void:
 		overlay_controls.layer_visibility_changed.connect(_on_overlay_visibility_changed)
 	if pause_button != null and not pause_button.pressed.is_connected(_open_pause_menu):
 		pause_button.pressed.connect(_open_pause_menu)
+	tactical_pause_button = Button.new()
+	tactical_pause_button.name = "TacticalPause"
+	tactical_pause_button.clip_text = true
+	tactical_pause_button.pressed.connect(_toggle_tactical_pause)
+	$HUDLayer.add_child(tactical_pause_button)
+	simulation_host.tactical_pause_changed.connect(_refresh_tactical_pause.unbind(1))
 	_configure_scenario_ui()
 	input_controller.simulation_host = simulation_host
 	input_controller.world_presentation = world_presentation
@@ -104,6 +113,9 @@ func _ready() -> void:
 	_on_command_mode_changed(input_controller.command_mode)
 	support_panel.simulation_host = simulation_host
 	support_panel.input_controller = input_controller
+	support_panel.contextual_card_actions = true
+	if not support_panel.card_decision_requested.is_connected(command_desk.show_card_actions):
+		support_panel.card_decision_requested.connect(command_desk.show_card_actions)
 	tutorial_panel.configure(simulation_host)
 	if not tutorial_panel.visibility_changed.is_connected(_update_tutorial_layout):
 		tutorial_panel.visibility_changed.connect(_update_tutorial_layout)
@@ -162,7 +174,9 @@ func _configure_scenario_ui() -> void:
 	support_panel.visible = is_grey_ridge
 	overlay_controls.visible = false
 	pause_button.visible = is_grey_ridge
-	army_board.set_commander_only(is_grey_ridge)
+	army_board.set_tactical_cards(is_grey_ridge)
+	if is_grey_ridge:
+		army_board.update_snapshot(simulation_host.current_snapshot)
 	if route_mode_hint != null:
 		route_mode_hint.visible = false
 	scenario_status.configure(simulation_host)
@@ -205,6 +219,9 @@ func _update_grey_ridge_panel_visibility() -> void:
 	_apply_grey_ridge_hud_layout()
 
 
+var _hud_layout_signature := ""
+
+
 func _apply_grey_ridge_hud_layout() -> void:
 	if simulation_host == null or not SimulationWorld.is_card_battle_kind(simulation_host.scenario_kind):
 		return
@@ -215,6 +232,10 @@ func _apply_grey_ridge_hud_layout() -> void:
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		return
 	var planning := prebattle_planner != null and prebattle_planner.visible
+	var layout_signature := "%s:%s:%s:%s:%s" % [viewport_size, planning, tutorial_panel.visible, TranslationServer.get_locale(), army_board._content_signature]
+	if layout_signature == _hud_layout_signature and _grey_ridge_fitted_map_rect.has_area():
+		return
+	_hud_layout_signature = layout_signature
 	if planning:
 		_apply_grey_ridge_planning_layout(viewport_size)
 	elif viewport_size.x >= GREY_RIDGE_MIN_DESKTOP_WIDTH:
@@ -243,22 +264,21 @@ func _apply_grey_ridge_planning_layout(viewport_size: Vector2) -> void:
 func _apply_grey_ridge_desktop_layout(viewport_size: Vector2) -> void:
 	_set_narrow_header_typography(false)
 	_set_grey_ridge_compact_panels(false)
+	var margin := GREY_RIDGE_OUTER_MARGIN
+	var gap := GREY_RIDGE_GUTTER
+	var left_width := 180.0
+	var right_width := clampf(viewport_size.x * 0.28, 340.0, 480.0)
+	var right_left := viewport_size.x - margin - right_width
+	var center_left := margin + left_width + gap
+	var center_width := right_left - gap - center_left
+	var card_height := army_board.get_overview_height(center_width)
+	_set_hud_rect(task_panel, Rect2(right_left, margin, right_width, viewport_size.y - margin * 2.0))
+	_set_hud_rect(army_board, Rect2(center_left, viewport_size.y - margin - card_height, center_width, card_height))
+	_set_hud_rect(support_panel, Rect2(margin, margin, left_width, viewport_size.y - margin * 2.0 - 188.0 - gap))
+	minimap.custom_minimum_size = Vector2.ZERO
+	_set_hud_rect(minimap, Rect2(margin, viewport_size.y - margin - 188.0, left_width, 188.0))
 	minimap.visible = true
-	var side_width := GREY_RIDGE_SIDE_WIDTH
-	minimap.custom_minimum_size = Vector2(side_width, 188.0)
-	var center_left := GREY_RIDGE_OUTER_MARGIN + side_width + GREY_RIDGE_GUTTER
-	var center_right := viewport_size.x - center_left
-	var command_top := viewport_size.y - GREY_RIDGE_OUTER_MARGIN - GREY_RIDGE_COMMAND_HEIGHT
-	var map_top := GREY_RIDGE_OUTER_MARGIN
-	var map_bottom := command_top - GREY_RIDGE_GUTTER
-	_set_hud_rect(support_panel, Rect2(
-		GREY_RIDGE_OUTER_MARGIN, GREY_RIDGE_OUTER_MARGIN,
-		side_width, viewport_size.y - GREY_RIDGE_OUTER_MARGIN - 204.0
-	))
-	_set_hud_rect(minimap, Rect2(GREY_RIDGE_OUTER_MARGIN, viewport_size.y - 204.0, side_width, 188.0))
-	_set_hud_rect(army_board, Rect2(viewport_size.x - GREY_RIDGE_OUTER_MARGIN - side_width, GREY_RIDGE_OUTER_MARGIN, side_width, viewport_size.y - GREY_RIDGE_OUTER_MARGIN * 2.0))
-	_set_hud_rect(task_panel, Rect2(center_left, command_top, center_right - center_left, GREY_RIDGE_COMMAND_HEIGHT))
-	_grey_ridge_map_rect = Rect2(center_left, map_top, center_right - center_left, map_bottom - map_top)
+	_grey_ridge_map_rect = Rect2(center_left, margin, center_width, viewport_size.y - margin * 2.0 - card_height - gap)
 	_set_hud_rect(map_frame, _grey_ridge_map_rect)
 	_layout_pause_button()
 
@@ -268,22 +288,24 @@ func _apply_grey_ridge_narrow_layout(viewport_size: Vector2) -> void:
 	_set_grey_ridge_compact_panels(true)
 	var margin := 8.0
 	var gap := 8.0
-	var lower_height := clampf(viewport_size.y * 0.28, 190.0, 228.0)
-	var map_height := maxf(180.0, viewport_size.y - GREY_RIDGE_NARROW_COMMAND_HEIGHT - lower_height - margin * 2.0 - gap * 2.0)
-	_grey_ridge_map_rect = Rect2(margin, margin, viewport_size.x - margin * 2.0, map_height)
-	_set_hud_rect(map_frame, _grey_ridge_map_rect)
-	_layout_pause_button()
-	var task_top := _grey_ridge_map_rect.end.y + gap
-	_set_hud_rect(task_panel, Rect2(margin, task_top, viewport_size.x - margin * 2.0, GREY_RIDGE_NARROW_COMMAND_HEIGHT))
-	var lower_top := task_top + GREY_RIDGE_NARROW_COMMAND_HEIGHT + gap
-	var column_width := (viewport_size.x - margin * 2.0 - gap * 2.0) / 3.0
+	var card_height := army_board.get_overview_height(viewport_size.x - margin * 2.0)
+	var upper_height := viewport_size.y - margin * 2.0 - card_height - gap
+	var right_width := maxf(248.0, viewport_size.x * 0.46)
+	var left_width := viewport_size.x - margin * 2.0 - gap - right_width
+	_set_hud_rect(task_panel, Rect2(margin + left_width + gap, margin, right_width, upper_height))
+	_set_hud_rect(army_board, Rect2(margin, margin + upper_height + gap, viewport_size.x - margin * 2.0, card_height))
 	for panel in [support_panel, minimap, army_board]:
 		panel.custom_minimum_size = Vector2.ZERO
 		panel.clip_contents = true
-	_set_hud_rect(support_panel, Rect2(margin, lower_top, column_width, lower_height))
-	_set_hud_rect(minimap, Rect2(margin + column_width + gap, lower_top, column_width, lower_height))
-	_set_hud_rect(army_board, Rect2(margin + (column_width + gap) * 2.0, lower_top, column_width, lower_height))
+	var support_height := 120.0 if card_height > 240.0 else 180.0
+	var minimap_height := 60.0 if card_height > 240.0 else 100.0
+	var map_height := upper_height - support_height - minimap_height - gap * 2.0
+	_grey_ridge_map_rect = Rect2(margin, margin, left_width, map_height)
+	_set_hud_rect(map_frame, _grey_ridge_map_rect)
+	_set_hud_rect(support_panel, Rect2(margin, margin + map_height + gap, left_width, support_height))
+	_set_hud_rect(minimap, Rect2(margin, margin + upper_height - minimap_height, left_width, minimap_height))
 	minimap.visible = true
+	_layout_pause_button()
 
 
 func _set_narrow_header_typography(narrow: bool) -> void:
@@ -326,6 +348,17 @@ func _layout_pause_button() -> void:
 		_grey_ridge_map_rect.position.y + 8.0
 	)
 	_set_hud_rect(pause_button, Rect2(position, Vector2(48.0, 40.0)))
+	if tactical_pause_button != null:
+		_set_hud_rect(tactical_pause_button, Rect2(_grey_ridge_map_rect.position + Vector2(6, 54), Vector2(minf(250.0, _grey_ridge_map_rect.size.x - 12.0), 34.0)))
+		_refresh_tactical_pause()
+	if contact_alert != null:
+		contact_alert.custom_minimum_size = Vector2.ZERO
+		if contact_alert.message_label != null:
+			contact_alert.message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			contact_alert.message_label.add_theme_font_size_override("font_size", 11)
+		_set_hud_rect(contact_alert, Rect2(_grey_ridge_map_rect.position + Vector2(8, 96), Vector2(_grey_ridge_map_rect.size.x - 16.0, 48.0)))
+	if control_handoff_button != null:
+		_set_hud_rect(control_handoff_button, Rect2(_grey_ridge_map_rect.position + Vector2(6, 146), Vector2(maxf(80.0, _grey_ridge_map_rect.size.x - 12.0), 48.0)))
 
 
 func _set_grey_ridge_compact_panels(compact: bool) -> void:
@@ -432,10 +465,10 @@ func _layout_route_mode_hint() -> void:
 		return
 	var available_width := maxf(0.0, _grey_ridge_map_rect.size.x - 20.0)
 	var hint_width := minf(660.0, available_width)
-	var hint_height := 42.0 if hint_width >= 520.0 else 56.0
+	var hint_height := 42.0 if hint_width >= 520.0 else (84.0 if hint_width < 260.0 else 56.0)
 	var hint_position := Vector2(
 		_grey_ridge_map_rect.get_center().x - hint_width * 0.5,
-		_grey_ridge_map_rect.position.y + (84.0 if overlay_controls != null and overlay_controls.visible else 10.0)
+		_grey_ridge_map_rect.end.y - hint_height - 8.0
 	)
 	_set_hud_rect(route_mode_hint, Rect2(hint_position, Vector2(hint_width, hint_height)))
 
@@ -495,6 +528,7 @@ func _on_move_intent_changed(target_position: Vector2, _intent_sequence: int) ->
 
 
 func _on_language_changed(_locale: String) -> void:
+	_refresh_tactical_pause()
 	task_panel.refresh_locale()
 	resource_bar.refresh_locale()
 	workflow_panel.refresh_locale()
@@ -564,6 +598,7 @@ func _on_scenario_restarted(_snapshot: WorldSnapshot) -> void:
 func _process(delta: float) -> void:
 	_update_unit_presentation_for_zoom()
 	input_controller.prune_selection()
+	_update_control_handoff_hint()
 	world_presentation.set_snapshots(
 		simulation_host.previous_snapshot,
 		simulation_host.current_snapshot,
@@ -573,18 +608,17 @@ func _process(delta: float) -> void:
 	if input_controller.pending_move_active and simulation_host.get_queue_size() == 0:
 		world_presentation.clear_pending_move_target()
 	var snapshot := simulation_host.current_snapshot
-	if snapshot != null and snapshot.tick != _last_ui_snapshot_tick:
+	var snapshot_changed := snapshot != null and snapshot.tick != _last_ui_snapshot_tick and _pending_ui_snapshot == null
+	if snapshot_changed:
 		_last_ui_snapshot_tick = snapshot.tick
 		if battle_feedback_director != null:
 			battle_feedback_director.process_events(simulation_host.world.events, snapshot)
 		_process_new_contacts(snapshot)
-		_pending_situation = _project_situation(snapshot)
-		_pending_command_situation = _command_situation_projector.project(
-			snapshot, _pending_situation, SimulationWorld.LOCAL_PLAYER_ID
-		) if _pending_situation != null else null
 		_pending_ui_snapshot = snapshot
 		_pending_ui_phase = 0
-	_advance_pending_ui_refresh()
+	# Leave the authoritative tick frame free of expensive HUD projection/layout.
+	if not snapshot_changed:
+		_advance_pending_ui_refresh()
 	_update_hover_tooltip(delta)
 
 
@@ -598,6 +632,11 @@ func _advance_pending_ui_refresh() -> void:
 		return
 	match _pending_ui_phase:
 		0:
+			_pending_situation = _project_situation(_pending_ui_snapshot)
+			_pending_command_situation = _command_situation_projector.project(
+				_pending_ui_snapshot, _pending_situation, SimulationWorld.LOCAL_PLAYER_ID
+			) if _pending_situation != null else null
+		1:
 			battlefield_overlay.set_situation(_pending_situation)
 			overlay_controls.update_situation(_pending_situation)
 			command_desk.update_command_situation(_pending_ui_snapshot, _pending_command_situation)
@@ -605,14 +644,15 @@ func _advance_pending_ui_refresh() -> void:
 			resource_bar.update_snapshot(_pending_ui_snapshot)
 			scenario_status.update_snapshot(_pending_ui_snapshot)
 			tutorial_panel.observe_snapshot(_pending_ui_snapshot)
-		1:
+		2:
 			minimap.set_situation(_pending_situation)
 			minimap.set_state(_pending_ui_snapshot, camera_controller, input_controller.selected_entity_ids)
-		2:
+		3:
 			task_panel.update_snapshot(_pending_ui_snapshot)
 			workflow_panel.update_snapshot(_pending_ui_snapshot)
 			support_panel.update_snapshot(_pending_ui_snapshot)
 			army_board.update_snapshot(_pending_ui_snapshot)
+			_apply_grey_ridge_hud_layout()
 			if debug_layer.visible:
 				debug_layer.update_status(
 					_pending_ui_snapshot,
@@ -628,7 +668,7 @@ func _advance_pending_ui_refresh() -> void:
 					simulation_host.get_agent_authorization(StrategicTaskSystem.BATTLEFIELD_AGENT_ID)
 				)
 	_pending_ui_phase += 1
-	if _pending_ui_phase > 2:
+	if _pending_ui_phase > 3:
 		_pending_ui_snapshot = null
 		_pending_ui_phase = -1
 		_pending_situation = null
@@ -686,14 +726,18 @@ func _update_hover_tooltip(delta: float) -> void:
 		hover_tooltip.clear()
 		return
 	var mouse_position := get_viewport().get_mouse_position()
-	var context := task_panel.get_hover_context(mouse_position)
-	if context.is_empty() and task_panel.get_global_rect().has_point(mouse_position):
+	var context := army_board.get_hover_context(mouse_position) if army_board.has_open_help_popup() else (command_desk.get_hover_context(mouse_position) if command_desk.visible else {})
+	if context.is_empty():
+		context = army_board.get_hover_context(mouse_position) if army_board.visible else {}
+	if context.is_empty():
+		context = task_panel.get_hover_context(mouse_position)
+	if context.is_empty() and (task_panel.get_global_rect().has_point(mouse_position) or army_board.get_global_rect().has_point(mouse_position) or support_panel.get_global_rect().has_point(mouse_position)) :
 		hover_tooltip.clear()
 		return
 	if context.is_empty():
 		context = _world_hover_context(input_controller._screen_to_world(mouse_position))
 	hover_tooltip.update_candidate(
-		String(context.get("key", "")), String(context.get("text", "")), mouse_position, delta
+		String(context.get("key", "")), String(context.get("text", "")), context.get("anchor", mouse_position), delta, context.get("avoid", Rect2())
 	)
 
 
@@ -737,3 +781,61 @@ func _world_hover_context(world_position: Vector2) -> Dictionary:
 				"text": GameText.t(&"ORE_TOOLTIP") % ore_field.ore_remaining,
 			}
 	return {}
+
+
+func _update_control_handoff_hint() -> void:
+	if not SimulationWorld.is_card_battle_kind(simulation_host.scenario_kind):
+		return
+	if control_handoff_button == null:
+		control_handoff_button = Button.new()
+		control_handoff_button.name = "ControlHandoff"
+		control_handoff_button.add_theme_font_size_override("font_size", 12)
+		control_handoff_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		control_handoff_button.pressed.connect(input_controller.return_selected_cards_to_ai)
+		$HUDLayer.add_child(control_handoff_button)
+		_layout_pause_button()
+	var ids := input_controller.get_handoff_card_ids()
+	army_board.set_handoff_available(not ids.is_empty())
+	control_handoff_button.visible = not prebattle_planner.visible and not battle_debrief.visible and not route_mode_hint.visible and not ids.is_empty()
+	control_handoff_button.text = GameText.t(&"CONTROL_AI_HINT") % ids.size()
+	control_handoff_button.tooltip_text = GameText.t(&"CONTROL_AI_HELP")
+	if simulation_host.is_tactical_paused() and simulation_host.get_queue_size() > 0 and input_controller.pending_handoff_tick == simulation_host.current_snapshot.tick:
+		control_handoff_button.text += "\n" + GameText.t(&"CONTROL_AI_PENDING")
+
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.keycode == KEY_R and not event.ctrl_pressed and not event.alt_pressed and SimulationWorld.is_card_battle_kind(simulation_host.scenario_kind):
+		if pause_menu.backdrop.visible or prebattle_planner.visible or battle_debrief.visible:
+			return
+		var focus := get_viewport().gui_get_focus_owner()
+		if focus is LineEdit or focus is TextEdit:
+			return
+		for window in get_viewport().get_embedded_subwindows():
+			if window.visible:
+				return
+		if event.pressed and not event.echo:
+			input_controller.return_selected_cards_to_ai()
+		get_viewport().set_input_as_handled()
+		return
+	if not event is InputEventKey or event.keycode != KEY_SPACE:
+		return
+	if pause_menu.backdrop.visible or prebattle_planner.visible or battle_debrief.visible:
+		return
+	if event.pressed and not event.echo:
+		_toggle_tactical_pause()
+	get_viewport().set_input_as_handled()
+
+
+func _toggle_tactical_pause() -> void:
+	if pause_menu.backdrop.visible or prebattle_planner.visible or battle_debrief.visible:
+		return
+	simulation_host.set_tactical_paused(not simulation_host.is_tactical_paused())
+	_refresh_tactical_pause()
+
+
+func _refresh_tactical_pause() -> void:
+	if tactical_pause_button == null:
+		return
+	tactical_pause_button.visible = SimulationWorld.is_card_battle_kind(simulation_host.scenario_kind) and not prebattle_planner.visible and not battle_debrief.visible
+	tactical_pause_button.text = GameText.t(&"TACTICAL_RESUME" if simulation_host.is_tactical_paused() else &"TACTICAL_PAUSE")
+	tactical_pause_button.tooltip_text = GameText.t(&"TACTICAL_PAUSE_HELP")

@@ -7,6 +7,7 @@ extends Resource
 func validate(unit_catalog: UnitDefinitionCatalog = null) -> DataValidationResult:
 	var result := DataValidationResult.new()
 	var scenario_ids: Dictionary = {}
+	var persistent_compositions: Dictionary = {}
 	for index in range(battles.size()):
 		var battle := battles[index]
 		if battle == null:
@@ -19,6 +20,15 @@ func validate(unit_catalog: UnitDefinitionCatalog = null) -> DataValidationResul
 		scenario_ids[battle.scenario_id] = true
 		for issue in battle.validate(unit_catalog).issues:
 			result.issues.append(issue)
+		for card in battle.unit_card_definitions:
+			if card == null:
+				continue
+			var signature: Array = []
+			for entry in UnitCardCompositionCompiler.compile(card):
+				signature.append([entry.entry_id, entry.unit_definition_id, entry.authorized_count, entry.replacement_priority])
+			if persistent_compositions.has(card.definition_id) and persistent_compositions[card.definition_id] != signature:
+				result.add(DataValidationResult.Reason.INVALID_VALUE, "card '%s' changes persistent composition between battles" % card.definition_id)
+			persistent_compositions[card.definition_id] = signature
 	return result
 
 

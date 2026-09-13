@@ -16,12 +16,16 @@ var show_frontlines := true
 var show_tasks := true
 var show_threats := true
 var show_intelligence := true
+var _terrain_grid: LogicGrid
+var _terrain_revision := -1
+var _terrain_texture: ImageTexture
 
 const CONTACT_PING_DURATION := 3.0
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	set_process(true)
 
 
@@ -125,11 +129,11 @@ func _draw() -> void:
 	var content := get_content_rect()
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0.02, 0.035, 0.04, 0.94), true)
 	draw_rect(content, Color("162326"), true)
-	for cell in logic_grid.get_blocked_cells():
-		var cell_world_rect := Rect2(logic_grid.cell_to_world(cell) - Vector2.ONE * LogicGrid.CELL_SIZE * 0.5, Vector2.ONE * LogicGrid.CELL_SIZE)
-		var top_left := world_to_minimap(cell_world_rect.position)
-		var bottom_right := world_to_minimap(cell_world_rect.end)
-		draw_rect(Rect2(top_left, bottom_right - top_left), Color("53676b"), true)
+	_update_terrain_texture()
+	var terrain_origin := logic_grid.cell_to_world(Vector2i.ZERO) - Vector2.ONE * LogicGrid.CELL_SIZE * 0.5
+	var terrain_start := world_to_minimap(terrain_origin)
+	var terrain_end := world_to_minimap(terrain_origin + Vector2(logic_grid.grid_size) * LogicGrid.CELL_SIZE)
+	draw_texture_rect(_terrain_texture, Rect2(terrain_start, terrain_end - terrain_start), false)
 	if snapshot != null:
 		for region in snapshot.strategic_regions:
 			if not region.capturable:
@@ -169,6 +173,18 @@ func _draw() -> void:
 		var camera_end := world_to_minimap(camera_rect.end)
 		draw_rect(Rect2(camera_start, camera_end - camera_start), Color(0.96, 0.84, 0.38, 0.95), false, 1.5)
 	draw_rect(content, Color("91a9ad"), false, 2.0)
+
+
+func _update_terrain_texture() -> void:
+	if _terrain_grid == logic_grid and _terrain_revision == logic_grid.revision:
+		return
+	var terrain := Image.create(logic_grid.grid_size.x, logic_grid.grid_size.y, false, Image.FORMAT_RGBA8)
+	terrain.fill(Color.TRANSPARENT)
+	for cell in logic_grid.get_blocked_cells():
+		terrain.set_pixelv(cell, Color("53676b"))
+	_terrain_texture = ImageTexture.create_from_image(terrain)
+	_terrain_grid = logic_grid
+	_terrain_revision = logic_grid.revision
 
 
 func _draw_situation() -> void:

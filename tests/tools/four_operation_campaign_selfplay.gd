@@ -40,6 +40,8 @@ func _initialize() -> void:
 		return
 
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, true)
+	root.size = VIEWPORT_SIZE
 	DisplayServer.window_set_size(VIEWPORT_SIZE)
 	root.content_scale_size = VIEWPORT_SIZE
 	await _wait_frames(5)
@@ -159,6 +161,10 @@ func _play_operation(game: GameRoot, operation_index: int, operation: Dictionary
 		return
 	if String(record_before_actions.get("last_scenario_id", "")) != String(scenario_id):
 		_fail("%s conclusion wrote the wrong scenario identity" % scenario_id)
+		return
+	await _click_control(game.battle_debrief.cards_button)
+	if game.battle_debrief._active_view != BattleDebrief.ReviewView.CARDS:
+		_fail("campaign purchases require the visible troop-card review")
 		return
 	if _growth_selection.is_empty():
 		_growth_selection = await _select_first_affordable_honor(game.battle_debrief, host)
@@ -328,6 +334,7 @@ func _click_control(control: Control) -> void:
 
 
 func _click_position(position: Vector2) -> void:
+	await _position_physical_pointer(position)
 	_send_motion(position, 0)
 	await process_frame
 	_send_button(position, true)
@@ -341,6 +348,7 @@ func _drag_control_to(control: Control, target: Vector2) -> void:
 		_fail("attempted to drag a missing or hidden commander card")
 		return
 	var start := control.get_global_rect().get_center()
+	await _position_physical_pointer(start)
 	_send_motion(start, 0)
 	await process_frame
 	_send_button(start, true)
@@ -353,6 +361,20 @@ func _drag_control_to(control: Control, target: Vector2) -> void:
 	await _wait_frames(6)
 
 
+func _position_physical_pointer(point: Vector2) -> void:
+	DisplayServer.window_move_to_foreground()
+	await _wait_frames(2)
+	var usable := DisplayServer.screen_get_usable_rect()
+	var position := Vector2(DisplayServer.window_get_position())
+	var physical_point := position + point
+	var visible_point := physical_point.clamp(Vector2(usable.position) + Vector2(8, 8), Vector2(usable.end) - Vector2(8, 8))
+	if not physical_point.is_equal_approx(visible_point):
+		DisplayServer.window_set_position(Vector2i(position + visible_point - physical_point))
+		await _wait_frames(4)
+	root.warp_mouse(point)
+	await _wait_frames(2)
+
+
 func _send_motion(position: Vector2, button_mask: int) -> void:
 	var event := InputEventMouseMotion.new()
 	event.position = position
@@ -361,6 +383,7 @@ func _send_motion(position: Vector2, button_mask: int) -> void:
 	event.button_mask = button_mask
 	_mouse_position = position
 	Input.parse_input_event(event)
+	Input.flush_buffered_events()
 
 
 func _send_button(position: Vector2, pressed: bool) -> void:

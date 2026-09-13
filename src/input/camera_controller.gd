@@ -80,7 +80,7 @@ func world_to_screen(world_position: Vector2) -> Vector2:
 
 func zoom_at_screen_position(screen_position: Vector2, delta_zoom: float) -> void:
 	var world_before := screen_to_world(screen_position)
-	var next_zoom := clampf(zoom.x + delta_zoom, MIN_ZOOM, MAX_ZOOM)
+	var next_zoom := clampf(zoom.x + delta_zoom, _minimum_zoom(), MAX_ZOOM)
 	zoom = Vector2.ONE * next_zoom
 	force_update_scroll()
 	var world_after := screen_to_world(screen_position)
@@ -115,7 +115,7 @@ func fit_world_in_screen_rect(screen_rect: Rect2, padding: float = 0.94) -> void
 		screen_rect.size.x / world_rect.size.x,
 		screen_rect.size.y / world_rect.size.y
 	) * clampf(padding, 0.5, 1.0)
-	zoom = Vector2.ONE * clampf(fit_zoom, MIN_ZOOM, MAX_ZOOM)
+	zoom = Vector2.ONE * clampf(fit_zoom, _minimum_zoom(), MAX_ZOOM)
 	position = world_rect.get_center() - _active_screen_offset_world()
 	force_update_scroll()
 	clamp_to_bounds()
@@ -178,3 +178,9 @@ func _viewport_size() -> Vector2:
 		float(ProjectSettings.get_setting("display/window/size/viewport_width", 1280)),
 		float(ProjectSettings.get_setting("display/window/size/viewport_height", 720))
 	)
+
+
+func _minimum_zoom() -> float:
+	if active_screen_rect.size.x <= 0.0 or active_screen_rect.size.y <= 0.0:
+		return MIN_ZOOM
+	return minf(MIN_ZOOM, minf(active_screen_rect.size.x / world_rect.size.x, active_screen_rect.size.y / world_rect.size.y) * 0.94)

@@ -212,20 +212,26 @@ extends Resource
 
 ### 4.5 战法卡
 
-`DoctrineDefinition` 应增加类型化效果，不再由名称 ID 在世界类中散落分支：
+`DoctrineDefinition.effects` 使用 `Array[DoctrineEffectDefinition]`。D-027 后按玩法路线改为七类受限 typed Resource，旧 `parameters: Dictionary` 提案不再适用：
 
 ```gdscript
 class_name DoctrineEffectDefinition
 extends Resource
 
-@export var effect_kind: int
-@export var trigger_kind: int
-@export var required_role_tags: Array[StringName]
-@export var parameters: Dictionary
-@export var reason_key: StringName
+@export var schema_version: int = 1
+@export var effect_id: StringName
+@export var trigger: DoctrineTriggerDefinition
+@export var selector: DoctrineSelectorDefinition
+@export var effect: DoctrineActionDefinition
+@export var cost: DoctrineCostDefinition
+@export var timing: DoctrineTimingDefinition
+@export var counterplay: DoctrineCounterplayDefinition
+@export var reason: DoctrineReasonDefinition
 ```
 
-推荐首批效果种类：
+R3-001 已完成非空子资源、稳定 ID、枚举、时序、说明 key 与重复效果校验，并经 `BattleDefinition` / `BattleContentLoader` 拒绝无效内容。空 effects 保持旧战法兼容。R3-002 已将交替掩护接入 `DoctrineEffectRegistry`，按合法阵营快照返回值拷贝任务参数；黄金轨迹、专项和五档 UI 通过，完整发布验证状态以 `AI_DEVELOPMENT_STATE.md` 为准。契约详见 `R3_TACTICAL_GRAMMAR.md`。
+
+当前语法/执行器只支持 `STAGED_DEPARTURE`；以下其他种类仍为设计备选，必须分别完成加载验证、行为、成本、反制和测试后才能加入枚举：
 
 - `STAGED_DEPARTURE`
 - `REQUIRE_OBSERVED_CONTACT`

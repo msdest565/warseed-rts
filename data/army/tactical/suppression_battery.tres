@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="UnitCardDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/data/unit_card_definition.gd" id="1"]
+[ext_resource type="Script" path="res://src/data/tactical_ability_definition.gd" id="2"]
+
+[sub_resource type="Resource" id="Ability"]
+script = ExtResource("2")
+ability_id = &"suppression_battery_action"
+kind = 2
+name_key = &"TACTICAL_BATTERY_ACTION"
+help_key = &"TACTICAL_BATTERY_HELP"
+required_unit_id = &"suppression_vehicle"
+supply_cost = 2
+preparation_ticks = 20
+duration_ticks = 80
+cooldown_ticks = 140
+range = 600.0
+organization_cost = 0.0
+
+[resource]
+script = ExtResource("1")
+definition_id = &"suppression_battery"
+display_name_key = &"TACTICAL_BATTERY"
+role_key = &"UNIT_CARD_ROLE_FIREPOWER"
+commander_definition_id = &"lin_mo"
+command_cost = 2
+authorized_strength = 6
+unit_definition_id = &"suppression_vehicle"
+supply_cost = 3
+deployment_ticks = 80
+tactical_ability = SubResource("Ability")
+

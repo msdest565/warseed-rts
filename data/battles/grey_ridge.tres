@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="BattleDefinition" load_steps=30 format=3]
+[gd_resource type="Resource" script_class="BattleDefinition" load_steps=51 format=3]
 
 [ext_resource type="Script" path="res://src/data/battle_definition.gd" id="1_battle"]
 [ext_resource type="Resource" path="res://data/objectives/standard_card_battle_objectives.tres" id="objectives"]
@@ -15,10 +15,22 @@
 [ext_resource type="Resource" path="res://data/army/ironwall_assault_group.tres" id="12_ironwall"]
 [ext_resource type="Resource" path="res://data/army/armored_spearhead.tres" id="13_armor"]
 [ext_resource type="Resource" path="res://data/army/thunder_fire_group.tres" id="14_thunder"]
+[ext_resource type="Resource" path="res://data/army/grey_ridge/falcon_recon_group.tres" id="19_falcon_grey"]
+[ext_resource type="Resource" path="res://data/army/grey_ridge/armored_spearhead.tres" id="20_armor_grey"]
+[ext_resource type="Resource" path="res://data/army/grey_ridge/thunder_fire_group.tres" id="21_thunder_grey"]
+[ext_resource type="Resource" path="res://data/army/grey_ridge/bridge_engineer_group.tres" id="22_engineer_grey"]
+[ext_resource type="Resource" path="res://data/army/grey_ridge/frontline_logistics_column.tres" id="23_logistics_grey"]
+[ext_resource type="Resource" path="res://data/army/lu_zheng.tres" id="24_lu"]
+[ext_resource type="Script" path="res://src/data/battle_engineering_route_definition.gd" id="25_route"]
+[ext_resource type="Script" path="res://src/data/unit_card_definition.gd" id="26_card"]
+[ext_resource type="Script" path="res://src/data/tactical_ability_definition.gd" id="27_ability"]
 [ext_resource type="Resource" path="res://data/army/covert_search.tres" id="15_covert"]
 [ext_resource type="Resource" path="res://data/army/alternating_cover.tres" id="16_cover"]
 [ext_resource type="Resource" path="res://data/army/fire_preparation.tres" id="17_fire"]
 [ext_resource type="Resource" path="res://data/army/concentrated_breakthrough.tres" id="18_breakthrough"]
+[ext_resource type="Resource" path="res://data/army/rally_reorganization.tres" id="28_rally"]
+[ext_resource type="Resource" path="res://data/army/elastic_defense.tres" id="29_elastic"]
+[ext_resource type="Resource" path="res://data/army/fighting_withdrawal.tres" id="30_withdrawal"]
 
 [sub_resource type="Resource" id="RegionWest"]
 script = ExtResource("2_region")
@@ -86,6 +98,24 @@ direction_key = &"INTEL_DIRECTION_UNKNOWN"
 confidence_key = &"INTEL_CONFIDENCE_NONE"
 has_estimate = false
 
+[sub_resource type="Resource" id="EnemyAssaultCard"]
+script = ExtResource("26_card")
+definition_id = &"grey_ridge_enemy_assault"
+display_name_key = &"UNIT_CARD_IRONWALL"
+role_key = &"UNIT_CARD_ROLE_ASSAULT"
+unit_definition_id = &"assault_vehicle"
+authorized_strength = 12
+enforce_organization_rules = true
+
+[sub_resource type="Resource" id="EnemyProbeCard"]
+script = ExtResource("26_card")
+definition_id = &"grey_ridge_enemy_probe"
+display_name_key = &"UNIT_CARD_FALCON"
+role_key = &"UNIT_CARD_ROLE_RECON"
+unit_definition_id = &"scout_vehicle"
+authorized_strength = 2
+enforce_organization_rules = true
+
 [sub_resource type="Resource" id="FormationAssault"]
 script = ExtResource("4_formation")
 formation_id = 3
@@ -99,6 +129,7 @@ facing = Vector2(0, 1)
 agent_id = 301
 task_id = 9001
 tactical_role = 2
+unit_card_definition = SubResource("EnemyAssaultCard")
 
 [sub_resource type="Resource" id="FormationProbe"]
 script = ExtResource("4_formation")
@@ -113,6 +144,7 @@ facing = Vector2(0, 1)
 agent_id = 301
 task_id = 9001
 tactical_role = 1
+unit_card_definition = SubResource("EnemyProbeCard")
 
 [sub_resource type="Resource" id="SupportRecon"]
 script = ExtResource("5_support")
@@ -211,6 +243,13 @@ action_kind = 1
 delay_ticks = 25
 commitment_ticks = 100
 
+[sub_resource type="Resource" id="GreyRoute"]
+script = ExtResource("25_route")
+route_id = &"grey_ridge_side_route"
+display_name_key = &"GREY_RIDGE_SIDE_ROUTE"
+linked_region_id = &"east_supply"
+cleared_rects = Array[Rect2i]([Rect2i(140, 60, 16, 8)])
+
 [resource]
 script = ExtResource("1_battle")
 scenario_id = &"grey_ridge"
@@ -227,6 +266,15 @@ region_settlement_interval_ticks = 300
 starting_supply = 5
 supply_capacity = 10
 population_capacity = 40
+organization_max = 100.0
+organization_damage_factor = 0.08
+organization_member_loss = 8.0
+organization_recovery_per_tick = 0.12
+organization_recovery_delay_ticks = 30
+organization_recovery_region_id = &"central_relay"
+organization_recovery_radius = 560.0
+organization_recovery_region_bonus = 0.38
+organization_low_threshold = 30.0
 deployment_radius = 384.0
 player_headquarters_position = Vector2(3088, 3536)
 enemy_headquarters_position = Vector2(3088, 272)
@@ -237,32 +285,16 @@ next_dynamic_formation_id = 5
 enemy_offensive_followup_tick = 1800
 enemy_agent_id = 301
 enemy_task_id = 9001
-commander_definitions = Array[ExtResource("8_bai")]([ExtResource("8_bai"), ExtResource("9_di"), ExtResource("10_lin")])
-unit_card_definitions = Array[ExtResource("11_falcon")]([ExtResource("11_falcon"), ExtResource("12_ironwall"), ExtResource("13_armor"), ExtResource("14_thunder")])
-doctrine_definitions = Array[ExtResource("15_covert")]([ExtResource("15_covert"), ExtResource("16_cover"), ExtResource("17_fire"), ExtResource("18_breakthrough")])
+commander_definitions = Array[ExtResource("8_bai")]([ExtResource("8_bai"), ExtResource("9_di"), ExtResource("10_lin"), ExtResource("24_lu")])
+unit_card_definitions = Array[ExtResource("19_falcon_grey")]([ExtResource("19_falcon_grey"), ExtResource("12_ironwall"), ExtResource("20_armor_grey"), ExtResource("21_thunder_grey"), ExtResource("22_engineer_grey"), ExtResource("23_logistics_grey")])
+doctrine_definitions = Array[ExtResource("15_covert")]([ExtResource("15_covert"), ExtResource("16_cover"), ExtResource("17_fire"), ExtResource("18_breakthrough"), ExtResource("28_rally"), ExtResource("29_elastic"), ExtResource("30_withdrawal")])
 starting_card_count = 2
-commander_agent_ids = {
-&"bai_jiuyang": 201,
-&"di_tian": 202,
-&"lin_mo": 203
-}
-default_commander_by_unit_card = {
-&"armored_spearhead": &"di_tian",
-&"falcon_recon_group": &"bai_jiuyang",
-&"ironwall_assault_group": &"di_tian",
-&"thunder_fire_group": &"lin_mo"
-}
-default_doctrine_by_commander = {
-&"bai_jiuyang": &"covert_search",
-&"di_tian": &"alternating_cover",
-&"lin_mo": &"fire_preparation"
-}
-default_posture_by_commander = {
-&"bai_jiuyang": 0,
-&"di_tian": 1,
-&"lin_mo": 1
-}
+commander_agent_ids = {&"bai_jiuyang": 201, &"di_tian": 202, &"lin_mo": 203, &"lu_zheng": 204}
+default_commander_by_unit_card = {&"armored_spearhead": &"di_tian", &"bridge_engineer_group": &"lu_zheng", &"falcon_recon_group": &"bai_jiuyang", &"frontline_logistics_column": &"lu_zheng", &"ironwall_assault_group": &"di_tian", &"thunder_fire_group": &"lin_mo"}
+default_doctrine_by_commander = {&"bai_jiuyang": &"covert_search", &"di_tian": &"alternating_cover", &"lin_mo": &"fire_preparation", &"lu_zheng": &"rally_reorganization"}
+default_posture_by_commander = {&"bai_jiuyang": 0, &"di_tian": 1, &"lin_mo": 1, &"lu_zheng": 1}
 default_starting_unit_card_ids = Array[StringName]([&"falcon_recon_group", &"ironwall_assault_group"])
+engineering_routes = Array[SubResource("GreyRoute")]([SubResource("GreyRoute")])
 strategic_regions = Array[SubResource("RegionWest")]([SubResource("RegionWest"), SubResource("RegionCentral"), SubResource("RegionEast")])
 initial_intel = Array[SubResource("IntelCentral")]([SubResource("IntelCentral"), SubResource("IntelWest"), SubResource("IntelEast")])
 enemy_formations = Array[SubResource("FormationAssault")]([SubResource("FormationAssault"), SubResource("FormationProbe")])

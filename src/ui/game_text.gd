@@ -70,6 +70,8 @@ static func command_recovery(reason: CommandValidationResult.Reason) -> String:
 			key = &"RECOVERY_DAMAGED_CARD"
 		CommandValidationResult.Reason.BATTLE_CONCLUDED:
 			key = &"RECOVERY_RETURN_TO_OPERATIONS"
+		CommandValidationResult.Reason.TACTICAL_BUSY, CommandValidationResult.Reason.CAPABILITY_LOST, CommandValidationResult.Reason.TARGET_UNIDENTIFIED, CommandValidationResult.Reason.OUT_OF_RANGE, CommandValidationResult.Reason.LOW_ORGANIZATION, CommandValidationResult.Reason.RESUPPLY_NOT_NEEDED, CommandValidationResult.Reason.TACTICAL_UNSAFE:
+			key = &"RECOVERY_TACTICAL_CONDITIONS"
 		_:
 			key = &"RECOVERY_RETRY_SELECTION"
 	return t(key)

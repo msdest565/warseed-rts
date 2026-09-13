@@ -27,7 +27,7 @@ func validate(
 	if command is CommanderOrderCommand:
 		return _validate_commander_order(command as CommanderOrderCommand, commanders, unit_cards, formations, strategic_regions, battlefield_bounds, pathfinder)
 	if command is UnitCardControlCommand:
-		return _validate_unit_card_control(command as UnitCardControlCommand, unit_cards, units, formations)
+		return _validate_unit_card_control(command as UnitCardControlCommand, unit_cards, units, formations, commanders)
 	if command is SupportOrderCommand:
 		return _validate_support_order(command as SupportOrderCommand, unit_cards, strategic_regions, factions, units, battle_definition)
 	if command is DeployUnitCardCommand:
@@ -155,7 +155,8 @@ func _validate_unit_card_control(
 	command: UnitCardControlCommand,
 	unit_cards: Dictionary,
 	units: Dictionary,
-	formations: Dictionary
+	formations: Dictionary,
+	commanders: Dictionary
 ) -> CommandValidationResult:
 	var unit_card := unit_cards.get(command.unit_card_id) as UnitCardState
 	if unit_card == null:
@@ -179,9 +180,10 @@ func _validate_unit_card_control(
 			if unit_card.control_state == UnitCardState.ControlState.RETURNING:
 				return _rejected(CommandValidationResult.Reason.INVALID_DISPOSITION)
 		UnitCardControlCommand.Action.RETURN_TO_COMMANDER:
-			if unit_card.return_formation_id == 0 or not formations.has(unit_card.return_formation_id):
+			var commander := commanders.get(unit_card.commander_definition_id) as CommanderState
+			if commander == null or commander.faction_id != unit_card.faction_id or not commander.subordinate_unit_card_ids.has(command.unit_card_id) or not formations.has(unit_card.formation_id):
 				return _rejected(CommandValidationResult.Reason.INVALID_DISPOSITION)
-			if unit_card.control_state not in [UnitCardState.ControlState.PLAYER_OVERRIDDEN, UnitCardState.ControlState.RETURNING]:
+			if unit_card.control_state not in [UnitCardState.ControlState.PLAYER_OVERRIDDEN, UnitCardState.ControlState.PLAYER_CONTROLLED, UnitCardState.ControlState.RETURNING]:
 				return _rejected(CommandValidationResult.Reason.INVALID_DISPOSITION)
 		UnitCardControlCommand.Action.STAY_MANUAL:
 			if unit_card.control_state == UnitCardState.ControlState.RETURNING:
@@ -224,7 +226,7 @@ func _validate_support_order(
 			return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 		if engineering_card.deployment_state != UnitCardState.DeploymentState.DEPLOYED or engineering_card.formation_id == 0:
 			return _rejected(CommandValidationResult.Reason.INVALID_DEPLOYMENT_STATE)
-		if engineering_card.definition.unit_definition_id != &"engineer_vehicle":
+		if not engineering_card.has_active_unit_type(&"engineer_vehicle", units):
 			return _rejected(CommandValidationResult.Reason.INVALID_TARGET)
 		return CommandValidationResult.new(CommandValidationResult.Status.ACCEPTED)
 	if command.support_kind == SupportOrderCommand.SupportKind.FIRE_SUPPORT:

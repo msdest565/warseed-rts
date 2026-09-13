@@ -30,6 +30,8 @@ signal commander_intent_preview_cleared
 signal commander_plan_preview_changed(commander_id: StringName, route_points: PackedVector2Array, target_position: Vector2)
 signal commander_plan_preview_cleared
 signal command_mode_changed(mode: CommandMode)
+signal reserve_deployment_submitted(card_id: StringName, result: CommandValidationResult)
+signal reserve_deployment_cancelled
 
 const HIT_RADIUS_SCREEN := 34.0
 const DRAG_THRESHOLD := 6.0
@@ -44,6 +46,9 @@ var selected_entity_ids: Array[int] = []
 var selected_building_id: int = 0
 var selected_unit_card_id: StringName
 var selected_commander_id: StringName
+var pending_handoff_tick: int = -1
+var _decision_reserve_card_id: StringName
+var _decision_reserve_commander_id: StringName
 var intent_sequence: int = 0
 var pending_move_target: Vector2
 var pending_move_active: bool = false
@@ -136,6 +141,14 @@ func _command_mode_guidance_key() -> StringName:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey:
+		var focus := get_viewport().gui_get_focus_owner() if get_viewport() != null else null
+		if focus is LineEdit or focus is TextEdit:
+			return
+		if get_viewport() != null:
+			for window in get_viewport().get_embedded_subwindows():
+				if window.visible:
+					return
 	if camera_controller != null and camera_controller.handle_input(event):
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -339,15 +352,29 @@ func select_unit_card(unit_card_id: StringName) -> void:
 	]
 
 
+func begin_reserve_decision(unit_card_id: StringName) -> void:
+	select_unit_card(unit_card_id)
+	if command_mode == CommandMode.DEPLOY_UNIT_CARD_TARGETING:
+		_decision_reserve_card_id = unit_card_id
+		_decision_reserve_commander_id = selected_commander_id
+
+
 func deploy_selected_unit_card_at(world_position: Vector2) -> CommandValidationResult:
-	if selected_unit_card_id.is_empty():
+	var card_id := _decision_reserve_card_id if not _decision_reserve_card_id.is_empty() else selected_unit_card_id
+	var commander_id := _decision_reserve_commander_id if not _decision_reserve_card_id.is_empty() else selected_commander_id
+	if card_id.is_empty():
 		last_command_status = GameText.t(&"STATUS_UNIT_CARD_UNAVAILABLE")
 		return null
 	var result := simulation_host.submit_command(
-		simulation_host.create_deploy_unit_card_command(selected_unit_card_id, world_position, selected_commander_id)
+		simulation_host.create_deploy_unit_card_command(card_id, world_position, commander_id)
 	)
 	last_command_status = GameText.t(&"STATUS_DEPLOY_UNIT_CARD") % GameText.command_result(result)
+	reserve_deployment_submitted.emit(card_id, result)
 	if result.is_accepted():
+		selected_unit_card_id = card_id
+		selected_commander_id = commander_id
+		_decision_reserve_card_id = &""
+		_decision_reserve_commander_id = &""
 		command_mode = CommandMode.NORMAL
 		command_mode_changed.emit(command_mode)
 	return result
@@ -1235,6 +1262,10 @@ func begin_attack_move_targeting() -> void:
 
 func cancel_command_mode() -> void:
 	var previous_mode := command_mode
+	if previous_mode == CommandMode.DEPLOY_UNIT_CARD_TARGETING:
+		reserve_deployment_cancelled.emit()
+	_decision_reserve_card_id = &""
+	_decision_reserve_commander_id = &""
 	var was_build_targeting := _is_build_targeting()
 	var was_attack_targeting := command_mode == CommandMode.ATTACK_MOVE_TARGETING
 	var was_formation_targeting := command_mode == CommandMode.FORMATION_ROUTE_TARGETING
@@ -1487,6 +1518,44 @@ func recall_control_group(group_number: int, additive: bool = false) -> void:
 	last_command_status = GameText.t(&"STATUS_GROUP_RECALLED") % [group_number, selected_entity_ids.size()]
 
 
+func get_handoff_card_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	if simulation_host == null or simulation_host.current_snapshot == null:
+		return ids
+	var snapshot := simulation_host.current_snapshot
+	for card in snapshot.unit_cards:
+		if card.faction_id != SimulationWorld.LOCAL_PLAYER_ID or card.deployment_state != UnitCardState.DeploymentState.DEPLOYED:
+			continue
+		if card.control_state not in [UnitCardState.ControlState.PLAYER_OVERRIDDEN, UnitCardState.ControlState.PLAYER_CONTROLLED]:
+			continue
+		var matches_selection := card.definition_id == selected_unit_card_id
+		for entity_id in selected_entity_ids:
+			matches_selection = matches_selection or card.active_member_entity_ids.has(entity_id)
+		if not selected_entity_ids.is_empty() or not selected_unit_card_id.is_empty():
+			if not matches_selection:
+				continue
+		elif not selected_commander_id.is_empty() and card.commander_definition_id != selected_commander_id:
+			continue
+		ids.append(card.definition_id)
+	ids.sort()
+	return ids
+
+
+func return_selected_cards_to_ai() -> CommandValidationResult:
+	var ids := get_handoff_card_ids()
+	if ids.is_empty():
+		last_command_status = GameText.t(&"CONTROL_AI_NO_MANUAL")
+		return null
+	cancel_command_mode()
+	var result: CommandValidationResult
+	for card_id in ids:
+		result = set_unit_card_control(card_id, UnitCardControlCommand.Action.RETURN_TO_COMMANDER)
+		if result != null and result.is_accepted():
+			pending_handoff_tick = simulation_host.current_snapshot.tick
+	last_command_status = GameText.t(&"CONTROL_AI_QUEUED") % ids.size() if result != null and result.is_accepted() else GameText.command_result(result)
+	return result
+
+
 func set_selected_disposition(disposition: UnitDispositionCommand.Disposition, destination_formation_id: int = 0) -> CommandValidationResult:
 	if not selected_unit_card_id.is_empty() and disposition == UnitDispositionCommand.Disposition.RETURN:
 		return set_unit_card_control(selected_unit_card_id, UnitCardControlCommand.Action.RETURN_TO_COMMANDER)
@@ -1627,6 +1696,8 @@ func prune_selection() -> void:
 
 
 func reset_for_new_scenario() -> void:
+	_decision_reserve_card_id = &""
+	_decision_reserve_commander_id = &""
 	if commander_drag_active:
 		_clear_commander_drag()
 	command_mode = CommandMode.NORMAL

@@ -29,6 +29,7 @@ var discovered_contact_count: int
 var unit_card_id: StringName
 var persistent_order: bool
 var activation_tick: int
+var doctrine_effect: DoctrineTaskParameters
 var final_target_position: Vector2
 var has_staged_target: bool
 var requires_observed_contact: bool
@@ -63,6 +64,7 @@ func _init(task: TaskState) -> void:
 	unit_card_id = task.unit_card_id
 	persistent_order = task.persistent_order
 	activation_tick = task.activation_tick
+	doctrine_effect = task.doctrine_effect.duplicate_value() if task.doctrine_effect != null else null
 	final_target_position = task.final_target_position
 	has_staged_target = task.has_staged_target
 	requires_observed_contact = task.requires_observed_contact

@@ -804,6 +804,8 @@ msgid "DOCTRINE_ALTERNATING_COVER_BEHAVIOR"
 msgstr "下属战团依次启动，一部推进时另一部保持掩护"
 msgid "DOCTRINE_ALTERNATING_COVER_TRADEOFF"
 msgstr "后续战团延迟投入"
+msgid "DOCTRINE_STAGED_DEPARTURE_COUNTERPLAY"
+msgstr "敌军可在后续部队抵达前集中攻击先头部队；接管或结束任务会终止该任务的执行。"
 msgid "DOCTRINE_FIRE_PREPARATION_BEHAVIOR"
 msgstr "火力战团等待观察到敌情并完成准备后推进"
 msgid "DOCTRINE_FIRE_PREPARATION_TRADEOFF"
@@ -2455,3 +2457,333 @@ msgid "AFTER_ACTION_CAUSE_GENERIC"
 msgstr "已记录因素：%s"
 msgid "AFTER_ACTION_CARD_METRICS"
 msgstr "伤害 %d | 击毁 %d | 任务完成 %d / 受阻 %d"
+
+msgid "CARD_DECISION_DEPLOY"
+msgstr "选择投入点"
+
+msgid "CARD_DECISION_ALL"
+msgstr "返回全部决策"
+
+msgid "CARD_DECISION_NO_TARGETS"
+msgstr "当前无合格对象：补员需已部署且缺员；保障需受伤或损失组织；工程需已部署工程卡及未开路线。"
+
+msgid "CARD_DECISION_READY"
+msgstr "可执行；最终以提交校验为准。"
+
+msgid "CARD_DECISION_CONTEXT"
+msgstr "兵力 %d/%d · 费用 %d Supply / 可用 %d\n人口 %d/%d（本次 +%d）· 冷却 %d 秒\n目标：%s"
+
+msgid "CARD_DECISION_PICK_POSITION"
+msgstr "在地图高亮总部区内左键投入；右键或 C 取消。尚未下令。"
+
+msgid "CARD_DECISION_QUEUED"
+msgstr "已接受，等待权威状态确认。"
+
+msgid "CARD_DECISION_DEPLOYING"
+msgstr "部署已开始，等待整卡到场。"
+
+msgid "CARD_DECISION_CANCELLED"
+msgstr "已取消投入点选择，未部署、未扣费。"
+
+msgid "CARD_DECISION_OPEN"
+msgstr "打开决策区，为具名部队卡选择此行动。"
+
+msgid "CARD_DECISION_SUPPORT_GUIDE"
+msgstr "整卡支援在决策区选择对象；战地补员消耗本局 Supply。战前/战后补员使用跨局补员点。"
+
+msgid "CARD_RECOVERY_INSUFFICIENT_SUPPLY"
+msgstr "等待补给收入或先保留其他投入。"
+
+msgid "CARD_RECOVERY_POPULATION_FULL"
+msgstr "释放人口空间后重试。"
+
+msgid "CARD_RECOVERY_SUPPORT_COOLDOWN"
+msgstr "等待显示的冷却结束再试。"
+
+msgid "CARD_RECOVERY_INVALID_DEPLOYMENT_STATE"
+msgstr "检查是否已部署、效果生效中、路线已开或另有命令等待执行；刷新后再试。"
+
+msgid "CARD_RECOVERY_INVALID_POSITION"
+msgstr "在高亮总部区内选择可部署位置；系统会解析整卡安全锚点。"
+
+msgid "CARD_RECOVERY_INVALID_TARGET"
+msgstr "确认卡牌与总部仍可用，返回全部决策重新选择。"
+
+msgid "CARD_RECOVERY_UNIT_CARD_FULL_STRENGTH"
+msgstr "该卡已满编，无需战地补员。"
+
+msgid "CARD_RECOVERY_BATTLE_CONCLUDED"
+msgstr "会战已结束，请前往结算。"
+
+msgid "CARD_RECOVERY_COMMANDER_MISMATCH"
+msgstr "使用该预备卡所属将领重新选择。"
+
+msgid "CARD_RECOVERY_SCENARIO_NOT_STARTED"
+msgstr "先完成编成并开始会战。"
+
+msgid "CARD_RECOVERY_PATH_UNAVAILABLE"
+msgstr "选择总部区内另一个可达投入点。"
+
+msgid "CARD_ACTION_REINFORCE"
+msgstr "战地补员"
+
+msgid "CARD_ACTION_FORTIFY"
+msgstr "紧急筑垒"
+
+msgid "CARD_ACTION_ENGINEERING"
+msgstr "开通工程路线"
+
+msgid "CARD_ACTION_MOBILITY"
+msgstr "快速机动"
+
+msgid "CARD_ACTION_LOGISTICS"
+msgstr "前线保障"
+
+msgid "TACTICAL_FINAL_TARGET"
+msgstr "最终目标"
+
+msgid "TACTICAL_WAYPOINT"
+msgstr "途经区"
+
+msgid "TACTICAL_DIRECT"
+msgstr "直接前往目标"
+
+msgid "TACTICAL_TARGET_HELP"
+msgstr "最终目标：该将领要到达或争夺的区域。途经区只改变进入方向，不会替代最终目标。批准后整卡按统一命令执行；暂停期间先排队，恢复后生效。"
+
+msgid "TACTICAL_WAYPOINT_HELP"
+msgstr "途经区：先通过这个区域，再到最终目标，用于侧翼或绕行。选择“直接前往目标”则不添加途经点；与最终目标相同也视为直达。路径仍受地图通行规则约束，并不保证沿途安全。"
+
+msgid "TACTICAL_RESERVE_HOLD_HELP"
+msgstr "保留预备队：将增援意图设为保留，优先保存尚未投入的卡牌。现阶段该选项记录作战意图，不会自动部署或撤回部队。需要投入时，在决策区选择预备卡及总部合法落点，并支付补给与人口成本。"
+
+msgid "TACTICAL_RESERVE_REINFORCE_ON_REQUEST_HELP"
+msgstr "请求后增援：将预备意图设为响应增援请求。现阶段不会自动投入，仍由玩家在决策区确认预备卡和投入点。部署有补给、人口与等待时间约束，部队到场后加入所属将领任务。"
+
+msgid "TACTICAL_RESERVE_COMMIT_AVAILABLE_HELP"
+msgstr "投入可用预备队：表达愿意动用可用预备兵力的意图，减少保留余地。现阶段不会自动消费补给或部署，须在决策区逐卡确认投入；补给不足、人口已满或非法落点仍会被拒绝。"
+
+msgid "TACTICAL_PAUSE"
+msgstr "空格 · 战术暂停"
+
+msgid "TACTICAL_RESUME"
+msgstr "已暂停 · 空格继续"
+
+msgid "TACTICAL_PAUSE_HELP"
+msgstr "只暂停战场时间。可继续查看说明、选择风格、规划路线和处理决策。命令先排队，恢复后执行；不会补跑暂停时间。Esc 打开设置菜单。"
+
+msgid "TACTICAL_IDLE"
+msgstr "● 空闲"
+
+msgid "TACTICAL_WORKING"
+msgstr "● 执行任务"
+
+msgid "TACTICAL_CONTACT"
+msgstr "● 交战 / 遇敌"
+
+msgid "TACTICAL_RESERVE_CARD"
+msgstr "预备"
+
+msgid "TACTICAL_QUEUED"
+msgstr "命令已排队，空格恢复后执行"
+
+msgid "TACTICAL_SUPERSEDED"
+msgstr "已由同批次的后续意图替代"
+
+msgid "TACTICAL_ACTIVE_INTENT"
+msgstr "目标：%s · %s"
+
+msgid "TACTICAL_APPROVE_QUEUE"
+msgstr "批准并排队"
+
+msgid "TACTICAL_APPROVAL_HINT"
+msgstr "指令需要玩家批准。战术暂停时先排队，空格恢复后执行。"
+
+msgid "CONTROL_AI_HINT"
+msgstr "手动控制 %d 张部队卡 · R 交给 AI"
+
+msgid "CONTROL_AI_BOARD"
+msgstr "R · 将所选部队交给 AI"
+
+msgid "CONTROL_AI_HELP"
+msgstr "按 R 或点击交给 AI。选中部队时交还所选卡；选中将领时交还其手控部队；未选择时交还全部手控卡。下发新的将领决策、路线或姿态，也会交还该将领的部队。"
+
+msgid "CONTROL_AI_QUEUED"
+msgstr "已提交 %d 张部队卡的 AI 接手请求"
+
+msgid "CONTROL_AI_PENDING"
+msgstr "暂停中：请求已排队，恢复后执行"
+
+msgid "CONTROL_AI_NO_MANUAL"
+msgstr "当前范围没有需要交还的手控部队"
+
+msgid "CONTROL_STATE_IDLE"
+msgstr "空闲"
+
+msgid "CONTROL_STATE_WORKING"
+msgstr "执行"
+
+msgid "CONTROL_STATE_CONTACT"
+msgstr "交战"
+
+msgid "CONTROL_MANUAL_BADGE"
+msgstr "手控"
+
+msgid "CONTROL_RETURNING_BADGE"
+msgstr "归队"
+
+msgid "ROSTER_LOAD_FAILED"
+msgstr "军团存档无法读取，已保留原文件。请查看错误详情或明确重置军团后再开始。"
+
+msgid "ROSTER_SAVE_FAILED"
+msgstr "军团存档未保存，原文件已保留。请重试保存后继续。"
+
+msgid "ROSTER_RETRY_SAVE"
+msgstr "重试保存"
+
+msgid "CARD_COMPOSITION"
+msgstr "部队编制 · 当前 / 授权"
+
+msgid "SUPPORT_COOLDOWN_READY"
+msgstr "冷却：就绪"
+
+msgid "SUPPORT_COOLDOWN_NONE"
+msgstr "无冷却"
+
+msgid "SUPPORT_COOLDOWN_REMAINING"
+msgstr "冷却：%d 秒"
+
+msgid "TACTICAL_READY"
+msgstr "就绪"
+
+msgid "TACTICAL_NEEDS_FIRE_ORDER"
+msgstr "等待压制指令"
+
+msgid "TACTICAL_PREPARING"
+msgstr "正在准备：驻停保持条件"
+
+msgid "TACTICAL_ACTIVE"
+msgstr "执行中"
+
+msgid "TACTICAL_COMPLETE"
+msgstr "已完成，等待冷却"
+
+msgid "TACTICAL_MOVED"
+msgstr "已中断：部队移动；保留消耗及冷却"
+
+msgid "TACTICAL_TARGET_CHANGED"
+msgstr "已中断：目标条件改变"
+
+msgid "TACTICAL_NO_AMMO"
+msgstr "弹药耗尽：靠近补给卡补弹"
+
+msgid "TACTICAL_NEEDS_IDENTIFICATION"
+msgstr "等待观察卡持续识别"
+
+msgid "TACTICAL_MINIMUM_RANGE"
+msgstr "敌人突入近距死区"
+
+msgid "TACTICAL_INVALID_TARGET_TAG"
+msgstr "武器无法攻击该目标类别"
+
+msgid "TACTICAL_AMMUNITION"
+msgstr "专业弹药 %d / %d"
+
+msgid "TACTICAL_IDENTIFIED"
+msgstr "光学持续识别，可校射"
+
+msgid "TACTICAL_IDENTIFICATION_TIME"
+msgstr "光学校射识别：%d 秒有效；失去视野即中断"
+
+msgid "TACTICAL_OBSERVERS"
+msgstr "前沿观察组"
+
+msgid "TACTICAL_ENGINEERS"
+msgstr "通路工程组"
+
+msgid "TACTICAL_BATTERY"
+msgstr "阵地压制组"
+
+msgid "TACTICAL_ASSAULT"
+msgstr "协同突击组"
+
+msgid "TACTICAL_SUPPLY"
+msgstr "前线补给组"
+
+msgid "TACTICAL_OBSERVERS_ACTION"
+msgstr "驻停观察"
+
+msgid "TACTICAL_ENGINEERS_ACTION"
+msgstr "准备开路"
+
+msgid "TACTICAL_BATTERY_ACTION"
+msgstr "校射压制"
+
+msgid "TACTICAL_ASSAULT_ACTION"
+msgstr "协同突破"
+
+msgid "TACTICAL_SUPPLY_ACTION"
+msgstr "近距补给"
+
+msgid "TACTICAL_OBSERVERS_HELP"
+msgstr "消耗1补给，驻停准备2秒；480距离内持续观察1秒形成识别。移动或侦察成员失能会中断，敌人脱离视野即失去校射。"
+
+msgid "TACTICAL_ENGINEERS_HELP"
+msgstr "消耗2补给，在工程入口280距离内安全准备3秒后开路。接敌、移动或工程成员失能中断，消耗不退回。"
+
+msgid "TACTICAL_BATTERY_HELP"
+msgstr "消耗2补给，组织至少30，准备2秒。专业武器每车4发、最低射程140，依赖持续识别；命中压制组织。移动、突近、识别中断或耗尽弹药可反制。"
+
+msgid "TACTICAL_ASSAULT_HELP"
+msgstr "消耗2补给，组织至少30，准备1.5秒后消耗10组织并向目标攻击推进。低于60组织准备加倍；压制至30以下会打断突破。"
+
+msgid "TACTICAL_SUPPLY_HELP"
+msgstr "消耗2补给，260距离内安全驻停3秒，为目标补满专业弹药并恢复20组织。接敌或移动会中断；满弹满组织时不可使用。"
+
+msgid "UNIT_SUPPRESSION_VEHICLE"
+msgstr "压制火炮"
+
+msgid "UNIT_BREAKTHROUGH_VEHICLE"
+msgstr "突破装甲"
+
+msgid "UNIT_DESCRIPTION_SUPPRESSION_VEHICLE"
+msgstr "驻停校射、有限弹药，以组织压制掩护突破。"
+
+msgid "UNIT_DESCRIPTION_BREAKTHROUGH_VEHICLE"
+msgstr "装甲突击底盘，组织达标后可协同突破。"
+
+msgid "REASON_TACTICAL_BUSY"
+msgstr "动作正在准备或冷却"
+
+msgid "REASON_CAPABILITY_LOST"
+msgstr "缺少存活能力成员或可用专业弹药"
+
+msgid "REASON_TARGET_UNIDENTIFIED"
+msgstr "目标未持续识别"
+
+msgid "REASON_OUT_OF_RANGE"
+msgstr "目标超出动作距离或处于近距死区"
+
+msgid "REASON_LOW_ORGANIZATION"
+msgstr "组织不足：复杂动作需要至少30组织"
+
+msgid "REASON_RESUPPLY_NOT_NEEDED"
+msgstr "目标弹药和组织均已充足"
+
+msgid "REASON_TACTICAL_UNSAFE"
+msgstr "附近接敌或刚受攻击，无法安全作业"
+
+msgid "RECOVERY_TACTICAL_CONDITIONS"
+msgstr "驻停并保持距离；补充能力成员和弹药，脱离接触恢复组织，再重新下令。"
+
+msgid "AFTER_ACTION_TACTICAL_METRICS"
+msgstr "动作开始 / 执行 / 中断：%d / %d / %d | 补给支出：%d\n识别：%d | 开路：%d | 有效组织压制：%.1f\n补弹：%d | 组织恢复：%.1f"
+
+msgid "AFTER_ACTION_TACTICAL_ACTION_STARTED"
+msgstr "动作开始：%s"
+
+msgid "AFTER_ACTION_TACTICAL_ACTION_COMPLETED"
+msgstr "动作执行：%s"
+
+msgid "AFTER_ACTION_TACTICAL_ACTION_INTERRUPTED"
+msgstr "动作中断：%s"

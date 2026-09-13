@@ -27,6 +27,10 @@ func validate() -> DataValidationResult:
 		if unit.combat == null:
 			result.add(DataValidationResult.Reason.INVALID_COMBAT, "units[%d] has no combat definition" % index)
 			continue
+		if unit.tactical_weapon != null:
+			result.issues.append_array(unit.tactical_weapon.validate().issues)
+			if unit.tactical_weapon.minimum_range >= unit.combat.attack_range:
+				result.add(DataValidationResult.Reason.INVALID_VALUE, "weapon minimum range must be below attack range")
 		if not is_finite(unit.combat.max_health) or unit.combat.max_health <= 0.0:
 			result.add(DataValidationResult.Reason.INVALID_MAX_HEALTH, "units[%d] has invalid max_health" % index)
 		if not is_finite(unit.combat.armor) or unit.combat.armor < 0.0:

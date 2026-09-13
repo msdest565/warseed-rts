@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="UnitCardDefinition" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://src/data/unit_card_definition.gd" id="1"]
+[ext_resource type="Script" path="res://src/data/unit_card_composition_entry.gd" id="2"]
+
+[sub_resource type="Resource" id="Assault"]
+script = ExtResource("2")
+entry_id = &"assault"
+unit_definition_id = &"assault_vehicle"
+authorized_count = 8
+formation_role = &"assault"
+replacement_priority = 1
+
+[sub_resource type="Resource" id="Engineers"]
+script = ExtResource("2")
+entry_id = &"engineers"
+unit_definition_id = &"engineer_vehicle"
+authorized_count = 4
+formation_role = &"none"
+replacement_priority = 0
+
+[resource]
+script = ExtResource("1")
+definition_id = &"fixture_mixed_card"
+display_name_key = &"UNIT_CARD_IRONWALL"
+role_key = &"UNIT_CARD_ROLE_ASSAULT"
+commander_definition_id = &"di_tian"
+command_cost = 2
+authorized_strength = 12
+composition = Array[ExtResource("2")]([SubResource("Assault"), SubResource("Engineers")])
+supply_cost = 2
+deployment_ticks = 10

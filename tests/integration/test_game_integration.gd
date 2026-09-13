@@ -4,6 +4,8 @@ extends RefCounted
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_tactical_card_status(failures)
+	_test_tactical_pause(failures)
 	_test_host_and_presentation_consume_faction_snapshot(failures)
 	_test_combat_snapshot_feedback_is_visible_and_transient(failures)
 	_test_battle_feedback_director_aggregates_authoritative_events(failures)
@@ -13,6 +15,7 @@ func run() -> Array[String]:
 	_test_operation_selector_flow(failures)
 	_test_grey_ridge_prebattle_planning(failures)
 	_test_command_desk_action_receipt_persists(failures)
+	_test_contextual_card_actions(failures)
 	_test_grey_ridge_scene_is_the_playable_slice(failures)
 	_test_grey_ridge_tutorial_progression(failures)
 	return failures
@@ -291,6 +294,8 @@ func _test_grey_ridge_prebattle_planning(failures: Array[String]) -> void:
 	_expect(planner.commander_grid.columns == 2 and planner.unit_card_grid.columns == 1, "1280-wide laptop planning should keep every card inside the visible scroll area", failures)
 	var bai_personality := planner._personality_labels.get(&"bai_jiuyang") as Label
 	var bai_doctrine := planner._doctrine_menus.get(&"bai_jiuyang") as OptionButton
+	var di_doctrine := planner._doctrine_menus.get(&"di_tian") as OptionButton
+	_expect(di_doctrine != null and di_doctrine.tooltip_text.contains(GameText.t(&"DOCTRINE_STAGED_DEPARTURE_COUNTERPLAY")), "the migrated doctrine must expose its authored counterplay in prebattle help", failures)
 	var bai_posture := planner._posture_menus.get(&"bai_jiuyang") as OptionButton
 	var bai_detail := planner._tactical_detail_labels.get(&"bai_jiuyang") as Label
 	_expect(bai_personality != null and bai_personality.tooltip_text.contains(GameText.t(&"PERSONALITY_CAUTIOUS_TOOLTIP")), "prebattle personality should explain its identity role and distinguish it from actionable controls", failures)
@@ -313,7 +318,7 @@ func _test_grey_ridge_prebattle_planning(failures: Array[String]) -> void:
 	_expect(planner.commander_grid.columns == 1 and planner.unit_card_grid.columns == 1, "narrow prebattle layout should collapse cards into one scrollable column", failures)
 	planner._apply_layout_for_size(planning_viewport_size)
 	var damaged_record := {
-		"format_version": ArmyRosterStore.FORMAT_VERSION,
+		"format_version": 3,
 		"scenario_id": "grey_ridge",
 		"battle_count": 1,
 		"replacement_points": 4,
@@ -332,7 +337,7 @@ func _test_grey_ridge_prebattle_planning(failures: Array[String]) -> void:
 			},
 		},
 	}
-	host._campaign_record = damaged_record
+	host._campaign_record = ArmyRosterMigration.normalize(damaged_record).record
 	host._campaign_record_updated()
 	_expect((planner._readiness_labels[&"ironwall_assault_group"] as Label).text.contains("10 / 12"), "prebattle card board should expose persistent depleted strength before battle", failures)
 	planner._on_replenish_pressed(&"ironwall_assault_group")
@@ -408,7 +413,7 @@ func _test_grey_ridge_scene_is_the_playable_slice(failures: Array[String]) -> vo
 	scenario_status.visible = true
 	army_board.title_label = army_board.get_node("Margin/Layout/Header/Title") as Label
 	army_board.hint_label = army_board.get_node("Margin/Layout/Header/Hint") as Label
-	army_board.commander_row = army_board.get_node("Margin/Layout/Scroll/CommanderRow") as VBoxContainer
+	army_board.commander_row = army_board.get_node("Margin/Layout/Scroll/CommanderRow") as BoxContainer
 	army_board.input_controller = input_controller
 	input_controller.simulation_host = host
 	input_controller.world_presentation = game.get_node("WorldPresentation") as WorldPresentation
@@ -455,22 +460,22 @@ func _test_grey_ridge_scene_is_the_playable_slice(failures: Array[String]) -> vo
 	TranslationServer.set_locale("en")
 	task_panel._refresh_strategy_locale()
 	army_board.update_snapshot(host.current_snapshot)
-	_expect(army_board.is_commander_only(), "card battles should switch the right-hand army board to commander-only mode", failures)
+	_expect(army_board.is_tactical_cards(), "card battles should group compact unit cards under their commanders", failures)
 	resource_bar.update_snapshot(host.current_snapshot)
 	scenario_status.update_snapshot(host.current_snapshot)
 	_expect(host.world.scenario_kind == SimulationWorld.ScenarioKind.GREY_RIDGE, "Grey Ridge scene should instantiate the dedicated authoritative scenario", failures)
-	_expect(army_board.get_commander_card_count() == 3 and army_board.get_unit_card_button_count() == 0, "Grey Ridge army board should expose exactly three commander cards and no subordinate unit-card controls", failures)
+	_expect(army_board.get_commander_card_count() == 4 and army_board.get_unit_card_button_count() == 6, "Grey Ridge army board should expose four commander summaries and all six subordinate cards", failures)
 	TranslationServer.set_locale("en")
 	army_board.refresh_locale()
 	var english_status := army_board.get_commander_status_text(&"bai_jiuyang")
 	var english_outlook := army_board.get_commander_status_tooltip(&"bai_jiuyang")
-	_expect(not english_status.contains("COMMANDER_") and english_status.contains("Preparing") and english_status.contains("ETA") and english_status.contains("Risk"), "army board should show a localized action, ETA, risk, and exit boundary for each commander (actual=%s)" % english_status, failures)
+	_expect(english_status in ["Idle", "Busy", "Fight"], "army board should show a compact localized activity state (actual=%s)" % english_status, failures)
 	_expect(english_outlook.contains("Objective:") and english_outlook.contains("Participants:") and english_outlook.contains("Action reason:") and english_outlook.contains("Exit condition:"), "commander outlook tooltip should expose the complete execution explanation (actual=%s)" % english_outlook, failures)
 	TranslationServer.set_locale("zh_CN")
 	army_board.refresh_locale()
 	var chinese_status := army_board.get_commander_status_text(&"bai_jiuyang")
 	var chinese_outlook := army_board.get_commander_status_tooltip(&"bai_jiuyang")
-	_expect(chinese_status != english_status and chinese_status.contains("风险") and not chinese_status.contains("COMMANDER_"), "commander behavior feedback should refresh into Chinese without exposing localization keys", failures)
+	_expect(chinese_status != english_status and chinese_status in ["空闲", "执行", "交战"], "commander behavior feedback should refresh into Chinese without exposing localization keys", failures)
 	_expect(chinese_outlook.contains("目标：") and chinese_outlook.contains("参与：") and chinese_outlook.contains("退出条件："), "commander outlook tooltip should refresh its complete explanation into Chinese", failures)
 	TranslationServer.set_locale("en")
 	army_board.refresh_locale()
@@ -486,6 +491,21 @@ func _test_grey_ridge_scene_is_the_playable_slice(failures: Array[String]) -> vo
 	input_controller.selected_unit_card_id = &""
 	support_panel.update_snapshot(host.current_snapshot)
 	_expect(support_panel.status_label.text.contains("Air recon:") and support_panel.reinforcement_button.tooltip_text.contains("Select a damaged"), "support panel should keep its usage steps visible and explain why reinforcement is disabled", failures)
+	var cooldown_snapshot := host.world.create_snapshot()
+	var cooldown_faction := cooldown_snapshot.get_faction(SimulationWorld.LOCAL_PLAYER_ID)
+	cooldown_faction.air_recon_cooldown_until_tick = cooldown_snapshot.tick + 11
+	cooldown_faction.fortify_cooldown_until_tick = cooldown_snapshot.tick + 1
+	cooldown_faction.reinforcement_cooldown_until_tick = cooldown_snapshot.tick + 21
+	support_panel.contextual_card_actions = true
+	support_panel.update_snapshot(cooldown_snapshot)
+	_expect(support_panel.recon_button.text.ends_with("Cooldown: 2 s") and support_panel.fortify_button.text.ends_with("Cooldown: 1 s") and support_panel.reinforcement_button.text.ends_with("Cooldown: 3 s"), "left support entries must display independent rounded-up cooldowns even in contextual mode", failures)
+	var cooldown_text := support_panel.reinforcement_button.text
+	support_panel.update_snapshot(cooldown_snapshot)
+	_expect(support_panel.reinforcement_button.text == cooldown_text and support_panel.reinforcement_button.disabled and support_panel.reinforcement_button.tooltip_text.contains("cooldown"), "refreshing a frozen snapshot must retain the countdown and disable the contextual reinforcement entry", failures)
+	cooldown_snapshot.tick += 21
+	support_panel.update_snapshot(cooldown_snapshot)
+	_expect(support_panel.recon_button.text.ends_with("Cooldown: ready") and support_panel.reinforcement_button.text.ends_with("Cooldown: ready"), "expired support cooldown must display ready without a negative countdown", failures)
+	support_panel.contextual_card_actions = false
 	host.start_grey_ridge(ArmyPlan.grey_ridge_default())
 	game.prebattle_planner.visible = false
 	var reinforcement_card := host.world.unit_cards[&"ironwall_assault_group"] as UnitCardState
@@ -513,7 +533,7 @@ func _test_grey_ridge_scene_is_the_playable_slice(failures: Array[String]) -> vo
 	input_controller._input(cancel_route)
 	_expect(input_controller.command_mode == InputController.CommandMode.NORMAL and not route_mode_hint.visible, "C should exit route planning without saving and immediately hide the route shortcut hint", failures)
 	var map_rect: Rect2 = game.get_grey_ridge_map_rect()
-	_expect(map_rect.size.x >= 780.0 and map_rect.size.y >= 440.0, "the 1280x720 battle layout should retain a usable central battlefield while reserving 220 pixels for decisions", failures)
+	_expect(map_rect.size.x >= 700.0 and map_rect.size.y >= 480.0, "the 1280x720 battle layout should retain a usable central battlefield while reserving the right column for decisions and bottom for cards", failures)
 	_expect(game.task_panel.size.y >= 220.0 and game.pause_button.visible and map_rect.grow(1.0).encloses(game.pause_button.get_global_rect()), "the battle layout should enlarge the decision desk and keep a visible pause button inside the map", failures)
 	input_controller.camera_controller.fit_world_in_screen_rect(map_rect)
 	var visible_world := input_controller.camera_controller.get_visible_world_rect()
@@ -541,9 +561,9 @@ func _test_grey_ridge_scene_is_the_playable_slice(failures: Array[String]) -> vo
 	var separated_panels: Array[Control] = [resource_bar, scenario_status, support_panel, army_board, task_panel, game.get_node("HUDLayer/Minimap") as Control]
 	for panel in separated_panels:
 		if panel.visible:
-			_expect(not panel.get_global_rect().intersects(map_rect), "%s must remain outside the dedicated battlefield viewport" % panel.name, failures)
+			_expect(not panel.get_global_rect().intersects(map_rect), "%s must remain outside the dedicated battlefield viewport (panel=%s map=%s)" % [panel.name, panel.get_global_rect(), map_rect], failures)
 	battle_debrief.show_debrief(ArmyRosterStore.build_battle_record(host.current_snapshot))
-	_expect(battle_debrief.visible and battle_debrief.cards_button.button_pressed and battle_debrief.rows.get_child_count() == 4, "Grey Ridge debrief without a completed live report should fall back to a progression row for every persistent friendly unit card", failures)
+	_expect(battle_debrief.visible and battle_debrief.cards_button.button_pressed and battle_debrief.rows.get_child_count() == 6, "Grey Ridge debrief without a completed live report should fall back to a progression row for every Grey Ridge tactical card", failures)
 	for row in battle_debrief.rows.get_children():
 		_expect(row.has_meta(&"unit_card_id") and not String(row.get_meta(&"unit_card_id", "")).is_empty(), "every debrief action row should retain a stable unit-card identity", failures)
 	battle_debrief._on_review_view_pressed(BattleDebrief.ReviewView.CAUSES)
@@ -593,7 +613,7 @@ func _test_command_desk_action_receipt_persists(failures: Array[String]) -> void
 	desk.exception_title = desk.get_node("Exceptions/Header/Title") as Label
 	desk.exception_count = desk.get_node("Exceptions/Header/Count") as Label
 	desk.exception_rows = desk.get_node("Exceptions/Scroll/Rows") as VBoxContainer
-	desk.separator = desk.get_node("Separator") as VSeparator
+	desk.separator = desk.get_node("Separator") as HSeparator
 	desk.guide_button = desk.get_node("Exceptions/Header/Guide") as Button
 	desk.guide_popup = desk.get_node("GuidePopup") as PopupPanel
 	desk.guide_text = desk.get_node("GuidePopup/Margin/Text") as RichTextLabel
@@ -895,6 +915,17 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	_expect(camera_limits.end.y + 360.0 >= CameraController.WORLD_RECT.end.y + 250.0, "camera should overscroll below the map enough to reveal terrain behind the bottom command bar", failures)
 	_expect(panel.simulation_host == host, "task panel should accept the authoritative simulation host", failures)
 	minimap.add_contact_ping(Vector2(640.0, 480.0))
+	var original_minimap_grid := minimap.logic_grid
+	var terrain_grid := LogicGrid.new()
+	terrain_grid.set_blocked(Vector2i(4, 4), true)
+	minimap.logic_grid = terrain_grid
+	minimap._update_terrain_texture()
+	_expect(minimap._terrain_texture.get_image().get_pixel(4, 4).a > 0.9, "minimap terrain must show an obstacle", failures)
+	terrain_grid.set_blocked(Vector2i(4, 4), false)
+	minimap._update_terrain_texture()
+	_expect(minimap._terrain_texture.get_image().get_pixel(4, 4).a == 0.0, "opening an engineering route must clear the cached minimap obstacle", failures)
+	minimap.logic_grid = original_minimap_grid
+	minimap._update_terrain_texture()
 	var contact_audio_before := contact_alert.get_audio_play_count()
 	contact_alert.show_contact(&"assault_vehicle")
 	_expect(minimap.get_contact_ping_count() == 1 and contact_alert.visible, "enemy contacts should have a visible minimap ping and alert surface", failures)
@@ -975,11 +1006,11 @@ func _test_game_scene_task_and_pause_controls(failures: Array[String]) -> void:
 	_expect(workflow_panel.title_label.text == "当前工作流程", "Chinese HUD should localize the workflow monitor", failures)
 	_expect(GameText.unit_description(&"assault_vehicle").contains("前线作战"), "Chinese unit descriptions should explain battlefield roles", failures)
 	hover_tooltip.update_candidate("unit:assault_vehicle", GameText.unit_tooltip(&"assault_vehicle"), Vector2(400.0, 300.0), 0.5)
-	_expect(not hover_tooltip.panel.visible, "context tooltip should remain hidden before its one-second delay", failures)
+	_expect(not hover_tooltip.panel.visible and hover_tooltip.progress.visible and is_zero_approx(hover_tooltip.progress.value), "at 0.5s tooltip starts a visible progress bar but no text", failures)
 	hover_tooltip.update_candidate("unit:assault_vehicle", GameText.unit_tooltip(&"assault_vehicle"), Vector2(400.0, 300.0), 0.51)
 	_expect(hover_tooltip.panel.visible and hover_tooltip.label.text.contains("突击车"), "context tooltip should appear after the delay with localized details", failures)
 	hover_tooltip.update_candidate("unit:scout_vehicle", GameText.unit_tooltip(&"scout_vehicle"), Vector2(400.0, 300.0), 0.1)
-	_expect(not hover_tooltip.panel.visible, "changing the hovered target should restart the tooltip delay", failures)
+	_expect(not hover_tooltip.panel.visible and not hover_tooltip.progress.visible, "changing target resets both tooltip text and progress", failures)
 	hover_tooltip.update_candidate("unit:scout_vehicle", GameText.unit_tooltip(&"scout_vehicle"), Vector2(400.0, 300.0), 1.01)
 	battle_debrief.visible = true
 	game._update_hover_tooltip(0.01)
@@ -1033,3 +1064,267 @@ func _expect(condition: bool, message: String, failures: Array[String]) -> void:
 
 func world_faction(host: SimulationHost) -> FactionState:
 	return host.world.factions[SimulationWorld.LOCAL_PLAYER_ID] as FactionState
+
+
+func _test_contextual_card_actions(failures: Array[String]) -> void:
+	var packed_scene := load("res://scenes/game/grey_ridge.tscn") as PackedScene
+	var game := packed_scene.instantiate()
+	Engine.get_main_loop().root.add_child(game)
+	var host := game.get_node("SimulationHost") as SimulationHost
+	var desk := game.get_node("HUDLayer/TaskPanel/Margin/Layout/CommandDesk") as CommandDesk
+	var support_panel := game.get_node("HUDLayer/SupportPanel") as SupportPanel
+	desk.intent_title = desk.get_node("Intent/Title") as Label
+	desk.approval_hint = desk.get_node("Intent/ApprovalHint") as Label
+	desk.commander_label = desk.get_node("Intent/Selectors/CommanderLabel") as Label
+	desk.commander_selector = desk.get_node("Intent/Selectors/Commander") as OptionButton
+	desk.objective_label = desk.get_node("Intent/Selectors/ObjectiveLabel") as Label
+	desk.objective_selector = desk.get_node("Intent/Selectors/Objective") as OptionButton
+	desk.axis_label = desk.get_node("Intent/Selectors/AxisLabel") as Label
+	desk.axis_selector = desk.get_node("Intent/Selectors/Axis") as OptionButton
+	desk.risk_label = desk.get_node("Intent/Selectors/RiskLabel") as Label
+	desk.risk_selector = desk.get_node("Intent/Selectors/Risk") as OptionButton
+	desk.reserve_label = desk.get_node("Intent/Selectors/ReserveLabel") as Label
+	desk.reserve_selector = desk.get_node("Intent/Selectors/Reserve") as OptionButton
+	desk.apply_button = desk.get_node("Intent/Actions/Apply") as Button
+	desk.cancel_button = desk.get_node("Intent/Actions/Cancel") as Button
+	desk.intent_status = desk.get_node("Intent/Status") as Label
+	desk.exception_title = desk.get_node("Exceptions/Header/Title") as Label
+	desk.exception_count = desk.get_node("Exceptions/Header/Count") as Label
+	desk.exception_rows = desk.get_node("Exceptions/Scroll/Rows") as VBoxContainer
+	desk.separator = desk.get_node("Separator") as HSeparator
+	desk.guide_button = desk.get_node("Exceptions/Header/Guide") as Button
+	desk.guide_popup = desk.get_node("GuidePopup") as PopupPanel
+	desk.guide_text = desk.get_node("GuidePopup/Margin/Text") as RichTextLabel
+	desk.history_button = desk.get_node("Exceptions/Footer/History") as Button
+	desk.history_popup = desk.get_node("HistoryPopup") as PopupPanel
+	desk.history_text = desk.get_node("HistoryPopup/Margin/Text") as RichTextLabel
+	desk.decision_failure_dialog = desk.get_node("DecisionFailureDialog") as AcceptDialog
+	desk._ready()
+	host._ready()
+	host.start_grey_ridge(ArmyPlan.grey_ridge_default())
+	desk.configure(host, game.get_node("InputController") as InputController, game.get_node("CameraController") as CameraController)
+	var input := game.get_node("InputController") as InputController
+	input.simulation_host = host
+	input.world_presentation = game.get_node("WorldPresentation") as WorldPresentation
+	input.camera_controller = game.get_node("CameraController") as CameraController
+	support_panel.pair_selector = support_panel.get_node("Margin/Scroll/Layout/Pair") as OptionButton
+	support_panel.recon_button = support_panel.get_node("Margin/Scroll/Layout/Recon") as Button
+	support_panel.fortify_button = support_panel.get_node("Margin/Scroll/Layout/Fortify") as Button
+	support_panel.reinforcement_button = support_panel.get_node("Margin/Scroll/Layout/Reinforcement") as Button
+	support_panel.status_label = support_panel.get_node("Margin/Scroll/Layout/Status") as Label
+	support_panel.intel_title_label = support_panel.get_node("Margin/Scroll/Layout/IntelTitle") as Label
+	support_panel.intel_label = support_panel.get_node("Margin/Scroll/Layout/Intel") as Label
+	support_panel.configure(host)
+	support_panel.input_controller = input
+	var card := host.world.unit_cards[&"ironwall_assault_group"] as UnitCardState
+	var removed_id: int = card.member_entity_ids.back()
+	(host.world.units[removed_id] as UnitState).enabled = false
+	var other_card := host.world.unit_cards[&"falcon_recon_group"] as UnitCardState
+	(host.world.units[other_card.member_entity_ids.back()] as UnitState).enabled = false
+	# This test measures reinforcement costs while another card is selected/controlled.
+	# Prevent that observer from making an independent automatic Supply commitment.
+	var takeover := UnitCardControlCommand.new(host.world.allocate_command_id(), 1, host.world.current_tick, &"falcon_recon_group", UnitCardControlCommand.Action.TAKEOVER)
+	_expect(host.submit_command(takeover).is_accepted(), "reinforcement fixture should take control of the unrelated observer", failures)
+	var faction := host.world.factions[SimulationWorld.LOCAL_PLAYER_ID] as FactionState
+	faction.supply = 100
+	host.current_snapshot = host.world.advance_tick()
+	var before_supply := faction.supply
+	var before_population := faction.population
+	var before_strength := host.current_snapshot.get_unit_card(&"ironwall_assault_group").current_strength
+	var situation := CommandSituationSnapshot.new(host.current_snapshot.tick, SimulationWorld.LOCAL_PLAYER_ID, [], [])
+	desk.update_command_situation(host.current_snapshot, situation)
+	input.selected_unit_card_id = &"ironwall_assault_group"
+	support_panel.contextual_card_actions = true
+	support_panel.update_snapshot(host.current_snapshot)
+	var decision_id := StringName("card:ironwall_assault_group:%d:" % SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT)
+	input.selected_unit_card_id = &"falcon_recon_group"
+	desk._perform_card_action(decision_id)
+	_expect(desk.get_decision_history_count() == 1 and desk._pending_responses.size() == 1, "a context reinforcement must record one accepted pending submission", failures)
+	desk._perform_card_action(decision_id)
+	_expect(desk.get_decision_history_count() == 1, "duplicate activation must not submit or record twice while awaiting confirmation", failures)
+	host.current_snapshot = host.world.advance_tick()
+	desk.update_command_situation(host.current_snapshot, situation)
+	support_panel.update_snapshot(host.current_snapshot)
+	_expect(host.current_snapshot.get_unit_card(&"ironwall_assault_group").current_strength == before_strength + 1, "context reinforcement must replace a real casualty on its bound card despite another selected card", failures)
+	_expect(faction.supply == before_supply - host.world.get_support_cost(SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT) and faction.population == before_population + 1 and faction.reinforcement_cooldown_until_tick > host.world.current_tick, "context reinforcement must preserve authoritative Supply/population/cooldown costs", failures)
+	var reinforcement_seconds := ceili((faction.reinforcement_cooldown_until_tick - host.current_snapshot.tick) * SimulationWorld.TICK_SECONDS)
+	_expect(support_panel.reinforcement_button.disabled and CardActionProjector.cooldown_until(host.current_snapshot.get_faction(SimulationWorld.LOCAL_PLAYER_ID), SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT) > host.current_snapshot.tick, "left and decision reinforcement entries must both retain the authoritative cooldown", failures)
+	_expect(support_panel.reinforcement_button.text.ends_with("Cooldown: %d s" % reinforcement_seconds), "left reinforcement entry must show the authoritative remaining cooldown", failures)
+	var other_decision_id := StringName("card:falcon_recon_group:%d:" % SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT)
+	var other_row := desk.exception_rows.get_node_or_null(NodePath(String(other_decision_id).validate_node_name()))
+	_expect(other_row != null, "the other damaged card must retain its reinforcement decision during shared cooldown", failures)
+	if other_row != null:
+		var other_action := other_row.get_node("Action") as Button
+		_expect(other_action.disabled and other_action.text.ends_with("Cooldown: %d s" % reinforcement_seconds), "the other card's reinforcement action must be grey with the same countdown", failures)
+		var frozen_text := other_action.text
+		desk.update_command_situation(host.current_snapshot, situation)
+		_expect(other_action.text == frozen_text, "a paused snapshot must freeze the decision countdown", failures)
+		var expiry_snapshot := host.world.create_faction_snapshot(SimulationWorld.LOCAL_PLAYER_ID)
+		input.selected_unit_card_id = &""
+		for remaining_ticks in [1, 0]:
+			expiry_snapshot.tick = faction.reinforcement_cooldown_until_tick - remaining_ticks
+			desk.update_command_situation(expiry_snapshot, situation)
+			support_panel.update_snapshot(expiry_snapshot)
+			_expect(other_action.disabled == (remaining_ticks > 0) and support_panel.reinforcement_button.disabled == (remaining_ticks > 0), "all reinforcement entries must unlock together at expiry, even with no selected card", failures)
+			if remaining_ticks > 0:
+				_expect(other_action.text.ends_with("Cooldown: 1 s") and support_panel.reinforcement_button.text.ends_with("Cooldown: 1 s"), "the last partial second must round up at every entry", failures)
+			else:
+				_expect(not other_action.text.contains("Cooldown:") and support_panel.reinforcement_button.text.ends_with("Cooldown: ready"), "expired cooldowns must clear without negative seconds", failures)
+		desk.update_command_situation(host.current_snapshot, situation)
+		support_panel.update_snapshot(host.current_snapshot)
+	_expect(desk._pending_responses.is_empty() and desk.get_decision_history_count() == 1 and desk.history_text.text.contains(GameText.t(&"DECISION_RESPONSE_CONFIRMED")), "actual reinforcement must confirm in the original history entry", failures)
+	# Replaying a stale full-strength row still reaches the authoritative rejection path.
+	desk.card_actions = [desk._card_projector._make(host.current_snapshot, host.world.battle_definition, host.current_snapshot.get_faction(SimulationWorld.LOCAL_PLAYER_ID), host.current_snapshot.get_unit_card(&"ironwall_assault_group"), SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT)]
+	desk._perform_card_action(decision_id)
+	_expect(desk.decision_failure_dialog.dialog_text.contains(GameText.t(&"CARD_RECOVERY_UNIT_CARD_FULL_STRENGTH")), "a stale full-strength reinforcement must explain that no replacement is needed", failures)
+	desk.decision_failure_dialog.hide()
+	desk.update_command_situation(host.current_snapshot, situation)
+	var intent := host.create_high_level_intent_command(&"di_tian", &"central_relay", &"central_relay", CommanderState.Posture.BALANCED, CommanderState.ReservePolicy.HOLD)
+	_expect(host.submit_command(intent).is_accepted(), "reserve fixture must establish its commander's current high-level intent", failures)
+	host.current_snapshot = host.world.advance_tick()
+	desk.update_command_situation(host.current_snapshot, situation)
+	var reserve: CardActionSnapshot
+	for candidate in desk.card_actions:
+		if candidate.action_kind == CardActionSnapshot.DEPLOY:
+			reserve = candidate
+			break
+	_expect(reserve != null, "reserve decisions must exist while subordinate cards are hidden", failures)
+	if reserve != null:
+		var history_before := desk.get_decision_history_count()
+		desk._perform_card_action(reserve.decision_id)
+		_expect(input.command_mode == InputController.CommandMode.DEPLOY_UNIT_CARD_TARGETING and desk.get_decision_history_count() == history_before, "starting map targeting must not be logged as a deployment success", failures)
+		input.cancel_command_mode()
+		_expect(desk._targeting_decision == null and desk.get_decision_history_count() == history_before + 1, "cancelling map targeting must release the pending target with one explicit cancellation", failures)
+		desk._perform_card_action(reserve.decision_id)
+		input.deploy_selected_unit_card_at(Vector2(-1000, -1000))
+		_expect(desk._targeting_decision != null and desk.decision_failure_dialog.dialog_text.contains(GameText.t(&"CARD_RECOVERY_INVALID_POSITION")), "an illegal map point must explain recovery and retain targeting for retry", failures)
+		desk.decision_failure_dialog.hide()
+		var reserve_supply := faction.supply
+		input.selected_unit_card_id = &"falcon_recon_group"
+		input.selected_commander_id = &"bai_jiuyang"
+		input.deploy_selected_unit_card_at(reserve.position + Vector2(0, -192))
+		_expect(desk._targeting_decision == null and desk._pending_responses.size() == 1, "a legal reserve point must submit the shared command and wait for actual deployment", failures)
+		for tick in range(host.current_snapshot.get_unit_card(reserve.unit_card_id).deployment_ticks + 20):
+			host.current_snapshot = host.world.advance_tick()
+			desk.update_command_situation(host.current_snapshot, situation)
+			if desk._pending_responses.is_empty():
+				break
+		var deployed := host.current_snapshot.get_unit_card(reserve.unit_card_id)
+		_expect(deployed.deployment_state == UnitCardState.DeploymentState.DEPLOYED and deployed.control_state == UnitCardState.ControlState.AGENT_ASSIGNED and faction.supply <= reserve_supply - reserve.supply_cost, "reserve targeting must create the actual whole card under its commander's Agent: state=%s control=%s supply=%d previous=%d pending=%s" % [deployed.deployment_state, deployed.control_state, faction.supply, reserve_supply, desk._pending_responses], failures)
+		_expect(deployed.assigned_task_id != 0 and host.current_snapshot.get_commander(reserve.commander_id).active_intent_id == intent.intent_id, "new reserve members must join the existing commander intent", failures)
+		_expect(desk._pending_responses.is_empty() and desk._decision_history.back()["accepted"], "deployment animation may exceed 15 ticks but must confirm when actual members arrive", failures)
+	for scenario in [SimulationWorld.ScenarioKind.BLACK_WELL, SimulationWorld.ScenarioKind.BROKEN_BRIDGE]:
+		host.world = SimulationWorld.new(true, false, scenario)
+		host.current_snapshot = host.world.create_faction_snapshot(SimulationWorld.LOCAL_PLAYER_ID)
+		(host.world.factions[SimulationWorld.LOCAL_PLAYER_ID] as FactionState).supply = 100
+		if scenario == SimulationWorld.ScenarioKind.BLACK_WELL:
+			var guard := host.world.unit_cards[&"blackwell_guard_battalion"] as UnitCardState
+			(host.world.units[guard.member_entity_ids[0]] as UnitState).health -= 20
+		else:
+			# Deploy the map's existing engineer through the ordinary deployment command.
+			for candidate in host.current_snapshot.unit_cards:
+				if candidate.unit_definition_id == &"engineer_vehicle" and candidate.deployment_state == UnitCardState.DeploymentState.RESERVE:
+					var hq := host.current_snapshot.get_building(SimulationWorld.PLAYER_COMMAND_CENTER_ID)
+					_expect(host.submit_command(host.create_deploy_unit_card_command(candidate.definition_id, hq.position + Vector2(0, -192), candidate.commander_definition_id)).is_accepted(), "engineering fixture must deploy through the shared command", failures)
+					for tick in range(candidate.deployment_ticks + 1):
+						host.current_snapshot = host.world.advance_tick()
+		for kind in ([SupportOrderCommand.SupportKind.RAPID_MOBILITY, SupportOrderCommand.SupportKind.FRONTLINE_LOGISTICS, SupportOrderCommand.SupportKind.EMERGENCY_FORTIFY] if scenario == SimulationWorld.ScenarioKind.BLACK_WELL else [SupportOrderCommand.SupportKind.ENGINEERING_ROUTE]):
+			host.current_snapshot = host.world.create_faction_snapshot(SimulationWorld.LOCAL_PLAYER_ID)
+			desk.update_command_situation(host.current_snapshot, situation)
+			var chosen: CardActionSnapshot
+			for candidate in desk.card_actions:
+				if candidate.action_kind == kind:
+					chosen = candidate
+					break
+			_expect(chosen != null, "existing support kind %d must have a context decision" % kind, failures)
+			if chosen == null:
+				continue
+			input.selected_unit_card_id = &""
+			desk._perform_card_action(chosen.decision_id)
+			_expect(desk._pending_responses.size() == 1, "existing support kind %d must submit without hidden selection" % kind, failures)
+			host.current_snapshot = host.world.advance_tick()
+			desk.update_command_situation(host.current_snapshot, situation)
+			_expect(desk._pending_responses.is_empty() and desk._decision_history.back()["accepted"], "existing support kind %d must confirm from its legal snapshot" % kind, failures)
+	host.world = SimulationWorld.new(true, false, SimulationWorld.ScenarioKind.GREY_RIDGE)
+	_expect(host.start_grey_ridge(ArmyPlan.grey_ridge_default()), "paused intent history fixture starts Grey Ridge after other scenario tests", failures)
+	desk.reset_decision_session()
+	desk.update_command_situation(host.current_snapshot, situation)
+	desk._refresh_dynamic_options()
+	desk._select_metadata(desk.commander_selector, &"bai_jiuyang")
+	desk._select_metadata(desk.objective_selector, &"west_mine")
+	desk._select_metadata(desk.axis_selector, &"")
+	host.set_tactical_paused(true)
+	desk._submit_intent()
+	desk._select_metadata(desk.objective_selector, &"east_supply")
+	desk._submit_intent()
+	var frozen := host.current_snapshot.tick
+	host._process(10.0)
+	desk.update_command_situation(host.current_snapshot, situation)
+	_expect(host.current_snapshot.tick == frozen and desk._pending_responses.size() == 2, "multiple paused intents remain pending without premature timeouts", failures)
+	host.set_tactical_paused(false)
+	host.advance_tick()
+	desk.update_command_situation(host.current_snapshot, situation)
+	_expect(host.current_snapshot.get_commander(&"bai_jiuyang").intent_objective_region_id == &"east_supply", "last paused intent executes in the normal command order", failures)
+	_expect(desk._pending_responses.is_empty() and desk._decision_history[0]["result"] == GameText.t(&"TACTICAL_SUPERSEDED") and desk._decision_history[1]["result"] == GameText.t(&"DECISION_RESPONSE_CONFIRMED"), "replaced paused intents must retain truthful history without false timeout", failures)
+
+	game.free()
+
+
+func _test_tactical_pause(failures: Array[String]) -> void:
+	var host := SimulationHost.new()
+	host.scenario_kind = SimulationWorld.ScenarioKind.GREY_RIDGE
+	host._ready()
+	host.set_tactical_paused(true)
+	_expect(not host.is_tactical_paused(), "prebattle cannot enter tactical pause", failures)
+	host.start_grey_ridge(ArmyPlan.grey_ridge_default())
+	host._process(0.04)
+	var initial := host.current_snapshot
+	var treasury: int = host.world.factions[SimulationWorld.LOCAL_PLAYER_ID].supply
+	host.set_tactical_paused(true)
+	var order := host.create_high_level_intent_command(&"bai_jiuyang", &"west_mine", &"west_mine", CommanderState.Posture.CAUTIOUS, CommanderState.ReservePolicy.HOLD)
+	var result := host.submit_command(order)
+	_expect(result.is_accepted(), "tactical pause still accepts a legal intent", failures)
+	var queued := host.get_queue_size()
+	host._process(500.0)
+	host.advance_tick()
+	_expect(host.current_snapshot == initial and host.world.current_tick == initial.tick and host.get_queue_size() == queued, "paused host must not advance world or drain commands even on a long frame or manual step", failures)
+	_expect(host.world.factions[SimulationWorld.LOCAL_PLAYER_ID].supply == treasury and is_equal_approx(host._accumulator, 0.04), "pause preserves resources and fractional tick without accumulating time", failures)
+	host.set_tactical_paused(false)
+	host._process(0.07)
+	_expect(host.current_snapshot.tick == initial.tick + 1, "resume advances just one normal tick without catch-up", failures)
+	_expect(host.current_snapshot.get_commander(&"bai_jiuyang").active_intent_id == order.intent_id, "queued pause intent must reach authoritative snapshot on resume", failures)
+	host.set_tactical_paused(true)
+	host.restart_grey_ridge()
+	_expect(not host.is_tactical_paused() and host.current_snapshot.tick == 0, "restart clears tactical pause", failures)
+	host.free()
+
+
+func _test_tactical_card_status(failures: Array[String]) -> void:
+	var world := SimulationWorld.new(true, false, SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var snapshot := world.create_faction_snapshot(SimulationWorld.LOCAL_PLAYER_ID)
+	var board := ArmyBoard.new()
+	board._snapshot = snapshot
+	var commander := snapshot.get_commander(&"bai_jiuyang")
+	commander.active_intent_id = &""
+	commander.behavior_state_key = &"COMMANDER_BEHAVIOR_STANDING_BY"
+	for unit in snapshot.units:
+		unit.is_moving = false
+		unit.is_attacking = false
+		unit.assigned_task_id = 0
+	_expect(board._tactical_activity(commander) == 0, "commander with no task or contact should show green idle", failures)
+	var card := snapshot.get_unit_card(&"falcon_recon_group")
+	var member := snapshot.get_unit(card.active_member_entity_ids[0])
+	member.is_moving = true
+	_expect(board._tactical_activity(commander) == 1, "moving whole card should show yellow task status", failures)
+	var hidden_enemy := UnitSnapshot.new(world.units[member.entity_id])
+	hidden_enemy.entity_id = 99999
+	hidden_enemy.faction_id = SimulationWorld.LOCAL_PLAYER_ID + 1
+	hidden_enemy.position = member.position
+	hidden_enemy.is_visible_to_local_player = false
+	snapshot.units.append(hidden_enemy)
+	_expect(board._tactical_activity(commander) == 1, "a hidden enemy at the same location must not contaminate card status", failures)
+	hidden_enemy.is_visible_to_local_player = true
+	_expect(board._tactical_activity(commander) == 2, "visible contact should override yellow task status with red", failures)
+	var reserve := snapshot.get_unit_card(&"armored_spearhead")
+	_expect(board._display_strength(reserve) == reserve.available_strength and board._display_strength(card) == card.current_strength, "reserve totals must reflect available soldiers while deployed cards reflect actual members", failures)
+	board.free()

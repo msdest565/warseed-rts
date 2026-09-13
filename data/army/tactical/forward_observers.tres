@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="UnitCardDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/data/unit_card_definition.gd" id="1"]
+[ext_resource type="Script" path="res://src/data/tactical_ability_definition.gd" id="2"]
+
+[sub_resource type="Resource" id="Ability"]
+script = ExtResource("2")
+ability_id = &"forward_observers_action"
+kind = 0
+name_key = &"TACTICAL_OBSERVERS_ACTION"
+help_key = &"TACTICAL_OBSERVERS_HELP"
+required_unit_id = &"scout_vehicle"
+supply_cost = 1
+preparation_ticks = 20
+duration_ticks = 100
+cooldown_ticks = 160
+range = 480.0
+organization_cost = 0.0
+
+[resource]
+script = ExtResource("1")
+definition_id = &"forward_observers"
+display_name_key = &"TACTICAL_OBSERVERS"
+role_key = &"UNIT_CARD_ROLE_RECON"
+commander_definition_id = &"bai_jiuyang"
+command_cost = 2
+authorized_strength = 6
+unit_definition_id = &"scout_vehicle"
+supply_cost = 3
+deployment_ticks = 80
+tactical_ability = SubResource("Ability")
+

@@ -164,9 +164,9 @@ stop_when:
 
 ## 5. 当前阶段可直接发送的命令
 
-R1-001 至 R1-008 已完成并由产品负责人接受。D-026 已取消真人证据硬门，D-027 已启用 [`GAMEPLAY_REWORK_ROADMAP.md`](GAMEPLAY_REWORK_ROADMAP.md)。R2-001 至 R2-006 的工程出口已经完成，当前等待产品负责人接受 R2 残余风险；接受前没有 `READY` 工作项，`WS-R3-001` 保持 `BLOCKED`。
+R1-001 至 R1-008 已完成并由产品负责人接受。D-026 已取消真人证据硬门，D-027 已启用 [`GAMEPLAY_REWORK_ROADMAP.md`](GAMEPLAY_REWORK_ROADMAP.md)。R2 工程出口已通过，并于 2026-09-10 按用户“维护自检后完成 R3、R4、R5”的明确授权进入 R3。当前用 `/goal continue` 继续活动目标，严格按独立工作项依赖执行；具体状态以 `AI_DEVELOPMENT_STATE.md` 为准。D-021 已由用户明确接受按文档实施，R3-003 的编制决定门已解除；D-022 已于 2026-09-11 由用户明确接受，R3-004 的决定门已解除。
 
-### 5.1 推荐：审查并接受 R2 阶段出口
+### 5.1 已完成的 R2 阶段出口审查示例
 
 ```text
 /goal review phase-exit R2
@@ -410,8 +410,8 @@ write_changes: false
 5. 有真人记录时可选执行 `/goal review human-validation`，但不改变工程状态
 ```
 
-当前最合适的第一条命令是：
+当前已有覆盖维护及 R3、R4、R5 的用户活动目标，继续命令是：
 
 ```text
-/goal review phase-exit R2
+/goal continue
 ```

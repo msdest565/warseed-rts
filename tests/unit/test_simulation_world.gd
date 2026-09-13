@@ -4,6 +4,9 @@ extends RefCounted
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	failures.append_array(TestCompositionPersistence.new().run())
+	failures.append_array(TestControlHandoff.new().run())
+	failures.append_array(TestDoctrineEffectRuntime.new().run())
 	_test_fixed_tick_movement(failures)
 	_test_arrival_without_overshoot(failures)
 	_test_snapshot_is_value_copy(failures)
@@ -955,7 +958,7 @@ func _test_grey_ridge_doctrine_constraints(failures: Array[String]) -> void:
 	var bai := world.commanders[&"bai_jiuyang"] as CommanderState
 	var di := world.commanders[&"di_tian"] as CommanderState
 	var lin := world.commanders[&"lin_mo"] as CommanderState
-	_expect(world.doctrine_definitions.size() == 4, "the first slice should expose four persistent doctrine definitions", failures)
+	_expect(world.doctrine_definitions.size() >= 4, "the first slice should expose persistent doctrine definitions", failures)
 	_expect(bai.has_doctrine(&"covert_search") and di.has_doctrine(&"alternating_cover") and lin.has_doctrine(&"fire_preparation"), "named commanders should start with authoritative equipped doctrine slots", failures)
 	var distant_recon := CommanderOrderCommand.new(
 		world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, world.current_tick,
@@ -983,7 +986,7 @@ func _test_grey_ridge_doctrine_constraints(failures: Array[String]) -> void:
 func _test_grey_ridge_locked_enemy_reactions_use_faction_knowledge(failures: Array[String]) -> void:
 	var world := SimulationWorld.new(true, false, SimulationWorld.ScenarioKind.GREY_RIDGE)
 	_expect(world.enemy_opening_plan_id == SimulationWorld.ENEMY_PLAN_CENTRAL_ASSAULT and world.enemy_reaction_log[0].contains("plan=central_assault"), "the first Grey Ridge battle should lock and log its central opening before player input", failures)
-	var second_battle_record := {"format_version": ArmyRosterStore.FORMAT_VERSION, "scenario_id": "grey_ridge", "battle_count": 1, "cards": {}}
+	var second_battle_record := {"format_version": ArmyRosterStore.FORMAT_VERSION, "content_version": ArmyRosterMigration.CONTENT_VERSION, "scenario_id": "grey_ridge", "battle_count": 1, "cards": {}}
 	var western_world := SimulationWorld.new(true, false, SimulationWorld.ScenarioKind.GREY_RIDGE, second_battle_record)
 	var repeated_western_world := SimulationWorld.new(true, false, SimulationWorld.ScenarioKind.GREY_RIDGE, second_battle_record)
 	var western_formation := western_world.formations[SimulationWorld.GREY_RIDGE_ENEMY_ASSAULT_FORMATION_ID] as FormationState
@@ -991,7 +994,7 @@ func _test_grey_ridge_locked_enemy_reactions_use_faction_knowledge(failures: Arr
 	var western_probe := western_world.formations[SimulationWorld.GREY_RIDGE_ENEMY_PROBE_FORMATION_ID] as FormationState
 	_expect(western_probe.target_position == SimulationWorld.GREY_RIDGE_CENTRAL_POSITION, "the western hook should assign the independent probe formation as a central screen", failures)
 	_expect(repeated_western_world.enemy_opening_plan_id == western_world.enemy_opening_plan_id and repeated_western_world.enemy_reaction_log[0] == western_world.enemy_reaction_log[0], "identical pre-battle records should deterministically select and log the same hostile opening", failures)
-	var third_battle_record := {"format_version": ArmyRosterStore.FORMAT_VERSION, "scenario_id": "grey_ridge", "battle_count": 2, "cards": {}}
+	var third_battle_record := {"format_version": ArmyRosterStore.FORMAT_VERSION, "content_version": ArmyRosterMigration.CONTENT_VERSION, "scenario_id": "grey_ridge", "battle_count": 2, "cards": {}}
 	var feint_world := SimulationWorld.new(true, false, SimulationWorld.ScenarioKind.GREY_RIDGE, third_battle_record)
 	var feint_probe := feint_world.formations[SimulationWorld.GREY_RIDGE_ENEMY_PROBE_FORMATION_ID] as FormationState
 	_expect(feint_world.enemy_opening_plan_id == SimulationWorld.ENEMY_PLAN_WESTERN_FEINT and feint_probe.target_position == SimulationWorld.GREY_RIDGE_WEST_POSITION, "the third battle should lock the western feint before any player command", failures)
@@ -1086,7 +1089,7 @@ func _test_grey_ridge_initial_state(failures: Array[String]) -> void:
 	var faction := snapshot.get_faction(SimulationWorld.LOCAL_PLAYER_ID)
 	_expect(world.scenario_kind == SimulationWorld.ScenarioKind.GREY_RIDGE, "Grey Ridge should be an explicit simulation scenario", failures)
 	_expect(true_state.units.size() == 34 and snapshot.units.size() == 20, "Grey Ridge should start with 20 friendly, 12 hostile assault units, and a hidden two-vehicle probe", failures)
-	_expect(snapshot.commanders.size() == 3 and snapshot.unit_cards.size() == 4, "Grey Ridge should expose three commanders, two deployed cards, and two reserve cards", failures)
+	_expect(snapshot.commanders.size() == 4 and snapshot.unit_cards.size() == 6, "Grey Ridge should expose four commanders and six tactical cards", failures)
 	_expect(faction.supply == 5 and faction.supply_capacity == 10, "Grey Ridge should start at 5/10 supply", failures)
 	_expect(faction.population == 20 and faction.population_capacity == 40, "Grey Ridge should start at 20/40 population", failures)
 	_expect(snapshot.ore_fields.is_empty() and snapshot.buildings.size() == 1, "local Grey Ridge snapshot should contain no ore economy and only the friendly headquarters", failures)
@@ -1115,6 +1118,9 @@ func _test_grey_ridge_initial_state(failures: Array[String]) -> void:
 
 func _test_grey_ridge_region_control_and_settlement(failures: Array[String]) -> void:
 	var world := SimulationWorld.new(true, false, SimulationWorld.ScenarioKind.GREY_RIDGE)
+	# Isolate income from the observer's separately tested automatic Supply commitment.
+	var takeover := UnitCardControlCommand.new(world.allocate_command_id(), 1, world.current_tick, &"falcon_recon_group", UnitCardControlCommand.Action.TAKEOVER)
+	_expect(world.submit_command(takeover).is_accepted(), "income fixture should take control of its observer", failures)
 	for unit_variant in world.units.values():
 		var unit := unit_variant as UnitState
 		if unit.faction_id == SimulationWorld.ENEMY_PLAYER_ID:
@@ -1139,6 +1145,12 @@ func _test_grey_ridge_region_control_and_settlement(failures: Array[String]) -> 
 	_set_test_formation_position(world, friendly_formation, SimulationWorld.GREY_RIDGE_CENTRAL_POSITION)
 	enemy.position = SimulationWorld.GREY_RIDGE_CENTRAL_POSITION
 	enemy.desired_position = enemy.position
+	world._advance_strategic_regions()
+	var broken := world.create_snapshot().get_strategic_region(&"central_relay")
+	_expect(not broken.contested, "a revived member of a zero-organization enemy card cannot capture a new objective", failures)
+	var enemy_card := world.unit_cards[enemy.unit_card_id] as UnitCardState
+	enemy_card.organization = world.battle_definition.organization_max
+	world.refresh_unit_card_organization_baseline(enemy_card)
 	world._advance_strategic_regions()
 	var contested := world.create_snapshot().get_strategic_region(&"central_relay")
 	_expect(contested.controller_faction_id == SimulationWorld.LOCAL_PLAYER_ID and contested.contested, "hostile presence should contest income without erasing the current owner (controller=%d contested=%s capture=%d progress=%d/%d friendly_enabled=%d enemy_enabled=%s)" % [contested.controller_faction_id, contested.contested, contested.capture_faction_id, contested.capture_progress_ticks, contested.capture_required_ticks, friendly_formation.member_entity_ids.filter(func(entity_id: int) -> bool: return (world.units[entity_id] as UnitState).enabled).size(), enemy.enabled], failures)

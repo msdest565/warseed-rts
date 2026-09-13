@@ -53,12 +53,20 @@ enum Kind {
 	REGION_CAPTURE_STARTED,
 	REGION_CAPTURE_INTERRUPTED,
 	BATTLE_CONCLUDED,
+	TACTICAL_ACTION_STARTED,
+	TACTICAL_ACTION_COMPLETED,
+	TACTICAL_ACTION_INTERRUPTED,
+	TACTICAL_IDENTIFIED,
+	AMMUNITION_RESTORED,
+	SUPPRESSION_APPLIED,
 }
 
 var tick: int
 var kind: Kind
 var entity_id: int
 var detail: String
+# Finalized by the organization system before this tick is published.
+var applied_amount: float = 0.0
 
 
 func _init(new_tick: int, new_kind: Kind, new_entity_id: int, new_detail: String = "") -> void:

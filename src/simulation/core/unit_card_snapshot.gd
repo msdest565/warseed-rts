@@ -5,11 +5,14 @@ var definition_id: StringName
 var display_name_key: StringName
 var role_key: StringName
 var unit_definition_id: StringName
+var composition: Array[UnitCardCompositionSnapshot] = []
 var commander_definition_id: StringName
 var faction_id: int
 var command_cost: int
 var authorized_strength: int
 var current_strength: int = 0
+var available_strength: int = 0
+var rapid_mobility_ticks_remaining: int = 0
 var member_entity_ids: Array[int]
 var active_member_entity_ids: Array[int] = []
 var center_position: Vector2
@@ -38,10 +41,23 @@ var organization: float = 0.0
 var organization_state_key: StringName = &"ORGANIZATION_STABLE"
 var withdrawn_strength: int = 0
 var withdrawn_tick: int = -1
+var tactical_ability_id: StringName
+var tactical_kind: int = -1
+var tactical_name_key: StringName
+var tactical_help_key: StringName
+var tactical_ready_tick: int
+var tactical_started_tick: int
+var tactical_complete_tick: int
+var tactical_until_tick: int
+var tactical_status_key: StringName
+var ammunition: int = 0
+var ammunition_capacity: int = 0
 
 
 func _init(state: UnitCardState, units: Dictionary) -> void:
 	definition_id = state.definition.definition_id
+	for entry in state.composition:
+		composition.append(UnitCardCompositionSnapshot.new(entry, units, state.deployment_state == UnitCardState.DeploymentState.WITHDRAWN))
 	display_name_key = state.definition.display_name_key
 	role_key = state.definition.role_key
 	unit_definition_id = state.definition.unit_definition_id
@@ -49,6 +65,8 @@ func _init(state: UnitCardState, units: Dictionary) -> void:
 	faction_id = state.faction_id
 	command_cost = state.definition.command_cost
 	authorized_strength = state.definition.authorized_strength
+	available_strength = state.available_strength
+	rapid_mobility_ticks_remaining = state.rapid_mobility_ticks_remaining
 	member_entity_ids = state.member_entity_ids.duplicate()
 	formation_id = state.formation_id
 	deployment_state = state.deployment_state
@@ -70,6 +88,16 @@ func _init(state: UnitCardState, units: Dictionary) -> void:
 	organization_state_key = _organization_state_key(organization)
 	withdrawn_strength = state.withdrawn_strength
 	withdrawn_tick = state.withdrawn_tick
+	tactical_ready_tick = state.tactical_ready_tick
+	tactical_started_tick = state.tactical_started_tick
+	tactical_complete_tick = state.tactical_complete_tick
+	tactical_until_tick = state.tactical_until_tick
+	tactical_status_key = state.tactical_status_key
+	if state.definition.tactical_ability != null:
+		tactical_ability_id = state.definition.tactical_ability.ability_id
+		tactical_kind = state.definition.tactical_ability.kind
+		tactical_name_key = state.definition.tactical_ability.name_key
+		tactical_help_key = state.definition.tactical_ability.help_key
 	var position_sum := Vector2.ZERO
 	var shared_task_id := -1
 	var terrain_counts: Dictionary = {}
@@ -79,6 +107,8 @@ func _init(state: UnitCardState, units: Dictionary) -> void:
 		if unit == null or not unit.enabled:
 			continue
 		active_member_entity_ids.append(entity_id)
+		ammunition += unit.ammunition
+		ammunition_capacity += unit.ammunition_capacity
 		position_sum += unit.position
 		is_player_overridden = is_player_overridden or unit.control_state == UnitState.ControlState.TEMPORARILY_OVERRIDDEN
 		if unit.rejoin_pending:
@@ -111,3 +141,17 @@ func _organization_state_key(value: float) -> StringName:
 	if value < 60.0:
 		return &"ORGANIZATION_PRESSURED"
 	return &"ORGANIZATION_STABLE"
+
+
+func get_composition_entry(entry_id: StringName) -> UnitCardCompositionSnapshot:
+	for entry in composition:
+		if entry.entry_id == entry_id:
+			return entry
+	return null
+
+
+func has_active_unit_type(unit_id: StringName) -> bool:
+	for entry in composition:
+		if entry.unit_definition_id == unit_id and not entry.active_member_entity_ids.is_empty():
+			return true
+	return false

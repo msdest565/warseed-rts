@@ -92,8 +92,13 @@ func validate(unit_catalog: UnitDefinitionCatalog = null) -> DataValidationResul
 	var commander_ids := _collect_resource_ids(result, commander_definitions, &"definition_id", "commanders")
 	var unit_card_ids := _collect_resource_ids(result, unit_card_definitions, &"definition_id", "unit_cards")
 	var doctrine_ids := _collect_resource_ids(result, doctrine_definitions, &"definition_id", "doctrines")
+	for index in range(doctrine_definitions.size()):
+		var doctrine := doctrine_definitions[index]
+		if doctrine != null:
+			result.issues.append_array(doctrine.validate("battle '%s'.doctrines[%d] '%s'" % [scenario_id, index, doctrine.definition_id]).issues)
 	var formation_ids: Dictionary = {}
 	var formation_role_ids: Dictionary = {}
+	var enemy_card_ids: Dictionary = {}
 	for index in range(enemy_formations.size()):
 		var formation := enemy_formations[index]
 		if formation == null:
@@ -113,6 +118,17 @@ func validate(unit_catalog: UnitDefinitionCatalog = null) -> DataValidationResul
 			result.add(DataValidationResult.Reason.INVALID_REFERENCE, "enemy_formations[%d] must reference battle enemy Agent/task %d/%d" % [index, enemy_agent_id, enemy_task_id])
 		if unit_catalog != null and unit_catalog.get_unit(formation.unit_definition_id) == null:
 			result.add(DataValidationResult.Reason.INVALID_REFERENCE, "enemy_formations[%d].unit_definition_id='%s'" % [index, formation.unit_definition_id])
+		var card := formation.unit_card_definition
+		if card != null:
+			_require_id(result, card.definition_id, "enemy formation card ID")
+			if enemy_card_ids.has(card.definition_id) or unit_card_ids.has(card.definition_id):
+				result.add(DataValidationResult.Reason.DUPLICATE_ID, "enemy card '%s' collides with another card" % card.definition_id)
+			enemy_card_ids[card.definition_id] = true
+			result.issues.append_array(UnitCardCompositionCompiler.validate(card, unit_catalog).issues)
+			if formation.faction_id == 1 or card.unit_definition_id != formation.unit_definition_id or card.authorized_strength != formation.strength or not card.composition.is_empty():
+				result.add(DataValidationResult.Reason.INVALID_VALUE, "enemy card must match its homogeneous hostile formation")
+			if organization_max <= 0.0 or not card.enforce_organization_rules or card.tactical_ability != null or card.tactical_weapon_override != null:
+				result.add(DataValidationResult.Reason.INVALID_VALUE, "enemy formation cards require organization constraints and no unsupported active ability")
 
 	for region in strategic_regions:
 		if region == null:
@@ -137,8 +153,24 @@ func validate(unit_catalog: UnitDefinitionCatalog = null) -> DataValidationResul
 		if card == null:
 			continue
 		_require_reference(result, commander_ids, card.commander_definition_id, "unit card '%s' commander" % card.definition_id)
-		if unit_catalog != null and unit_catalog.get_unit(card.unit_definition_id) == null:
-			result.add(DataValidationResult.Reason.INVALID_REFERENCE, "unit card '%s' unit_definition_id='%s'" % [card.definition_id, card.unit_definition_id])
+		result.issues.append_array(UnitCardCompositionCompiler.validate(card, unit_catalog).issues)
+		if card.tactical_ability != null:
+			result.issues.append_array(card.tactical_ability.validate(unit_catalog).issues)
+			var has_capability := false
+			for entry in UnitCardCompositionCompiler.compile(card):
+				has_capability = has_capability or entry.unit_definition_id == card.tactical_ability.required_unit_id
+			if not has_capability or organization_max <= 0.0:
+				result.add(DataValidationResult.Reason.INVALID_VALUE, "tactical card needs its capability member and organization rules")
+		if card.tactical_weapon_override != null:
+			result.issues.append_array(card.tactical_weapon_override.validate().issues)
+			if card.tactical_ability == null or card.tactical_ability.kind != TacticalAbilityDefinition.Kind.SUPPRESS:
+				result.add(DataValidationResult.Reason.INVALID_VALUE, "card weapon override requires a suppression capability")
+			elif unit_catalog != null:
+				var weapon_unit := unit_catalog.get_unit(card.tactical_ability.required_unit_id)
+				if weapon_unit == null or not weapon_unit.can_attack or weapon_unit.combat == null or card.tactical_weapon_override.minimum_range >= weapon_unit.combat.attack_range:
+					result.add(DataValidationResult.Reason.INVALID_VALUE, "card weapon override requires a compatible armed member and firing range")
+		if card.enforce_organization_rules and organization_max <= 0.0:
+			result.add(DataValidationResult.Reason.INVALID_VALUE, "card organization constraints require organization rules")
 		if card.authorized_strength <= 0 or card.command_cost <= 0:
 			result.add(DataValidationResult.Reason.INVALID_VALUE, "unit card '%s' has invalid strength or command cost" % card.definition_id)
 	if starting_card_count <= 0 or starting_card_count > unit_card_ids.size():

@@ -15,3 +15,4 @@ extends Resource
 @export var can_repair: bool = false
 @export_range(0.0, 10000.0) var sight_range: float = 224.0
 @export var combat: CombatDefinition
+@export var tactical_weapon: TacticalWeaponDefinition

@@ -86,12 +86,13 @@ func _benchmark(
 	var host := game.get_node("SimulationHost") as SimulationHost
 	host.start_grey_ridge(ArmyPlan.grey_ridge_default())
 	host.process_mode = Node.PROCESS_MODE_DISABLED
-	var world := GreyRidgeBenchmarkFixture.create_world(entity_count, true, projectile_count)
+	var world := _create_benchmark_world(entity_count, projectile_count)
 	world.tick_profile_enabled = true
 	var snapshot := world.create_snapshot()
 	host.world = world
 	host.previous_snapshot = snapshot
 	host.current_snapshot = snapshot
+	_configure_benchmark_game(game, snapshot)
 	var presentation := game.get_node("WorldPresentation") as WorldPresentation
 	var camera := game.get_node("CameraController") as CameraController
 	camera.zoom = Vector2.ONE
@@ -368,6 +369,14 @@ func _benchmark(
 	game.free()
 	await process_frame
 	return result
+
+
+func _create_benchmark_world(entity_count: int, projectile_count: int) -> SimulationWorld:
+	return GreyRidgeBenchmarkFixture.create_world(entity_count, true, projectile_count)
+
+
+func _configure_benchmark_game(_game: GameRoot, _snapshot: WorldSnapshot) -> void:
+	pass
 
 
 func _measure_empty_frame_baseline() -> Dictionary:

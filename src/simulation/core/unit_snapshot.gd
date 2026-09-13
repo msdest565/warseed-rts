@@ -59,10 +59,17 @@ var rejoin_formation_id: int
 var rejoin_slot_id: int
 var rejoin_pending: bool
 var unit_card_id: StringName
+var composition_entry_id: StringName
 var tactical_role: UnitState.TacticalRole
 var terrain_kind: UnitState.TerrainKind
 var terrain_effect_key: StringName
 var intel_freshness: float = 1.0
+var damage_tag: int = TacticalWeaponDefinition.DamageTag.KINETIC
+var target_tag: int = TacticalWeaponDefinition.TargetTag.LIGHT
+var ammunition_capacity: int = 0
+var ammunition: int = 0
+var minimum_attack_range: float = 0.0
+var weapon_reason_key: StringName = &"TACTICAL_READY"
 
 
 func _init(unit: UnitState = null, contact: KnowledgeContact = null) -> void:
@@ -132,9 +139,16 @@ func _init(unit: UnitState = null, contact: KnowledgeContact = null) -> void:
 	rejoin_slot_id = unit.rejoin_slot_id
 	rejoin_pending = unit.rejoin_pending
 	unit_card_id = unit.unit_card_id
+	composition_entry_id = unit.composition_entry_id
 	tactical_role = unit.tactical_role
 	terrain_kind = unit.terrain_kind
 	terrain_effect_key = unit.terrain_effect_key
+	damage_tag = unit.damage_tag
+	target_tag = unit.target_tag
+	ammunition_capacity = unit.ammunition_capacity
+	ammunition = unit.ammunition
+	minimum_attack_range = unit.minimum_attack_range
+	weapon_reason_key = unit.weapon_reason_key
 
 
 func _apply_contact(contact: KnowledgeContact) -> void:

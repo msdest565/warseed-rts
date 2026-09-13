@@ -24,14 +24,17 @@ var _battles: Array[BattleDefinition] = []
 var _battle_buttons: Array[Button] = []
 var _selected_index: int = -1
 var _black_well_continuity_confirmed := false
+var _roster_error := ""
 
 
 func _ready() -> void:
 	var session_id := ArmyRosterStore.active_playtest_session_id()
 	var roster_path := ArmyRosterStore.campaign_record_path_for_session(session_id, &"black_well")
-	_black_well_continuity_confirmed = TutorialProgressStore.confirm_black_well_continuity(
-		ArmyRosterStore.load_record(roster_path)
-	)
+	var loaded := ArmyRosterStore.load_record_result(roster_path, ArmyRosterStore.runtime_persistence_allowed())
+	if loaded.status == ArmyRosterResult.Status.FAILED:
+		_roster_error = "; ".join(loaded.errors)
+	else:
+		_black_well_continuity_confirmed = TutorialProgressStore.confirm_black_well_continuity(loaded.record)
 	_load_battles()
 	language_button.pressed.connect(_toggle_language)
 	exit_button.pressed.connect(_exit_game)
@@ -71,6 +74,9 @@ func refresh_locale() -> void:
 	title_label.text = GameText.t(&"BATTLE_SELECT_TITLE")
 	subtitle_label.text = GameText.t(&"BATTLE_SELECT_SUBTITLE")
 	persistence_label.text = GameText.t(&"BATTLE_SELECT_PERSISTENCE")
+	if not _roster_error.is_empty():
+		persistence_label.text += "\n" + GameText.t(&"ROSTER_LOAD_FAILED")
+		persistence_label.tooltip_text = _roster_error
 	if _black_well_continuity_confirmed:
 		persistence_label.text = "%s\n%s" % [persistence_label.text, GameText.t(&"BLACK_WELL_CONTINUITY_CONFIRMED")]
 	deploy_button.text = GameText.t(&"BATTLE_SELECT_DEPLOY")

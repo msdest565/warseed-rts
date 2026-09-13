@@ -1,6 +1,9 @@
 class_name SupportPanel
 extends PanelContainer
 
+signal card_decision_requested(kind: int)
+var contextual_card_actions: bool = false
+
 @onready var title_label: Label = $Margin/Scroll/Layout/Title
 @onready var pair_selector: OptionButton = $Margin/Scroll/Layout/Pair
 @onready var recon_button: Button = $Margin/Scroll/Layout/Recon
@@ -73,6 +76,8 @@ func refresh_locale() -> void:
 		frontline_logistics_button.text = GameText.t(&"SUPPORT_FRONTLINE_LOGISTICS")
 	status_label.text = GameText.t(&"SUPPORT_READY")
 	intel_title_label.text = GameText.t(&"INTEL_CARDINAL_TITLE")
+	if simulation_host != null and simulation_host.current_snapshot != null:
+		update_snapshot(simulation_host.current_snapshot)
 
 
 func update_snapshot(snapshot: WorldSnapshot) -> void:
@@ -81,15 +86,15 @@ func update_snapshot(snapshot: WorldSnapshot) -> void:
 	var faction := snapshot.get_faction(SimulationWorld.LOCAL_PLAYER_ID)
 	var affordable := faction != null and faction.supply >= SimulationWorld.SUPPORT_COST
 	var recon_cooldown := maxi(0, faction.air_recon_cooldown_until_tick - snapshot.tick) if faction != null else 0
-	var fortify_cooldown := maxi(0, faction.fortify_cooldown_until_tick - snapshot.tick) if faction != null else 0
-	var reinforcement_cooldown := maxi(0, faction.reinforcement_cooldown_until_tick - snapshot.tick) if faction != null else 0
+	var fortify_cooldown := _generic_cooldown(faction, SupportOrderCommand.SupportKind.EMERGENCY_FORTIFY, snapshot.tick)
+	var reinforcement_cooldown := _generic_cooldown(faction, SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT, snapshot.tick)
 	recon_button.disabled = not affordable or recon_cooldown > 0
 	var selected_card := snapshot.get_unit_card(input_controller.selected_unit_card_id) if input_controller != null else null
 	_update_pending_reinforcement_receipt(snapshot)
 	fortify_button.disabled = not affordable or fortify_cooldown > 0 or selected_card == null or selected_card.deployment_state != UnitCardState.DeploymentState.DEPLOYED or selected_card.fortified_ticks_remaining > 0
 	reinforcement_button.disabled = not affordable or reinforcement_cooldown > 0 or selected_card == null or selected_card.deployment_state != UnitCardState.DeploymentState.DEPLOYED or selected_card.current_strength >= selected_card.authorized_strength or faction == null or faction.population >= faction.population_capacity
 	var routes := simulation_host.world.battle_definition.engineering_routes if simulation_host.world.battle_definition != null else []
-	var engineer_selected := selected_card != null and selected_card.deployment_state == UnitCardState.DeploymentState.DEPLOYED and selected_card.unit_definition_id == &"engineer_vehicle"
+	var engineer_selected := selected_card != null and selected_card.deployment_state == UnitCardState.DeploymentState.DEPLOYED and selected_card.has_active_unit_type(&"engineer_vehicle")
 	var route_available := not routes.is_empty() and not simulation_host.world.opened_engineering_routes.has(routes[0].route_id)
 	if engineering_button != null:
 		engineering_button.visible = not routes.is_empty()
@@ -116,25 +121,41 @@ func update_snapshot(snapshot: WorldSnapshot) -> void:
 	recon_button.tooltip_text = _recon_tooltip(affordable, recon_cooldown)
 	fortify_button.tooltip_text = _fortify_tooltip(affordable, fortify_cooldown, selected_card)
 	reinforcement_button.tooltip_text = _reinforcement_tooltip(affordable, reinforcement_cooldown, selected_card, faction)
+	var reinforcement_title := GameText.t(&"SUPPORT_REINFORCEMENT")
 	if selected_card != null and selected_card.deployment_state == UnitCardState.DeploymentState.DEPLOYED:
-		reinforcement_button.text = GameText.t(&"SUPPORT_REINFORCEMENT_SELECTED") % [selected_card.current_strength, selected_card.authorized_strength]
-	else:
-		reinforcement_button.text = GameText.t(&"SUPPORT_REINFORCEMENT")
-	status_label.text = GameText.t(&"SUPPORT_USAGE_GUIDE")
+		reinforcement_title = GameText.t(&"SUPPORT_REINFORCEMENT_SELECTED") % [selected_card.current_strength, selected_card.authorized_strength]
+	var status_text := GameText.t(&"SUPPORT_USAGE_GUIDE")
 	if not affordable:
-		status_label.text += "\n" + GameText.t(&"SUPPORT_NEEDS_SUPPLY") % SimulationWorld.SUPPORT_COST
+		status_text += "\n" + GameText.t(&"SUPPORT_NEEDS_SUPPLY") % SimulationWorld.SUPPORT_COST
 	elif selected_card == null or selected_card.deployment_state != UnitCardState.DeploymentState.DEPLOYED:
-		status_label.text += "\n" + GameText.t(&"SUPPORT_SELECT_CARD_GUIDE")
+		status_text += "\n" + GameText.t(&"SUPPORT_SELECT_CARD_GUIDE")
 	if recon_cooldown > 0 or fortify_cooldown > 0 or reinforcement_cooldown > 0:
-		status_label.text += "\n" + GameText.t(&"SUPPORT_COOLDOWN_STATUS") % [
+		status_text += "\n" + GameText.t(&"SUPPORT_COOLDOWN_STATUS") % [
 			ceili(recon_cooldown * SimulationWorld.TICK_SECONDS),
 			ceili(fortify_cooldown * SimulationWorld.TICK_SECONDS),
 			ceili(reinforcement_cooldown * SimulationWorld.TICK_SECONDS),
 		]
 	if not _status_receipt_text.is_empty() and Time.get_ticks_msec() <= _status_receipt_until_msec:
-		status_label.text = "%s\n%s" % [_status_receipt_text, status_label.text]
+		status_text = "%s\n%s" % [_status_receipt_text, status_text]
 	elif Time.get_ticks_msec() > _status_receipt_until_msec:
 		_status_receipt_text = ""
+	if contextual_card_actions:
+		# These entries open a faction-wide list, independently of the selected card.
+		_update_contextual_entry(fortify_button, fortify_cooldown)
+		_update_contextual_entry(reinforcement_button, reinforcement_cooldown)
+		_update_contextual_entry(engineering_button, 0)
+		_update_contextual_entry(rapid_mobility_button, mobility_cooldown)
+		_update_contextual_entry(frontline_logistics_button, logistics_cooldown)
+		reinforcement_title = GameText.t(&"CARD_ACTION_REINFORCE")
+		status_text = GameText.t(&"CARD_DECISION_SUPPORT_GUIDE")
+	status_label.text = status_text
+	_update_cooldown_label(recon_button, &"SUPPORT_AIR_RECON", recon_cooldown)
+	_update_cooldown_label(fortify_button, &"CARD_ACTION_FORTIFY" if contextual_card_actions else &"SUPPORT_FORTIFY", fortify_cooldown)
+	_update_cooldown_label(reinforcement_button, &"", reinforcement_cooldown, reinforcement_title)
+	_update_cooldown_label(engineering_button, &"CARD_ACTION_ENGINEERING" if contextual_card_actions else &"SUPPORT_ENGINEERING_ROUTE", -1)
+	_update_cooldown_label(fire_support_button, &"SUPPORT_FIRE_SUPPORT", fire_cooldown)
+	_update_cooldown_label(rapid_mobility_button, &"CARD_ACTION_MOBILITY" if contextual_card_actions else &"SUPPORT_RAPID_MOBILITY", mobility_cooldown)
+	_update_cooldown_label(frontline_logistics_button, &"CARD_ACTION_LOGISTICS" if contextual_card_actions else &"SUPPORT_FRONTLINE_LOGISTICS", logistics_cooldown)
 	var lines: Array[String] = []
 	var active_reports: Array[IntelReportSnapshot] = []
 	for report in snapshot.intel_reports:
@@ -164,8 +185,28 @@ func update_snapshot(snapshot: WorldSnapshot) -> void:
 	intel_label.text = "\n".join(lines)
 
 
+func _update_cooldown_label(button: Button, title_key: StringName, remaining_ticks: int, title_override: String = "") -> void:
+	if button == null:
+		return
+	var title := title_override if title_key.is_empty() else GameText.t(title_key)
+	var cooldown := GameText.t(&"SUPPORT_COOLDOWN_READY")
+	if remaining_ticks < 0:
+		cooldown = GameText.t(&"SUPPORT_COOLDOWN_NONE")
+	elif remaining_ticks > 0:
+		cooldown = GameText.t(&"SUPPORT_COOLDOWN_REMAINING") % ceili(remaining_ticks * SimulationWorld.TICK_SECONDS)
+	button.text = title + "\n" + cooldown
+	button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, 48.0)
+
+
 func _generic_cooldown(faction: FactionSnapshot, support_kind: int, tick: int) -> int:
-	return maxi(0, int(faction.support_cooldown_until_by_kind.get(support_kind, 0)) - tick) if faction != null else 0
+	return maxi(0, CardActionProjector.cooldown_until(faction, support_kind) - tick) if faction != null else 0
+
+
+func _update_contextual_entry(button: Button, cooldown_ticks: int) -> void:
+	if button == null:
+		return
+	button.disabled = cooldown_ticks > 0
+	button.tooltip_text = GameText.t(&"SUPPORT_DISABLED_COOLDOWN") % ceili(cooldown_ticks * SimulationWorld.TICK_SECONDS) if cooldown_ticks > 0 else GameText.t(&"CARD_DECISION_OPEN")
 
 
 func _resolve_extended_buttons() -> void:
@@ -264,6 +305,9 @@ func _rebuild_pair_labels() -> void:
 
 
 func _request_fortify() -> void:
+	if contextual_card_actions:
+		card_decision_requested.emit(SupportOrderCommand.SupportKind.EMERGENCY_FORTIFY)
+		return
 	if simulation_host == null or input_controller == null or input_controller.selected_unit_card_id.is_empty():
 		status_label.text = GameText.t(&"SUPPORT_SELECT_CARD")
 		return
@@ -275,6 +319,9 @@ func _request_fortify() -> void:
 
 
 func _request_reinforcement() -> void:
+	if contextual_card_actions:
+		card_decision_requested.emit(SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT)
+		return
 	if simulation_host == null or input_controller == null or input_controller.selected_unit_card_id.is_empty():
 		_set_status_receipt(GameText.t(&"SUPPORT_SELECT_DAMAGED_CARD"))
 		status_label.text = _status_receipt_text
@@ -325,6 +372,9 @@ func _set_status_receipt(text: String) -> void:
 
 
 func _request_engineering_route() -> void:
+	if contextual_card_actions:
+		card_decision_requested.emit(SupportOrderCommand.SupportKind.ENGINEERING_ROUTE)
+		return
 	if simulation_host == null or input_controller == null or input_controller.selected_unit_card_id.is_empty():
 		status_label.text = GameText.t(&"SUPPORT_SELECT_ENGINEER")
 		return
@@ -358,6 +408,9 @@ func _request_frontline_logistics() -> void:
 
 
 func _request_card_support(kind: int) -> void:
+	if contextual_card_actions:
+		card_decision_requested.emit(kind)
+		return
 	if simulation_host == null or input_controller == null or input_controller.selected_unit_card_id.is_empty():
 		status_label.text = GameText.t(&"SUPPORT_SELECT_CARD")
 		return

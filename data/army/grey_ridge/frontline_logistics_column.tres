@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="UnitCardDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/data/unit_card_definition.gd" id="1"]
+[ext_resource type="Script" path="res://src/data/tactical_ability_definition.gd" id="2"]
+
+[sub_resource type="Resource" id="Ability"]
+script = ExtResource("2")
+ability_id = &"grey_logistics_action"
+kind = 4
+name_key = &"TACTICAL_SUPPLY_ACTION"
+help_key = &"TACTICAL_SUPPLY_HELP"
+required_unit_id = &"supply_truck"
+supply_cost = 2
+preparation_ticks = 30
+duration_ticks = 1
+cooldown_ticks = 140
+range = 260.0
+organization_cost = 0.0
+
+[resource]
+script = ExtResource("1")
+definition_id = &"frontline_logistics_column"
+display_name_key = &"UNIT_CARD_FRONTLINE_LOGISTICS"
+role_key = &"UNIT_CARD_ROLE_LOGISTICS"
+commander_definition_id = &"lu_zheng"
+command_cost = 2
+authorized_strength = 4
+unit_definition_id = &"supply_truck"
+supply_cost = 3
+tactical_ability = SubResource("Ability")
+deployment_ticks = 90
+starts_in_reserve = true

@@ -1,0 +1,53 @@
+[gd_resource type="Resource" script_class="DoctrineEffectDefinition" load_steps=16 format=3]
+
+[ext_resource type="Script" path="res://src/data/doctrine_effect_definition.gd" id="1"]
+[ext_resource type="Script" path="res://src/data/doctrine_trigger_definition.gd" id="2"]
+[ext_resource type="Script" path="res://src/data/doctrine_selector_definition.gd" id="3"]
+[ext_resource type="Script" path="res://src/data/doctrine_action_definition.gd" id="4"]
+[ext_resource type="Script" path="res://src/data/doctrine_cost_definition.gd" id="5"]
+[ext_resource type="Script" path="res://src/data/doctrine_timing_definition.gd" id="6"]
+[ext_resource type="Script" path="res://src/data/doctrine_counterplay_definition.gd" id="7"]
+[ext_resource type="Script" path="res://src/data/doctrine_reason_definition.gd" id="8"]
+
+[sub_resource type="Resource" id="Trigger"]
+script = ExtResource("2")
+
+[sub_resource type="Resource" id="Selector"]
+script = ExtResource("3")
+
+[sub_resource type="Resource" id="Effect"]
+script = ExtResource("4")
+kind = 1
+
+
+[sub_resource type="Resource" id="Cost"]
+script = ExtResource("5")
+kind = 1
+explanation_key = &"DOCTRINE_FIRE_PREPARATION_TRADEOFF"
+
+[sub_resource type="Resource" id="Timing"]
+script = ExtResource("6")
+kind = 1
+base_delay_ticks = 40
+interval_ticks = 0
+
+[sub_resource type="Resource" id="Counterplay"]
+script = ExtResource("7")
+kind = 1
+explanation_key = &"DOCTRINE_FIRE_PREPARATION_TRADEOFF"
+
+[sub_resource type="Resource" id="Reason"]
+script = ExtResource("8")
+waiting_reason_key = &"COMMANDER_REASON_FIRE_PREPARATION_VISION"
+description_key = &"DOCTRINE_FIRE_PREPARATION_BEHAVIOR"
+
+[resource]
+script = ExtResource("1")
+effect_id = &"fire_preparation"
+trigger = SubResource("Trigger")
+selector = SubResource("Selector")
+effect = SubResource("Effect")
+cost = SubResource("Cost")
+timing = SubResource("Timing")
+counterplay = SubResource("Counterplay")
+reason = SubResource("Reason")

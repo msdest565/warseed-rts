@@ -1,5 +1,5 @@
 class_name CommandDesk
-extends HBoxContainer
+extends VBoxContainer
 
 signal decision_preview_changed(route: PackedVector2Array, target_position: Vector2, radius: float, label: String)
 signal decision_preview_cleared
@@ -27,7 +27,7 @@ const DECISION_HISTORY_LIMIT := 64
 @onready var exception_count: Label = $Exceptions/Header/Count
 @onready var guide_button: Button = $Exceptions/Header/Guide
 @onready var exception_rows: VBoxContainer = $Exceptions/Scroll/Rows
-@onready var separator: VSeparator = $Separator
+@onready var separator: HSeparator = $Separator
 @onready var guide_popup: PopupPanel = $GuidePopup
 @onready var guide_text: RichTextLabel = $GuidePopup/Margin/Text
 @onready var history_button: Button = $Exceptions/Footer/History
@@ -43,6 +43,7 @@ var current_command_situation: CommandSituationSnapshot
 var acknowledged_exception_ids: Dictionary = {}
 var _loaded_intent_id: StringName
 var _compact: bool = false
+var _compact_initialized: bool = false
 var _action_receipt_exception_id: StringName
 var _action_receipt_action: int = -1
 var _action_receipt_result: CommandValidationResult
@@ -51,6 +52,13 @@ var _action_receipt_expires_at_tick: int = -1
 var _action_receipt_subject := ""
 var _decision_history: Array[Dictionary] = []
 var _pending_responses: Array[Dictionary] = []
+var card_actions: Array[CardActionSnapshot] = []
+var _card_projector := CardActionProjector.new()
+var _card_action_filter: int = -2
+var _row_insert_index: int = 0
+var _targeting_decision: CardActionSnapshot
+var _card_receipt := ""
+var _card_receipt_until: int = -1
 
 
 func _ready() -> void:
@@ -70,8 +78,20 @@ func _ready() -> void:
 
 
 func configure(host: SimulationHost, input: InputController, camera: CameraController) -> void:
+	if simulation_host != null and simulation_host.tactical_pause_changed.is_connected(_update_pause_copy):
+		simulation_host.tactical_pause_changed.disconnect(_update_pause_copy)
+	if input_controller != null:
+		if input_controller.reserve_deployment_submitted.is_connected(_on_reserve_submitted):
+			input_controller.reserve_deployment_submitted.disconnect(_on_reserve_submitted)
+		if input_controller.reserve_deployment_cancelled.is_connected(_on_reserve_cancelled):
+			input_controller.reserve_deployment_cancelled.disconnect(_on_reserve_cancelled)
 	simulation_host = host
+	if simulation_host != null:
+		simulation_host.tactical_pause_changed.connect(_update_pause_copy)
 	input_controller = input
+	if input_controller != null:
+		input_controller.reserve_deployment_submitted.connect(_on_reserve_submitted)
+		input_controller.reserve_deployment_cancelled.connect(_on_reserve_cancelled)
 	camera_controller = camera
 	current_snapshot = null
 	current_command_situation = null
@@ -83,6 +103,15 @@ func configure(host: SimulationHost, input: InputController, camera: CameraContr
 
 
 func reset_decision_session() -> void:
+	_loaded_intent_id = &""
+	for selector in [commander_selector, objective_selector, axis_selector]:
+		if selector != null:
+			selector.clear()
+	_targeting_decision = null
+	_card_receipt = ""
+	_card_receipt_until = -1
+	_card_action_filter = -2
+	card_actions.clear()
 	_decision_history.clear()
 	_pending_responses.clear()
 	_clear_decision_preview()
@@ -94,35 +123,37 @@ func update_command_situation(snapshot: WorldSnapshot, command_situation: Comman
 	current_command_situation = command_situation
 	if snapshot == null or command_situation == null:
 		return
+	card_actions.clear()
+	if simulation_host != null and simulation_host.world != null:
+		card_actions = _card_projector.project(snapshot, simulation_host.world.battle_definition)
 	_check_pending_responses()
-	_refresh_dynamic_options()
+	if commander_selector.item_count == 0 or objective_selector.item_count != snapshot.strategic_regions.size():
+		_refresh_dynamic_options()
 	_sync_selected_intent()
 	_rebuild_exception_rows()
 	_update_status()
 
 
 func set_compact(compact: bool) -> void:
+	if _compact_initialized and _compact == compact:
+		return
+	_compact_initialized = true
 	_compact = compact
-	$Intent.custom_minimum_size.x = 220.0 if compact else 360.0
-	$Exceptions.custom_minimum_size.x = 200.0 if compact else 340.0
-	$Intent/Selectors.columns = 2 if compact else 4
-	for label in [commander_label, objective_label, axis_label, risk_label, reserve_label]:
-		if label != null:
-			label.visible = not compact
+	$Intent.custom_minimum_size.x = 0.0
+	$Exceptions.custom_minimum_size.x = 0.0
+	$Intent.size_flags_vertical = Control.SIZE_FILL
+	$Exceptions.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	$Intent/Selectors.columns = 2
+	for field in [commander_label, objective_label, axis_label, risk_label, reserve_label]:
+		if field != null:
+			field.visible = true
 	for selector in [commander_selector, objective_selector, axis_selector, risk_selector, reserve_selector]:
-		if selector != null:
-			selector.custom_minimum_size.y = 32.0
-			selector.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	if commander_selector != null and commander_label != null:
-		commander_selector.tooltip_text = commander_label.text
-	if objective_selector != null and objective_label != null:
-		objective_selector.tooltip_text = objective_label.text
-	if axis_selector != null and axis_label != null:
-		axis_selector.tooltip_text = axis_label.text
-	if risk_selector != null and risk_label != null:
-		risk_selector.tooltip_text = risk_label.text
-	if reserve_selector != null and reserve_label != null:
-		reserve_selector.tooltip_text = reserve_label.text
+		if selector == null:
+			continue
+		selector.custom_minimum_size = Vector2(0.0, 32.0)
+		selector.fit_to_longest_item = false
+		selector.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		selector.tooltip_text = ""
 	_rebuild_exception_rows()
 
 
@@ -130,20 +161,20 @@ func refresh_locale() -> void:
 	if intent_title == null:
 		return
 	intent_title.text = GameText.t(&"COMMAND_DESK_INTENT_TITLE")
-	approval_hint.text = GameText.t(&"COMMAND_DESK_APPROVAL_HINT")
+	approval_hint.text = GameText.t(&"TACTICAL_APPROVAL_HINT")
 	commander_label.text = GameText.t(&"COMMAND_DESK_COMMANDER")
-	objective_label.text = GameText.t(&"COMMAND_DESK_OBJECTIVE")
-	axis_label.text = GameText.t(&"COMMAND_DESK_AXIS")
+	objective_label.text = GameText.t(&"TACTICAL_FINAL_TARGET")
+	axis_label.text = GameText.t(&"TACTICAL_WAYPOINT")
 	risk_label.text = GameText.t(&"COMMAND_DESK_RISK")
 	reserve_label.text = GameText.t(&"COMMAND_DESK_RESERVE")
 	for label in [commander_label, objective_label, axis_label, risk_label, reserve_label]:
-		label.visible = not _compact
-	commander_selector.tooltip_text = commander_label.text
-	objective_selector.tooltip_text = objective_label.text
-	axis_selector.tooltip_text = axis_label.text
-	risk_selector.tooltip_text = risk_label.text
-	reserve_selector.tooltip_text = reserve_label.text
-	apply_button.text = GameText.t(&"COMMAND_DESK_APPLY")
+		label.visible = true
+	commander_selector.tooltip_text = ""
+	objective_selector.tooltip_text = ""
+	axis_selector.tooltip_text = ""
+	risk_selector.tooltip_text = ""
+	reserve_selector.tooltip_text = ""
+	_update_pause_copy()
 	cancel_button.text = GameText.t(&"COMMAND_DESK_CANCEL")
 	exception_title.text = GameText.t(&"COMMAND_DESK_EXCEPTIONS")
 	guide_button.tooltip_text = GameText.t(&"COMMAND_DESK_GUIDE_TOOLTIP")
@@ -175,6 +206,11 @@ func _populate_static_options() -> void:
 	_select_metadata(reserve_selector, selected_reserve)
 
 
+func _update_pause_copy(_paused: bool = false) -> void:
+	if apply_button != null:
+		apply_button.text = GameText.t(&"TACTICAL_APPROVE_QUEUE" if simulation_host != null and simulation_host.is_tactical_paused() else &"COMMAND_DESK_APPLY")
+
+
 func _refresh_dynamic_options() -> void:
 	var selected_commander := StringName(_selected_metadata(commander_selector, &""))
 	var selected_objective := StringName(_selected_metadata(objective_selector, &""))
@@ -192,6 +228,9 @@ func _refresh_dynamic_options() -> void:
 	regions.sort_custom(func(left: StrategicRegionSnapshot, right: StrategicRegionSnapshot) -> bool: return String(left.region_id) < String(right.region_id))
 	for selector in [objective_selector, axis_selector]:
 		selector.clear()
+		if selector == axis_selector:
+			selector.add_item(GameText.t(&"TACTICAL_DIRECT"))
+			selector.set_item_metadata(0, &"")
 		for region in regions:
 			selector.add_item(GameText.t(region.display_name_key))
 			selector.set_item_metadata(selector.item_count - 1, region.region_id)
@@ -210,25 +249,30 @@ func _sync_selected_intent() -> void:
 		return
 	_loaded_intent_id = intent_id
 	_select_metadata(objective_selector, commander.intent_objective_region_id)
-	_select_metadata(axis_selector, commander.intent_axis_region_id)
+	_select_metadata(axis_selector, &"" if commander.intent_axis_region_id == commander.intent_objective_region_id else commander.intent_axis_region_id)
 	_select_metadata(risk_selector, commander.posture)
 	_select_metadata(reserve_selector, commander.intent_reserve_policy)
 	cancel_button.disabled = false
 
 
 func _submit_intent() -> void:
+	_card_receipt = ""
 	if simulation_host == null:
 		_record_and_show_unavailable(GameText.t(&"COMMAND_DESK_INTENT_TITLE"))
 		return
+	var objective_id := StringName(_selected_metadata(objective_selector, &""))
+	var axis_id := StringName(_selected_metadata(axis_selector, &""))
 	var command := simulation_host.create_high_level_intent_command(
 		StringName(_selected_metadata(commander_selector, &"")),
-		StringName(_selected_metadata(objective_selector, &"")),
-		StringName(_selected_metadata(axis_selector, &"")),
+		objective_id,
+		objective_id if axis_id.is_empty() else axis_id,
 		int(_selected_metadata(risk_selector, CommanderState.Posture.BALANCED)),
 		int(_selected_metadata(reserve_selector, CommanderState.ReservePolicy.HOLD))
 	)
 	var result := simulation_host.submit_command(command)
 	intent_status.text = GameText.t(&"COMMAND_DESK_INTENT_RESULT") % GameText.command_result(result)
+	if result.is_accepted() and simulation_host.is_tactical_paused():
+		intent_status.text = GameText.t(&"TACTICAL_QUEUED")
 	var subject := _commander_name(command.commander_id)
 	var history_index := _record_decision(subject, GameText.t(&"COMMAND_DESK_APPLY"), GameText.command_result(result), result.is_accepted())
 	if result.is_accepted():
@@ -243,6 +287,7 @@ func _submit_intent() -> void:
 
 
 func _cancel_intent() -> void:
+	_card_receipt = ""
 	if simulation_host == null:
 		_record_and_show_unavailable(GameText.t(&"COMMAND_DESK_CANCEL"))
 		return
@@ -265,16 +310,37 @@ func _cancel_intent() -> void:
 func _rebuild_exception_rows() -> void:
 	if exception_rows == null:
 		return
+	_row_insert_index = 0
+	var visible_card_ids: Array[StringName] = []
+	for decision in card_actions:
+		if _card_action_filter == -2 or decision.action_kind == _card_action_filter:
+			visible_card_ids.append(decision.decision_id)
 	for child in exception_rows.get_children():
+		if child.has_meta(&"card_decision_id") and visible_card_ids.has(child.get_meta(&"card_decision_id")):
+			continue
+		exception_rows.remove_child(child)
 		child.queue_free()
-	if current_command_situation == null or current_command_situation.exceptions.is_empty():
+	if _card_action_filter != -2:
+		var back := Button.new()
+		back.text = GameText.t(&"CARD_DECISION_ALL")
+		back.pressed.connect(show_card_actions.bind(-2))
+		_place_decision_row(back)
+	if current_command_situation != null and _card_action_filter == -2:
+		for exception in current_command_situation.exceptions:
+			# The contextual row covers every casualty and shares the same confirmation path.
+			if exception.kind != CommandExceptionSnapshot.Kind.REINFORCEMENT_REQUEST:
+				_add_exception_row(exception)
+	var count := 0
+	for decision in card_actions:
+		if _card_action_filter != -2 and decision.action_kind != _card_action_filter:
+			continue
+		_add_card_action_row(decision)
+		count += 1
+	if count == 0 and (_card_action_filter != -2 or current_command_situation == null or current_command_situation.exceptions.is_empty()):
 		var clear_label := Label.new()
-		clear_label.text = GameText.t(&"COMMAND_DESK_NO_EXCEPTIONS")
-		clear_label.add_theme_color_override("font_color", Color(0.48, 0.75, 0.65))
-		exception_rows.add_child(clear_label)
-		return
-	for exception in current_command_situation.exceptions:
-		_add_exception_row(exception)
+		clear_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		clear_label.text = GameText.t(&"CARD_DECISION_NO_TARGETS" if _card_action_filter != -2 else &"COMMAND_DESK_NO_EXCEPTIONS")
+		_place_decision_row(clear_label)
 
 
 func _add_exception_row(exception: CommandExceptionSnapshot) -> void:
@@ -338,7 +404,7 @@ func _add_exception_row(exception: CommandExceptionSnapshot) -> void:
 	acknowledge.pressed.connect(_acknowledge_exception.bind(exception.exception_id))
 	buttons.add_child(acknowledge)
 	row.add_child(buttons)
-	exception_rows.add_child(row)
+	_place_decision_row(row)
 
 
 func _perform_exception_action(exception_id: StringName, action: int) -> void:
@@ -351,6 +417,9 @@ func _perform_exception_action(exception_id: StringName, action: int) -> void:
 		return
 	if simulation_host == null and action not in [CommandExceptionSnapshot.Action.FOCUS, CommandExceptionSnapshot.Action.KEEP_PLAN]:
 		_record_and_show_unavailable(_action_subject(exception, action))
+		return
+	if action == CommandExceptionSnapshot.Action.REQUEST_REINFORCEMENT:
+		_perform_card_action(StringName("card:%s:%d:" % [exception.unit_card_id, SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT]))
 		return
 	var action_name := String(CommandExceptionSnapshot.Action.keys()[action]).to_lower()
 	var result: CommandValidationResult
@@ -366,12 +435,6 @@ func _perform_exception_action(exception_id: StringName, action: int) -> void:
 		CommandExceptionSnapshot.Action.RETURN_TO_COMMANDER:
 			result = simulation_host.submit_command(simulation_host.create_unit_card_control_command(
 				exception.unit_card_id, UnitCardControlCommand.Action.RETURN_TO_COMMANDER
-			))
-		CommandExceptionSnapshot.Action.REQUEST_REINFORCEMENT:
-			if input_controller != null:
-				input_controller.select_unit_card(exception.unit_card_id)
-			result = simulation_host.submit_command(simulation_host.create_support_order_command(
-				SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT, &"", &"", exception.unit_card_id
 			))
 		CommandExceptionSnapshot.Action.KEEP_PLAN:
 			_acknowledge_exception(exception_id)
@@ -409,7 +472,19 @@ func _acknowledge_exception(exception_id: StringName) -> void:
 
 
 func _update_status() -> void:
-	exception_count.text = str(current_command_situation.exceptions.size()) if current_command_situation != null else "0"
+	var decision_count := 0
+	for decision in card_actions:
+		if _card_action_filter == -2 or decision.action_kind == _card_action_filter:
+			decision_count += 1
+	if _card_action_filter == -2 and current_command_situation != null:
+		for exception in current_command_situation.exceptions:
+			if exception.kind != CommandExceptionSnapshot.Kind.REINFORCEMENT_REQUEST:
+				decision_count += 1
+	exception_count.text = str(decision_count)
+	if not _card_receipt.is_empty() and current_snapshot != null and current_snapshot.tick <= _card_receipt_until:
+		intent_status.text = _card_receipt
+		intent_status.tooltip_text = _card_receipt
+		return
 	if _has_active_action_receipt():
 		_show_action_receipt()
 		return
@@ -422,9 +497,9 @@ func _update_status() -> void:
 	else:
 		var objective := current_snapshot.get_strategic_region(commander.intent_objective_region_id)
 		var axis := current_snapshot.get_strategic_region(commander.intent_axis_region_id)
-		intent_status.text = GameText.t(&"COMMAND_DESK_ACTIVE_INTENT") % [
+		intent_status.text = GameText.t(&"TACTICAL_ACTIVE_INTENT") % [
 			GameText.t(objective.display_name_key) if objective != null else String(commander.intent_objective_region_id),
-			GameText.t(axis.display_name_key) if axis != null else String(commander.intent_axis_region_id),
+			GameText.t(&"TACTICAL_DIRECT") if commander.intent_axis_region_id == commander.intent_objective_region_id else (GameText.t(axis.display_name_key) if axis != null else String(commander.intent_axis_region_id)),
 		]
 		cancel_button.disabled = false
 
@@ -436,6 +511,7 @@ func _set_action_receipt(
 	accepted: bool
 ) -> void:
 	_action_receipt_exception_id = exception_id
+	_card_receipt = ""
 	_action_receipt_action = action
 	_action_receipt_result = result
 	_action_receipt_accepted = accepted
@@ -555,6 +631,8 @@ func _record_decision(subject: String, action: String, result_text: String, acce
 	})
 	if _decision_history.size() > DECISION_HISTORY_LIMIT:
 		_decision_history.pop_front()
+		for response in _pending_responses:
+			response["history_index"] = int(response["history_index"]) - 1
 	_update_history_display()
 	return _decision_history.size() - 1
 
@@ -601,13 +679,34 @@ func _watch_exception_response(
 func _check_pending_responses() -> void:
 	for response_index in range(_pending_responses.size() - 1, -1, -1):
 		var response := _pending_responses[response_index]
+		if response.get("kind", "") == "card" and int(response.get("support_kind", -1)) >= CardActionSnapshot.TACTICAL:
+			var tactical_card := current_snapshot.get_unit_card(response["unit_card_id"])
+			if tactical_card != null and tactical_card.tactical_started_tick > int(response.get("before_tactical_tick", -1)) and tactical_card.tactical_status_key not in [&"TACTICAL_PREPARING", &"TACTICAL_ACTIVE", &"TACTICAL_COMPLETE"]:
+				var reason := GameText.t(tactical_card.tactical_status_key)
+				_update_history_result(int(response["history_index"]), reason, false)
+				_set_card_receipt(String(response["subject"]), String(response["action"]), reason)
+				_pending_responses.remove_at(response_index)
+				continue
+		if response.get("superseded", false):
+			_update_history_result(int(response["history_index"]), GameText.t(&"TACTICAL_SUPERSEDED"), true)
+			_pending_responses.remove_at(response_index)
+			continue
 		if _response_is_confirmed(response):
+			if response.get("kind", "") in ["intent", "cancel_intent"]:
+				for earlier_index in range(response_index):
+					var earlier := _pending_responses[earlier_index]
+					if earlier.get("kind", "") in ["intent", "cancel_intent"] and earlier.get("commander_id") == response.get("commander_id"):
+						earlier["superseded"] = true
 			_update_history_result(int(response["history_index"]), GameText.t(&"DECISION_RESPONSE_CONFIRMED"), true)
+			if response.get("kind", "") == "card":
+				_set_card_receipt(String(response["subject"]), String(response["action"]), GameText.t(&"DECISION_RESPONSE_CONFIRMED"))
 			_pending_responses.remove_at(response_index)
 			continue
 		if current_snapshot.tick < int(response["deadline_tick"]):
 			continue
 		var reason := GameText.t(&"DECISION_RESPONSE_TIMEOUT_REASON")
+		if response.get("kind", "") == "card":
+			_set_card_receipt(String(response["subject"]), String(response["action"]), reason)
 		_update_history_result(int(response["history_index"]), reason, false)
 		_show_decision_failure(String(response["subject"]), String(response["action"]), reason)
 		_pending_responses.remove_at(response_index)
@@ -623,6 +722,8 @@ func _response_is_confirmed(response: Dictionary) -> bool:
 			and commander.intent_axis_region_id == response.get("axis_id", &"")
 	if kind == "cancel_intent":
 		return commander != null and commander.active_intent_id.is_empty()
+	if kind == "card":
+		return _card_response_is_confirmed(response)
 	if kind != "exception":
 		return true
 	var action := int(response.get("action_id", -1))
@@ -682,7 +783,7 @@ func _preview_selected_objective() -> void:
 
 
 func _preview_selected_axis() -> void:
-	_preview_selected_region(axis_selector, true)
+	_preview_selected_region(objective_selector if StringName(_selected_metadata(axis_selector, &"")).is_empty() else axis_selector, true)
 
 
 func _preview_selected_region(selector: OptionButton, include_route: bool) -> void:
@@ -734,13 +835,262 @@ func _selected_commander_origin() -> Vector2:
 
 
 func _clear_decision_preview() -> void:
-	decision_preview_cleared.emit()
+	if _targeting_decision != null:
+		_preview_card(_targeting_decision)
+	else:
+		decision_preview_cleared.emit()
 
 
 func _selected_metadata(selector: OptionButton, fallback: Variant) -> Variant:
 	if selector == null or selector.item_count == 0 or selector.selected < 0:
 		return fallback
 	return selector.get_item_metadata(selector.selected)
+
+
+func show_card_actions(kind: int) -> void:
+	_card_action_filter = kind
+	_rebuild_exception_rows()
+	_update_status()
+	var scroll := get_node("Exceptions/Scroll") as ScrollContainer
+	scroll.scroll_vertical = 0
+
+
+func _card_subject(decision: CardActionSnapshot) -> String:
+	return "%s / %s" % [GameText.t(decision.card_name_key), GameText.t(decision.commander_name_key)]
+
+
+func _card_reason(reason: CommandValidationResult.Reason) -> String:
+	if reason == CommandValidationResult.Reason.NONE:
+		return GameText.t(&"CARD_DECISION_READY")
+	var result := CommandValidationResult.new(CommandValidationResult.Status.REJECTED, reason)
+	var recovery_key := StringName("CARD_RECOVERY_%s" % CommandValidationResult.Reason.keys()[reason])
+	var recovery := GameText.t(recovery_key)
+	if recovery == String(recovery_key):
+		recovery = GameText.command_recovery(reason)
+	return "%s %s" % [GameText.t(StringName("REASON_%s" % CommandValidationResult.Reason.keys()[reason])), recovery]
+
+
+func _place_decision_row(row: Control) -> void:
+	if row.get_parent() == null:
+		exception_rows.add_child(row)
+	if row.get_index() != _row_insert_index:
+		exception_rows.move_child(row, _row_insert_index)
+	_row_insert_index += 1
+
+
+func _add_card_action_row(decision: CardActionSnapshot) -> void:
+	var row := exception_rows.get_node_or_null(NodePath(String(decision.decision_id).validate_node_name())) as VBoxContainer
+	if row == null:
+		row = VBoxContainer.new()
+		row.name = String(decision.decision_id).validate_node_name()
+		row.set_meta(&"card_decision_id", decision.decision_id)
+		var title := Button.new()
+		title.name = "Summary"
+		title.flat = true
+		title.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		title.custom_minimum_size.y = 30
+		title.mouse_entered.connect(_preview_card_id.bind(decision.decision_id, false))
+		title.mouse_exited.connect(_clear_decision_preview)
+		title.pressed.connect(_preview_card_id.bind(decision.decision_id, true))
+		row.add_child(title)
+		var details := Label.new()
+		details.name = "Context"
+		details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		details.add_theme_font_size_override("font_size", 10)
+		row.add_child(details)
+		var action := Button.new()
+		action.name = "Action"
+		action.custom_minimum_size.y = 30
+		action.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		action.pressed.connect(_perform_card_action.bind(decision.decision_id))
+		action.mouse_entered.connect(_preview_card_id.bind(decision.decision_id, false))
+		action.mouse_exited.connect(_clear_decision_preview)
+		row.add_child(action)
+	var title := row.get_node("Summary") as Button
+	var details := row.get_node("Context") as Label
+	var action := row.get_node("Action") as Button
+	title.text = _card_subject(decision)
+	title.tooltip_text = title.text
+	var detail_text := GameText.t(&"CARD_DECISION_CONTEXT") % [decision.current_strength, decision.authorized_strength, decision.supply_cost, decision.available_supply, decision.population, decision.population_capacity, decision.population_required, ceili(decision.cooldown_ticks * SimulationWorld.TICK_SECONDS), GameText.t(decision.target_name_key)]
+	detail_text += "\n" + _card_reason(decision.reason)
+	if decision.action_kind >= CardActionSnapshot.TACTICAL:
+		var card := current_snapshot.get_unit_card(decision.unit_card_id)
+		if card != null and card.ammunition_capacity > 0:
+			detail_text += "\n" + GameText.t(&"TACTICAL_AMMUNITION") % [card.ammunition, card.ammunition_capacity]
+			detail_text += "\n" + GameText.t(&"TACTICAL_IDENTIFICATION_TIME") % ceili(decision.identification_ticks * SimulationWorld.TICK_SECONDS)
+		detail_text += "\n" + GameText.t(decision.tactical_help_key)
+	details.text = detail_text
+	action.text = GameText.t(decision.action_key())
+	if decision.cooldown_ticks > 0:
+		action.text += "\n" + GameText.t(&"SUPPORT_COOLDOWN_REMAINING") % ceili(decision.cooldown_ticks * SimulationWorld.TICK_SECONDS)
+	action.custom_minimum_size.y = 48.0
+	action.tooltip_text = "%s\n%s" % [action.text, details.text]
+	# Keep the same control across snapshots, including a mouse press held over a tick.
+	action.disabled = decision.reason != CommandValidationResult.Reason.NONE or _card_action_pending(decision.decision_id) or (_targeting_decision != null and _targeting_decision.decision_id == decision.decision_id)
+	_place_decision_row(row)
+
+
+func _preview_card_id(decision_id: StringName, focus: bool) -> void:
+	for decision in card_actions:
+		if decision.decision_id == decision_id:
+			if focus:
+				_focus_card(decision)
+			else:
+				_preview_card(decision)
+			return
+
+
+func _perform_card_action(decision_id: StringName) -> void:
+	var decision: CardActionSnapshot
+	for candidate in card_actions:
+		if candidate.decision_id == decision_id:
+			decision = candidate
+	if decision == null:
+		_record_and_show_stale(decision_id)
+		return
+	if simulation_host == null:
+		_record_and_show_unavailable(_card_subject(decision))
+		return
+	if _card_action_pending(decision_id):
+		return
+	var card := simulation_host.current_snapshot.get_unit_card(decision.unit_card_id) if simulation_host.current_snapshot != null else null
+	if card == null:
+		_record_and_show_stale(decision_id)
+		return
+	if decision.action_kind == CardActionSnapshot.DEPLOY:
+		if input_controller == null:
+			_record_and_show_unavailable(_card_subject(decision))
+			return
+		if card.deployment_state != UnitCardState.DeploymentState.RESERVE:
+			_card_submission_result(decision, CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.INVALID_DEPLOYMENT_STATE))
+			return
+		if decision.reason != CommandValidationResult.Reason.NONE:
+			_card_submission_result(decision, CommandValidationResult.new(CommandValidationResult.Status.REJECTED, decision.reason))
+			return
+		if _targeting_decision != null:
+			input_controller.cancel_command_mode()
+		input_controller.begin_reserve_decision(decision.unit_card_id)
+		_targeting_decision = decision
+		_set_card_receipt(_card_subject(decision), GameText.t(decision.action_key()), GameText.t(&"CARD_DECISION_PICK_POSITION"))
+		_focus_card(decision)
+		_rebuild_exception_rows()
+		return
+	var command: GameCommand
+	if decision.action_kind >= CardActionSnapshot.TACTICAL:
+		command = TacticalActionProjector.command_for(decision, simulation_host.world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, simulation_host.current_snapshot.tick)
+	else:
+		command = simulation_host.create_support_order_command(decision.action_kind, decision.target_id, &"", decision.unit_card_id)
+	var result := simulation_host.submit_command(command)
+	_card_submission_result(decision, result)
+
+
+func _card_submission_result(decision: CardActionSnapshot, result: CommandValidationResult) -> void:
+	var subject := _card_subject(decision)
+	var action := GameText.t(decision.action_key())
+	var accepted := result != null and result.is_accepted()
+	var reason := GameText.t(&"CARD_DECISION_QUEUED") if accepted else (_card_reason(result.reason) if result != null else GameText.t(&"DECISION_RESPONSE_UNAVAILABLE"))
+	_set_card_receipt(subject, action, reason)
+	var history_index := _record_decision(subject, action, reason, accepted)
+	if not accepted:
+		_show_decision_failure(subject, action, reason)
+		return
+	var card := simulation_host.current_snapshot.get_unit_card(decision.unit_card_id)
+	_watch_response({
+		"kind": "card", "decision_id": decision.decision_id, "unit_card_id": decision.unit_card_id,
+		"support_kind": decision.action_kind, "target_id": decision.target_id,
+		"before_members": card.member_entity_ids.duplicate(),
+		"before_tactical_tick": card.tactical_started_tick,
+		"issued_tick": simulation_host.current_snapshot.tick, "deployment_ticks": card.deployment_ticks,
+		"history_index": history_index, "subject": subject, "action": action,
+	})
+	_rebuild_exception_rows()
+
+
+func _on_reserve_submitted(card_id: StringName, result: CommandValidationResult) -> void:
+	if _targeting_decision == null or _targeting_decision.unit_card_id != card_id:
+		return
+	_card_submission_result(_targeting_decision, result)
+	if result != null and result.is_accepted():
+		_targeting_decision = null
+		_clear_decision_preview()
+
+
+func _on_reserve_cancelled() -> void:
+	if _targeting_decision == null:
+		return
+	var subject := _card_subject(_targeting_decision)
+	var action := GameText.t(_targeting_decision.action_key())
+	var reason := GameText.t(&"CARD_DECISION_CANCELLED")
+	_set_card_receipt(subject, action, reason)
+	_record_decision(subject, action, reason, false)
+	_targeting_decision = null
+	_clear_decision_preview()
+	_rebuild_exception_rows()
+
+
+func _set_card_receipt(subject: String, action: String, result: String) -> void:
+	_card_receipt = "%s | %s | %s" % [subject, action, result]
+	_card_receipt_until = (current_snapshot.tick if current_snapshot != null else 0) + ACTION_RECEIPT_HOLD_TICKS
+	if intent_status != null:
+		intent_status.text = _card_receipt
+		intent_status.tooltip_text = _card_receipt
+
+
+func _card_action_pending(decision_id: StringName) -> bool:
+	for response in _pending_responses:
+		if response.get("decision_id", &"") == decision_id:
+			return true
+	return false
+
+
+func _card_response_is_confirmed(response: Dictionary) -> bool:
+	var card := current_snapshot.get_unit_card(response["unit_card_id"] as StringName)
+	var faction := current_snapshot.get_faction(current_snapshot.observer_faction_id)
+	if card == null or faction == null or current_snapshot.tick <= int(response["issued_tick"]):
+		return false
+	var kind := int(response["support_kind"])
+	if kind >= CardActionSnapshot.TACTICAL:
+		if card.tactical_started_tick <= int(response["before_tactical_tick"]):
+			return false
+		if card.tactical_status_key == &"TACTICAL_PREPARING":
+			response["deadline_tick"] = card.tactical_complete_tick + DECISION_RESPONSE_TIMEOUT_TICKS
+			return false
+		return card.tactical_status_key in [&"TACTICAL_ACTIVE", &"TACTICAL_COMPLETE"]
+	if kind == CardActionSnapshot.DEPLOY:
+		if card.deployment_state == UnitCardState.DeploymentState.DEPLOYING and not response.get("deployment_started", false):
+			response["deployment_started"] = true
+			response["deadline_tick"] = current_snapshot.tick + card.deployment_ticks_remaining + DECISION_RESPONSE_TIMEOUT_TICKS
+			_update_history_result(int(response["history_index"]), GameText.t(&"CARD_DECISION_DEPLOYING"), true)
+			_set_card_receipt(String(response["subject"]), String(response["action"]), GameText.t(&"CARD_DECISION_DEPLOYING"))
+		return card.deployment_state == UnitCardState.DeploymentState.DEPLOYED and not card.active_member_entity_ids.is_empty()
+	if kind == SupportOrderCommand.SupportKind.ENGINEERING_ROUTE:
+		return faction.opened_engineering_route_ids.has(response["target_id"])
+	if CardActionProjector.cooldown_until(faction, kind) <= int(response["issued_tick"]):
+		return false
+	match kind:
+		SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT:
+			for member in card.member_entity_ids:
+				if not (response["before_members"] as Array).has(member):
+					return true
+			return false
+		SupportOrderCommand.SupportKind.EMERGENCY_FORTIFY:
+			return card.fortified_ticks_remaining > 0
+		SupportOrderCommand.SupportKind.RAPID_MOBILITY:
+			return card.rapid_mobility_ticks_remaining > 0
+	return true
+
+
+func _focus_card(decision: CardActionSnapshot) -> void:
+	if camera_controller != null:
+		camera_controller.position = decision.position
+		camera_controller.clamp_to_bounds()
+	_preview_card(decision)
+
+
+func _preview_card(decision: CardActionSnapshot) -> void:
+	var preview := _targeting_decision if _targeting_decision != null else decision
+	decision_preview_changed.emit(preview.route, preview.position, preview.radius, _card_subject(preview))
 
 
 func _select_metadata(selector: OptionButton, value: Variant) -> void:
@@ -751,3 +1101,37 @@ func _select_metadata(selector: OptionButton, value: Variant) -> void:
 			selector.select(index)
 			return
 	selector.select(0)
+
+
+func get_hover_context(mouse_position: Vector2) -> Dictionary:
+	var selectors := [commander_selector, objective_selector, axis_selector, risk_selector, reserve_selector]
+	var open_selector: OptionButton
+	for candidate in selectors:
+		if candidate.get_popup().visible:
+			open_selector = candidate
+	for selector in selectors:
+		if open_selector != null and selector != open_selector:
+			continue
+		var index: int = selector.selected
+		var popup: PopupMenu = selector.get_popup()
+		if popup.visible:
+			if not Rect2(Vector2.ZERO, Vector2(popup.size)).has_point(popup.get_mouse_position()):
+				return {}
+			index = popup.get_focused_item()
+		elif not selector.get_global_rect().has_point(mouse_position):
+			continue
+		if index < 0:
+			continue
+		var detail := ""
+		if selector == risk_selector:
+			detail = TacticalHelp.posture(int(selector.get_item_metadata(index)))
+		elif selector == reserve_selector:
+			detail = GameText.t(StringName("TACTICAL_RESERVE_%s_HELP" % CommanderState.ReservePolicy.keys()[int(selector.get_item_metadata(index))]))
+		elif selector == commander_selector:
+			var commander := current_snapshot.get_commander(selector.get_item_metadata(index)) if current_snapshot != null else null
+			if commander != null:
+				detail = TacticalHelp.personality(commander.personality_key)
+		else:
+			detail = GameText.t(&"TACTICAL_TARGET_HELP" if selector == objective_selector else &"TACTICAL_WAYPOINT_HELP")
+		return {"key": "intent-help:%s:%d:%s" % [selector.name, index, popup.visible], "text": detail, "avoid": Rect2(popup.position, popup.size) if popup.visible else Rect2(), "anchor": Vector2(popup.position) + Vector2(-18, popup.size.y) if popup.visible else mouse_position}
+	return {}

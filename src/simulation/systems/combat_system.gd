@@ -16,6 +16,8 @@ func advance(
 		var unit := units[entity_id] as UnitState
 		if unit.enabled and unit.attack_cooldown_remaining_ticks > 0:
 			unit.attack_cooldown_remaining_ticks -= 1
+		if unit.enabled and unit.weapon_preparation_ticks > 0:
+			unit.weapon_prepared_ticks = 0 if unit.has_move_target else mini(unit.weapon_preparation_ticks, unit.weapon_prepared_ticks + 1)
 
 	var projectile_id := next_projectile_id
 	for entity_id in entity_ids:
@@ -23,12 +25,12 @@ func advance(
 		if not attacker.enabled or not attacker.can_attack or attacker.attack_target_entity_id == 0:
 			continue
 		var target_id := attacker.attack_target_entity_id
-		if not attacker.can_accept_attack_orders:
+		if not attacker.can_accept_attack_orders or attacker.organization_attack_restricted:
 			var aggressor := units.get(target_id) as UnitState
 			if not attacker.attack_is_retaliation or aggressor == null or not aggressor.can_attack or aggressor.attack_target_entity_id != attacker.entity_id:
 				_clear_invalid_target(attacker, events, current_tick, "invalid_role")
 				continue
-		if attacker.attack_damage <= 0.0 or attacker.attack_range <= 0.0:
+		if (attacker.attack_damage <= 0.0 and attacker.suppression_power <= 0.0) or attacker.attack_range <= 0.0:
 			continue
 		if not _entity_exists(target_id, units, buildings):
 			_clear_invalid_target(attacker, events, current_tick, "missing")
@@ -41,6 +43,26 @@ func advance(
 		var target_position := _entity_position(target_id, units, buildings)
 		if attacker.position.distance_squared_to(target_position) > attacker.attack_range * attacker.attack_range:
 			continue
+		attacker.weapon_reason_key = &"TACTICAL_READY"
+		if attacker.ammunition_capacity > 0 and attacker.ammunition <= 0:
+			attacker.weapon_reason_key = &"TACTICAL_NO_AMMO"
+			continue
+		if not attacker.weapon_action_ready:
+			attacker.weapon_reason_key = &"TACTICAL_NEEDS_FIRE_ORDER"
+			continue
+		if attacker.identification_required and not attacker.target_identified:
+			attacker.weapon_reason_key = &"TACTICAL_NEEDS_IDENTIFICATION"
+			continue
+		if attacker.weapon_prepared_ticks < attacker.weapon_preparation_ticks:
+			attacker.weapon_reason_key = &"TACTICAL_PREPARING"
+			continue
+		if attacker.position.distance_squared_to(target_position) < attacker.minimum_attack_range * attacker.minimum_attack_range:
+			attacker.weapon_reason_key = &"TACTICAL_MINIMUM_RANGE"
+			continue
+		var target_tag := (units[target_id] as UnitState).target_tag if units.has(target_id) else TacticalWeaponDefinition.TargetTag.STRUCTURE
+		if not attacker.allowed_target_tags.is_empty() and not attacker.allowed_target_tags.has(target_tag):
+			attacker.weapon_reason_key = &"TACTICAL_INVALID_TARGET_TAG"
+			continue
 		var projectile := ProjectileState.new(
 			projectile_id,
 			attacker.entity_id,
@@ -52,6 +74,10 @@ func advance(
 			current_tick
 		)
 		projectiles[projectile_id] = projectile
+		projectile.damage_tag = attacker.damage_tag
+		projectile.suppression_power = attacker.suppression_power
+		if attacker.ammunition_capacity > 0:
+			attacker.ammunition -= 1
 		projectile_id += 1
 		attacker.attack_cooldown_remaining_ticks = attacker.attack_cooldown_ticks
 		events.append(SimulationEvent.new(
@@ -91,6 +117,15 @@ func advance(
 			continue
 		var health_before := _entity_health(target_id, units, buildings)
 		var amount := maxf(1.0, float(impact["attack_power"]) - _entity_armor(target_id, units, buildings))
+		var projectile := projectiles[impact_id] as ProjectileState
+		if projectile.damage_tag == TacticalWeaponDefinition.DamageTag.SUPPRESSION:
+			amount = 0.0
+		if units.has(target_id) and projectile.suppression_power > 0.0:
+			(units[target_id] as UnitState).pending_suppression += projectile.suppression_power
+			var suppression_event := SimulationEvent.new(current_tick, SimulationEvent.Kind.SUPPRESSION_APPLIED, int(impact["source_id"]), "target=%d;amount=%.3f;damage_tag=suppression" % [target_id, projectile.suppression_power])
+			suppression_event.applied_amount = projectile.suppression_power
+			(units[target_id] as UnitState).pending_suppression_events.append(suppression_event)
+			events.append(suppression_event)
 		_apply_damage(target_id, amount, units, buildings)
 		var health_after := _entity_health(target_id, units, buildings)
 		events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.PROJECTILE_IMPACTED, target_id, "projectile=%d" % impact_id))

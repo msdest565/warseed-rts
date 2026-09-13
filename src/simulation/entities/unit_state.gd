@@ -104,6 +104,7 @@ var rejoin_formation_id: int = 0
 var rejoin_slot_id: int = -1
 var rejoin_pending: bool = false
 var unit_card_id: StringName
+var composition_entry_id: StringName
 var tactical_role: TacticalRole = TacticalRole.NONE
 var terrain_kind: TerrainKind = TerrainKind.NONE
 var terrain_effect_key: StringName = &"TERRAIN_EFFECT_NONE"
@@ -112,6 +113,23 @@ var base_armor: float = 0.0
 var base_attack_damage: float = 0.0
 var base_attack_range: float = 0.0
 var base_sight_range: float = 0.0
+var damage_tag: int = TacticalWeaponDefinition.DamageTag.KINETIC
+var target_tag: int = TacticalWeaponDefinition.TargetTag.LIGHT
+var allowed_target_tags: Array[int] = []
+var ammunition_capacity: int = 0
+var ammunition: int = 0
+var minimum_attack_range: float = 0.0
+var suppression_power: float = 0.0
+var pending_suppression: float = 0.0
+var pending_suppression_events: Array[SimulationEvent] = []
+var identification_required: bool = false
+var weapon_preparation_ticks: int = 0
+var weapon_prepared_ticks: int = 0
+var target_identified: bool = false
+var weapon_action_ready: bool = true
+var weapon_reason_key: StringName = &"TACTICAL_READY"
+var card_weapon_initialized: bool = false
+var organization_attack_restricted: bool = false
 
 
 func _init(
@@ -129,3 +147,15 @@ func _init(
 	controller_id = new_controller_id
 	faction_id = new_controller_id
 	last_seen_position = new_position
+
+
+func configure_tactical_weapon(weapon: TacticalWeaponDefinition) -> void:
+	damage_tag = weapon.damage_tag
+	target_tag = weapon.target_tag
+	allowed_target_tags.assign(weapon.allowed_targets)
+	ammunition_capacity = weapon.ammunition_capacity
+	ammunition = weapon.ammunition_capacity
+	minimum_attack_range = weapon.minimum_range
+	suppression_power = weapon.suppression
+	identification_required = weapon.identification_required
+	weapon_preparation_ticks = weapon.preparation_ticks

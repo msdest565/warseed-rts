@@ -87,6 +87,7 @@ func _include_turning_point(point: Dictionary) -> bool:
 		"first_high_level_order", "player_correction", "unit_card_takeover",
 		"unit_card_return_result", "unit_card_loss", "supply_committed",
 		"exception_opened", "exception_reopened", "exception_action",
+		"tactical_action_started", "tactical_action_completed", "tactical_action_interrupted",
 	]:
 		return true
 	if reason == "task_state_changed":

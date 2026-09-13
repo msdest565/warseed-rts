@@ -4,6 +4,7 @@ extends RefCounted
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_visibility_circles(failures)
 	_test_faction_snapshot_filters_true_state(failures)
 	_test_last_seen_contact_and_snapshot_copy(failures)
 	_test_current_visible_contact_index(failures)
@@ -14,6 +15,21 @@ func run() -> Array[String]:
 	_test_enemy_strategy_phase_machine(failures)
 	_test_enemy_replaces_economy_losses(failures)
 	return failures
+
+
+func _test_visibility_circles(failures: Array[String]) -> void:
+	var knowledge := FactionKnowledge.new(1, Vector2i(24, 20))
+	for center in [Vector2i(12, 10), Vector2i.ZERO, Vector2i(23, 19), Vector2i(-2, 8)]:
+		for radius in [0, 1, 4, 9]:
+			knowledge.begin_update()
+			knowledge.reveal(center, radius)
+			knowledge.reveal(center, radius)
+			for y in range(20):
+				for x in range(24):
+					var expected: bool = Vector2i(x, y).distance_squared_to(center) <= radius * radius
+					_expect(knowledge.is_visible(Vector2i(x, y)) == expected, "visibility circle must preserve exact radius and edge clipping", failures)
+	knowledge.begin_update()
+	_expect(not knowledge.cells.has(FactionKnowledge.CellState.VISIBLE), "all previous circles become explored at the next update", failures)
 
 
 func _test_faction_snapshot_filters_true_state(failures: Array[String]) -> void:

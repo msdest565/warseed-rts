@@ -9,6 +9,7 @@ var unit_card_grid: GridContainer
 var roster_summary_label: Label
 var reset_campaign_button: Button
 var roster_bar: BoxContainer
+var roster_status: RosterStatusPanel
 var tutorial_toggle: CheckButton
 
 var _plan: ArmyPlan = ArmyPlan.grey_ridge_default()
@@ -36,9 +37,17 @@ func _ready() -> void:
 
 
 func configure(host: SimulationHost) -> void:
+	_build_ui()
 	simulation_host = host
 	if simulation_host == null:
 		return
+	if roster_status == null:
+		roster_status = RosterStatusPanel.new()
+		roster_bar.get_parent().add_child(roster_status)
+		roster_bar.get_parent().move_child(roster_status, roster_bar.get_index() + 1)
+	roster_status.configure(host)
+	if not host.campaign_persistence_changed.is_connected(_refresh_validity):
+		host.campaign_persistence_changed.connect(_refresh_validity)
 	var battle := simulation_host.world.battle_definition
 	if battle != null:
 		_commander_definitions.assign(battle.commander_definitions)
@@ -68,6 +77,8 @@ func refresh_locale() -> void:
 	if not _built:
 		return
 	_rebuild_content()
+	if roster_status != null:
+		roster_status.refresh()
 
 
 func get_plan() -> ArmyPlan:
@@ -273,7 +284,7 @@ func _rebuild_content() -> void:
 		int(campaign_record.get("merit", 0)),
 		int(campaign_record.get("battle_count", 0)),
 	]
-	reset_campaign_button.disabled = campaign_record.is_empty()
+	reset_campaign_button.disabled = campaign_record.is_empty() and (simulation_host == null or not simulation_host.has_campaign_error())
 	_clear_container(commander_grid)
 	_clear_container(unit_card_grid)
 	_capacity_labels.clear()
@@ -398,11 +409,14 @@ func _create_commander_panel(definition: CommanderDefinition) -> PanelContainer:
 func _doctrine_tooltip(doctrine: DoctrineDefinition) -> String:
 	if doctrine == null:
 		return ""
-	return GameText.t(&"DOCTRINE_SLOT_TOOLTIP") % [
+	var description := GameText.t(&"DOCTRINE_SLOT_TOOLTIP") % [
 		GameText.t(doctrine.display_name_key),
 		GameText.t(doctrine.behavior_key),
 		GameText.t(doctrine.tradeoff_key),
 	]
+	for definition in doctrine.effects:
+		description += "\n" + GameText.t(definition.counterplay.explanation_key)
+	return description
 
 
 func _posture_tooltip(posture: CommanderState.Posture) -> String:
@@ -481,6 +495,9 @@ func _create_unit_card_panel(definition: UnitCardDefinition) -> PanelContainer:
 	identity.add_child(stats)
 	var record := simulation_host.get_campaign_record() if simulation_host != null else {}
 	var card_record := (record.get("cards", {}) as Dictionary).get(String(definition.definition_id), {}) as Dictionary
+	stats.tooltip_text = CompositionText.from_definition(definition, card_record)
+	if definition.composition.size() > 1:
+		stats.text += "\n" + CompositionText.from_definition(definition, card_record)
 	var available_strength := int(card_record.get("available_strength", definition.authorized_strength))
 	var readiness := Label.new()
 	readiness.name = "Readiness"

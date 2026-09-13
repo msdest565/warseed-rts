@@ -22,7 +22,7 @@ func _test_initial_situation_contract(failures: Array[String]) -> void:
 	if situation == null:
 		return
 	_expect(situation.observer_faction_id == SimulationWorld.LOCAL_PLAYER_ID and situation.source_tick == snapshot.tick, "situation identity should preserve observer and source tick", failures)
-	_expect(situation.card_statuses.size() == 4, "situation should expose all four friendly persistent cards", failures)
+	_expect(situation.card_statuses.size() == 6, "situation should expose all six Grey Ridge tactical cards", failures)
 	_expect(situation.task_axes.size() >= 2, "initial deployed cards should expose whole-card task axes", failures)
 	_expect(_known_threat_count(situation) >= 2, "initial central and western reports should produce known threat zones", failures)
 	_expect(situation.frontline_segments.size() >= 2, "known pressure should produce estimated frontline segments", failures)
@@ -40,6 +40,15 @@ func _test_determinism_and_value_copy(failures: Array[String]) -> void:
 	_expect(first != null and second != null and first.fingerprint() == second.fingerprint(), "identical faction snapshots should preserve situation fingerprints", failures)
 	if first == null:
 		return
+	var projector := BattlefieldSituationProjector.new()
+	var cached := projector.project(snapshot, 1, world.battle_definition.battlefield_bounds)
+	var cached_json := cached.canonical_json()
+	cached.uncertainty_zones.clear()
+	_expect(projector.project(snapshot, 1, world.battle_definition.battlefield_bounds).canonical_json() == cached_json, "mutating a projected result cannot corrupt the cached legal fog", failures)
+	var changed := world.create_faction_snapshot(1)
+	changed.knowledge.cells.fill(FactionKnowledge.CellState.VISIBLE)
+	_expect(projector.project(changed, 1, world.battle_definition.battlefield_bounds).uncertainty_zones.is_empty(), "a changed visibility mask invalidates the cached fog", failures)
+	_expect(projector.project(snapshot, 1, world.battle_definition.battlefield_bounds).canonical_json() == cached_json, "an older immutable snapshot remains projectable after a newer mask", failures)
 	var before := first.canonical_json()
 	if not snapshot.knowledge.cells.is_empty():
 		snapshot.knowledge.cells[0] = FactionKnowledge.CellState.VISIBLE

@@ -804,6 +804,8 @@ msgid "DOCTRINE_ALTERNATING_COVER_BEHAVIOR"
 msgstr "Activate subordinate formations in sequence so one covers while another moves"
 msgid "DOCTRINE_ALTERNATING_COVER_TRADEOFF"
 msgstr "Later formations enter the maneuver after a delay"
+msgid "DOCTRINE_STAGED_DEPARTURE_COUNTERPLAY"
+msgstr "The enemy can concentrate on the leading formation before the others arrive. Player takeover or task completion stops this task's execution."
 msgid "DOCTRINE_FIRE_PREPARATION_BEHAVIOR"
 msgstr "Fire support waits for observed contact and preparation before advancing"
 msgid "DOCTRINE_FIRE_PREPARATION_TRADEOFF"
@@ -2516,3 +2518,333 @@ msgid "AFTER_ACTION_CAUSE_GENERIC"
 msgstr "Recorded factor: %s"
 msgid "AFTER_ACTION_CARD_METRICS"
 msgstr "Damage %d | Kills %d | Tasks %d complete / %d blocked"
+
+msgid "CARD_DECISION_DEPLOY"
+msgstr "Choose deployment point"
+
+msgid "CARD_DECISION_ALL"
+msgstr "All decisions"
+
+msgid "CARD_DECISION_NO_TARGETS"
+msgstr "No eligible cards: reinforcement needs deployed casualties; logistics needs damage or organization loss; engineering needs a deployed engineer and an unopened route."
+
+msgid "CARD_DECISION_READY"
+msgstr "Ready; checked again on submission."
+
+msgid "CARD_DECISION_CONTEXT"
+msgstr "Strength %d/%d · Cost %d Supply / available %d\nPopulation %d/%d (+%d) · Cooldown %ds\nTarget: %s"
+
+msgid "CARD_DECISION_PICK_POSITION"
+msgstr "Left-click inside the highlighted HQ area; right-click or C to cancel. No order submitted yet."
+
+msgid "CARD_DECISION_QUEUED"
+msgstr "Accepted; awaiting battlefield confirmation."
+
+msgid "CARD_DECISION_DEPLOYING"
+msgstr "Deployment started; waiting for the whole card to arrive."
+
+msgid "CARD_DECISION_CANCELLED"
+msgstr "Target selection cancelled; no deployment or charge."
+
+msgid "CARD_DECISION_OPEN"
+msgstr "Open card decisions and choose the named unit card."
+
+msgid "CARD_DECISION_SUPPORT_GUIDE"
+msgstr "Choose card support targets in the decision desk. Field reinforcement costs battle Supply; pre/postbattle replacements use roster points."
+
+msgid "CARD_RECOVERY_INSUFFICIENT_SUPPLY"
+msgstr "Wait for Supply income or defer other spending."
+
+msgid "CARD_RECOVERY_POPULATION_FULL"
+msgstr "Free population capacity and retry."
+
+msgid "CARD_RECOVERY_SUPPORT_COOLDOWN"
+msgstr "Wait for the displayed cooldown to expire."
+
+msgid "CARD_RECOVERY_INVALID_DEPLOYMENT_STATE"
+msgstr "Check deployment state, active effects, opened routes or pending orders; refresh and retry."
+
+msgid "CARD_RECOVERY_INVALID_POSITION"
+msgstr "Choose a point in the highlighted HQ area; the system resolves a safe whole-card anchor."
+
+msgid "CARD_RECOVERY_INVALID_TARGET"
+msgstr "Check that the card and HQ are available; return to all decisions and select again."
+
+msgid "CARD_RECOVERY_UNIT_CARD_FULL_STRENGTH"
+msgstr "This card is at full strength and needs no replacements."
+
+msgid "CARD_RECOVERY_BATTLE_CONCLUDED"
+msgstr "The battle has ended; continue to the debrief."
+
+msgid "CARD_RECOVERY_COMMANDER_MISMATCH"
+msgstr "Select this reserve card with its assigned commander."
+
+msgid "CARD_RECOVERY_SCENARIO_NOT_STARTED"
+msgstr "Finish planning and start the battle first."
+
+msgid "CARD_RECOVERY_PATH_UNAVAILABLE"
+msgstr "Choose another reachable point inside the HQ area."
+
+msgid "CARD_ACTION_REINFORCE"
+msgstr "Field reinforcement"
+
+msgid "CARD_ACTION_FORTIFY"
+msgstr "Emergency fortify"
+
+msgid "CARD_ACTION_ENGINEERING"
+msgstr "Open engineering route"
+
+msgid "CARD_ACTION_MOBILITY"
+msgstr "Rapid mobility"
+
+msgid "CARD_ACTION_LOGISTICS"
+msgstr "Frontline logistics"
+
+msgid "TACTICAL_FINAL_TARGET"
+msgstr "Final target"
+
+msgid "TACTICAL_WAYPOINT"
+msgstr "Via region"
+
+msgid "TACTICAL_DIRECT"
+msgstr "Go directly to target"
+
+msgid "TACTICAL_TARGET_HELP"
+msgstr "Final target: the region this commander should reach or contest. A via region changes the approach without replacing this destination. Approval queues an order; orders issued during tactical pause execute after resuming."
+
+msgid "TACTICAL_WAYPOINT_HELP"
+msgstr "Via region: pass through this region before reaching the final target, for flanking or detours. Direct travel adds no waypoint; choosing the final target here also means direct travel. Routes obey terrain rules and do not guarantee safety."
+
+msgid "TACTICAL_RESERVE_HOLD_HELP"
+msgstr "Hold reserves: record an intent to preserve undeployed cards. Currently this policy records intent; it does not automatically deploy or withdraw troops. To commit a card, choose it in Decisions and select a legal headquarters deployment point, with sufficient Supply and population space."
+
+msgid "TACTICAL_RESERVE_REINFORCE_ON_REQUEST_HELP"
+msgstr "Reinforce on request: record an intent to respond to reinforcement requests. Deployment currently requires player confirmation of a reserve card and position in Decisions. Supply, population and deployment time still apply; arriving troops join their commander."
+
+msgid "TACTICAL_RESERVE_COMMIT_AVAILABLE_HELP"
+msgstr "Commit available reserves: record willingness to commit available reserve strength, leaving less in reserve. Currently this does not automatically spend Supply or deploy troops; confirm each card in Decisions. Insufficient Supply, full population or an illegal position still rejects deployment."
+
+msgid "TACTICAL_PAUSE"
+msgstr "Space · Tactical pause"
+
+msgid "TACTICAL_RESUME"
+msgstr "Paused · Space to resume"
+
+msgid "TACTICAL_PAUSE_HELP"
+msgstr "Freeze battlefield time while keeping tooltips, posture selection, route planning and decisions available. Orders queue until you resume; paused time is never simulated later. Esc opens the settings menu."
+
+msgid "TACTICAL_IDLE"
+msgstr "● Idle"
+
+msgid "TACTICAL_WORKING"
+msgstr "● On task"
+
+msgid "TACTICAL_CONTACT"
+msgstr "● Combat / contact"
+
+msgid "TACTICAL_RESERVE_CARD"
+msgstr "Reserve"
+
+msgid "TACTICAL_QUEUED"
+msgstr "Order queued; resume with Space to execute"
+
+msgid "TACTICAL_SUPERSEDED"
+msgstr "Replaced by a later intent in the same batch"
+
+msgid "TACTICAL_ACTIVE_INTENT"
+msgstr "Target: %s · %s"
+
+msgid "TACTICAL_APPROVE_QUEUE"
+msgstr "Approve and queue"
+
+msgid "TACTICAL_APPROVAL_HINT"
+msgstr "Orders require approval. During tactical pause they queue until Space resumes."
+
+msgid "CONTROL_AI_HINT"
+msgstr "%d cards under manual control · R: hand to AI"
+
+msgid "CONTROL_AI_BOARD"
+msgstr "R · Hand selected cards to AI"
+
+msgid "CONTROL_AI_HELP"
+msgstr "Press R or click to hand control to AI. This returns selected cards, the selected commander's manual cards, or all manual cards when nothing is selected. Issuing a new commander decision, route or posture also returns that commander's cards."
+
+msgid "CONTROL_AI_QUEUED"
+msgstr "AI handoff queued for %d cards"
+
+msgid "CONTROL_AI_PENDING"
+msgstr "Paused: request queued until play resumes"
+
+msgid "CONTROL_AI_NO_MANUAL"
+msgstr "No manual cards in the current selection"
+
+msgid "CONTROL_STATE_IDLE"
+msgstr "Idle"
+
+msgid "CONTROL_STATE_WORKING"
+msgstr "Busy"
+
+msgid "CONTROL_STATE_CONTACT"
+msgstr "Fight"
+
+msgid "CONTROL_MANUAL_BADGE"
+msgstr "Manual"
+
+msgid "CONTROL_RETURNING_BADGE"
+msgstr "Rejoin"
+
+msgid "ROSTER_LOAD_FAILED"
+msgstr "The army roster could not be loaded. The original file is preserved. Check the error details or explicitly reset the army before starting."
+
+msgid "ROSTER_SAVE_FAILED"
+msgstr "The army roster was not saved. The original file is preserved. Retry saving before continuing."
+
+msgid "ROSTER_RETRY_SAVE"
+msgstr "Retry save"
+
+msgid "CARD_COMPOSITION"
+msgstr "Composition · Current / Authorized"
+
+msgid "SUPPORT_COOLDOWN_READY"
+msgstr "Cooldown: ready"
+
+msgid "SUPPORT_COOLDOWN_NONE"
+msgstr "No cooldown"
+
+msgid "SUPPORT_COOLDOWN_REMAINING"
+msgstr "Cooldown: %d s"
+
+msgid "TACTICAL_READY"
+msgstr "Ready"
+
+msgid "TACTICAL_NEEDS_FIRE_ORDER"
+msgstr "Awaiting suppression order"
+
+msgid "TACTICAL_PREPARING"
+msgstr "Preparing: remain stationary"
+
+msgid "TACTICAL_ACTIVE"
+msgstr "Active"
+
+msgid "TACTICAL_COMPLETE"
+msgstr "Completed; cooling down"
+
+msgid "TACTICAL_MOVED"
+msgstr "Interrupted by movement; cost and cooldown retained"
+
+msgid "TACTICAL_TARGET_CHANGED"
+msgstr "Interrupted: target conditions changed"
+
+msgid "TACTICAL_NO_AMMO"
+msgstr "Out of ammunition: approach a supply card"
+
+msgid "TACTICAL_NEEDS_IDENTIFICATION"
+msgstr "Awaiting sustained observer identification"
+
+msgid "TACTICAL_MINIMUM_RANGE"
+msgstr "Target inside minimum range"
+
+msgid "TACTICAL_INVALID_TARGET_TAG"
+msgstr "Weapon cannot engage this target category"
+
+msgid "TACTICAL_AMMUNITION"
+msgstr "Specialist ammunition %d / %d"
+
+msgid "TACTICAL_IDENTIFIED"
+msgstr "Sustained optical identification; fire control available"
+
+msgid "TACTICAL_IDENTIFICATION_TIME"
+msgstr "Optical fire-control identification: %d s left; losing sight breaks tracking"
+
+msgid "TACTICAL_OBSERVERS"
+msgstr "Forward Observers"
+
+msgid "TACTICAL_ENGINEERS"
+msgstr "Route Engineers"
+
+msgid "TACTICAL_BATTERY"
+msgstr "Suppression Battery"
+
+msgid "TACTICAL_ASSAULT"
+msgstr "Combined Assault"
+
+msgid "TACTICAL_SUPPLY"
+msgstr "Ammunition Column"
+
+msgid "TACTICAL_OBSERVERS_ACTION"
+msgstr "Stationary observation"
+
+msgid "TACTICAL_ENGINEERS_ACTION"
+msgstr "Prepare route clearance"
+
+msgid "TACTICAL_BATTERY_ACTION"
+msgstr "Observed suppression"
+
+msgid "TACTICAL_ASSAULT_ACTION"
+msgstr "Coordinated breakthrough"
+
+msgid "TACTICAL_SUPPLY_ACTION"
+msgstr "Local resupply"
+
+msgid "TACTICAL_OBSERVERS_HELP"
+msgstr "Costs 1 Supply; prepare stationary for 2 s. Observe contacts within 480 for 1 s to identify. Moving or losing scouts interrupts; losing visibility breaks fire control."
+
+msgid "TACTICAL_ENGINEERS_HELP"
+msgstr "Costs 2 Supply; prepare safely for 3 s within 280 of the route entrance. Contact, movement or loss of engineers interrupts; cost is retained."
+
+msgid "TACTICAL_BATTERY_HELP"
+msgstr "Costs 2 Supply; requires 30 organization and 2 s preparation. Each vehicle carries 4 rounds, minimum range 140, and needs sustained identification. Hits suppress organization. Counter with movement, closing range, broken observation or ammunition exhaustion."
+
+msgid "TACTICAL_ASSAULT_HELP"
+msgstr "Costs 2 Supply; requires 30 organization. Prepare 1.5 s, spend 10 organization, then attack-move to the objective. Preparation doubles below 60; suppression below 30 interrupts."
+
+msgid "TACTICAL_SUPPLY_HELP"
+msgstr "Costs 2 Supply; remain safe and stationary for 3 s within 260. Refill specialist ammunition and restore 20 organization. Contact or movement interrupts; a fully supplied target cannot use this action."
+
+msgid "UNIT_SUPPRESSION_VEHICLE"
+msgstr "Suppression Artillery"
+
+msgid "UNIT_BREAKTHROUGH_VEHICLE"
+msgstr "Breakthrough Armor"
+
+msgid "UNIT_DESCRIPTION_SUPPRESSION_VEHICLE"
+msgstr "Stationary observed fire with limited ammunition suppresses organization to cover an assault."
+
+msgid "UNIT_DESCRIPTION_BREAKTHROUGH_VEHICLE"
+msgstr "Armored assault chassis; coordinated breakthrough requires sufficient organization."
+
+msgid "REASON_TACTICAL_BUSY"
+msgstr "Action preparing or cooling down"
+
+msgid "REASON_CAPABILITY_LOST"
+msgstr "Missing capability members or usable specialist ammunition"
+
+msgid "REASON_TARGET_UNIDENTIFIED"
+msgstr "Target lacks sustained identification"
+
+msgid "REASON_OUT_OF_RANGE"
+msgstr "Target outside action range or inside minimum range"
+
+msgid "REASON_LOW_ORGANIZATION"
+msgstr "Insufficient organization: complex actions require at least 30"
+
+msgid "REASON_RESUPPLY_NOT_NEEDED"
+msgstr "Target ammunition and organization are full"
+
+msgid "REASON_TACTICAL_UNSAFE"
+msgstr "Nearby contact or recent damage prevents safe work"
+
+msgid "RECOVERY_TACTICAL_CONDITIONS"
+msgstr "Remain stationary and in range. Replace capability members or ammunition, disengage to recover organization, then issue the order again."
+
+msgid "AFTER_ACTION_TACTICAL_METRICS"
+msgstr "Actions started / executed / interrupted: %d / %d / %d | Supply: %d\nIdentifications: %d | Routes opened: %d | Organization suppressed: %.1f\nRounds restored: %d | Organization restored: %.1f"
+
+msgid "AFTER_ACTION_TACTICAL_ACTION_STARTED"
+msgstr "Action started: %s"
+
+msgid "AFTER_ACTION_TACTICAL_ACTION_COMPLETED"
+msgstr "Action executed: %s"
+
+msgid "AFTER_ACTION_TACTICAL_ACTION_INTERRUPTED"
+msgstr "Action interrupted: %s"

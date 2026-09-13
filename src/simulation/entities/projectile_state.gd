@@ -9,6 +9,8 @@ var position: Vector2
 var speed: float
 var attack_power: float
 var spawn_tick: int
+var damage_tag: int = TacticalWeaponDefinition.DamageTag.KINETIC
+var suppression_power: float = 0.0
 
 
 func _init(
