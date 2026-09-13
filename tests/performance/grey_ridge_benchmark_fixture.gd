@@ -26,6 +26,7 @@ static func create_world(
 			anchor, next_entity_id, forward
 		)
 		var formation := world.formations[next_formation_id] as FormationState
+		_place_walkable_formation(world, formation, anchor)
 		var destination := _formation_destination(world, anchor, group_index, chokepoint_stress)
 		world._apply_command(FormationMoveCommand.new(
 			world.allocate_command_id(), faction_id, GameCommand.IssuerKind.PLAYER,
@@ -47,6 +48,49 @@ static func create_world(
 	if projectile_count > 0:
 		_seed_projectiles(world, projectile_count)
 	return world
+
+
+static func _place_walkable_formation(world: SimulationWorld, formation: FormationState, preferred: Vector2) -> void:
+	# A spawn has no route origin yet; deployment validation cannot recover an
+	# anchor inside an obstacle. Choose a complete walkable footprint first.
+	var center := _walkable_spawn(world, formation, preferred)
+	assert(center.is_finite(), "benchmark requires a walkable complete formation")
+	formation.anchor_position = center
+	formation.target_position = center
+	formation.order_destination = center
+	formation.reset_anchor_history(formation.initial_path_direction)
+	var forward := formation.initial_path_direction
+	var lateral := Vector2(-forward.y, forward.x)
+	for id in formation.member_entity_ids:
+		var unit := world.units[id] as UnitState
+		var offset := formation.get_wide_offset(formation.get_slot_id(id))
+		unit.position = center + forward * offset.x + lateral * offset.y
+		assert(world.logic_grid.is_world_position_walkable(unit.position), "benchmark member spawned in an obstacle")
+		unit.desired_position = unit.position
+		unit.move_target = unit.position
+		unit.has_move_target = false
+		unit.following_formation = true
+
+
+static func _walkable_spawn(world: SimulationWorld, formation: FormationState, preferred: Vector2) -> Vector2:
+	var origin := world.logic_grid.world_to_cell(preferred)
+	var forward := formation.initial_path_direction
+	var lateral := Vector2(-forward.y, forward.x)
+	for radius in range(25):
+		for y in range(-radius, radius + 1):
+			for x in range(-radius, radius + 1):
+				if maxi(absi(x), absi(y)) != radius:
+					continue
+				var center := preferred if radius == 0 else world.logic_grid.cell_to_world(origin + Vector2i(x, y))
+				var fits := true
+				for slot in range(formation.member_entity_ids.size()):
+					var offset := formation.get_wide_offset(slot)
+					if not world.logic_grid.is_world_position_walkable(center + forward * offset.x + lateral * offset.y):
+						fits = false
+						break
+				if fits:
+					return center
+	return Vector2(INF, INF)
 
 
 static func active_entity_count(world: SimulationWorld) -> int:

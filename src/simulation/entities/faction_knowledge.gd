@@ -79,5 +79,22 @@ func is_visible(cell: Vector2i) -> bool:
 	return get_cell_state(cell) == CellState.VISIBLE
 
 
+func unexplored_frontier_cells() -> Array[Vector2i]:
+	# Read the faction's packed knowledge once per cell. Calling get_cell_state
+	# for every neighbor of every map cell made scout retargeting stall a tick.
+	var frontier: Array[Vector2i] = []
+	var width := grid_size.x
+	for index in range(cells.size()):
+		if cells[index] != CellState.UNEXPLORED:
+			continue
+		var x := index % width
+		if (x > 0 and cells[index - 1] != CellState.UNEXPLORED) \
+			or (x + 1 < width and cells[index + 1] != CellState.UNEXPLORED) \
+			or (index >= width and cells[index - width] != CellState.UNEXPLORED) \
+			or (index + width < cells.size() and cells[index + width] != CellState.UNEXPLORED):
+			frontier.append(Vector2i(x, index / width))
+	return frontier
+
+
 func _index(cell: Vector2i) -> int:
 	return cell.y * grid_size.x + cell.x

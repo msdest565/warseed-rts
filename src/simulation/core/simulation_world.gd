@@ -1419,13 +1419,9 @@ func find_reachable_scout_target(faction_id: int, origin: Vector2, excluded_posi
 	var map_center := Vector2(logic_grid.grid_size) * 0.5
 	var exploration_heading := (map_center - Vector2(base_cell)).normalized()
 	var candidates: Array[Vector2i] = []
-	for y in range(logic_grid.grid_size.y):
-		for x in range(logic_grid.grid_size.x):
-			var cell := Vector2i(x, y)
-			if knowledge.get_cell_state(cell) != FactionKnowledge.CellState.UNEXPLORED or logic_grid.is_blocked(cell):
-				continue
-			if _is_exploration_frontier(knowledge, cell):
-				candidates.append(cell)
+	for cell in knowledge.unexplored_frontier_cells():
+		if not logic_grid.is_blocked(cell):
+			candidates.append(cell)
 	candidates.sort_custom(func(first: Vector2i, second: Vector2i) -> bool:
 		var first_offset := Vector2(first - origin_cell)
 		var second_offset := Vector2(second - origin_cell)
@@ -1440,14 +1436,6 @@ func find_reachable_scout_target(faction_id: int, origin: Vector2, excluded_posi
 		if not pathfinder.find_path(origin, target).is_empty():
 			return target
 	return origin
-
-
-func _is_exploration_frontier(knowledge: FactionKnowledge, cell: Vector2i) -> bool:
-	for offset in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
-		var neighbor: Vector2i = cell + offset
-		if logic_grid.is_in_bounds(neighbor) and knowledge.get_cell_state(neighbor) != FactionKnowledge.CellState.UNEXPLORED:
-			return true
-	return false
 
 
 func _is_direct_player_order(command: GameCommand) -> bool:

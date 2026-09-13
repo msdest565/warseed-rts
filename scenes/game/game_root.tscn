@@ -1086,6 +1086,7 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.96, 0.78, 0.28, 1)
 theme_override_font_sizes/font_size = 13
 text = "THEATER SUPPORT"
+autowrap_mode = 2
 
 [node name="Pair" type="OptionButton" parent="HUDLayer/SupportPanel/Margin/Scroll/Layout"]
 layout_mode = 2
@@ -1148,6 +1149,7 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.35, 0.78, 0.72, 1)
 theme_override_font_sizes/font_size = 11
 text = "CARDINAL / INTELLIGENCE"
+autowrap_mode = 2
 
 [node name="Intel" type="Label" parent="HUDLayer/SupportPanel/Margin/Scroll/Layout"]
 layout_mode = 2

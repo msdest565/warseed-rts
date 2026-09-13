@@ -165,6 +165,12 @@ func _run_resolution(resolution: Vector2i) -> void:
 	await _validate_debrief_rows(game.battle_debrief, viewport_rect, &"unit_card_id", game.simulation_host.current_snapshot.unit_cards.size(), "unit cards")
 	await _focus_last_debrief_row(game.battle_debrief, viewport_rect)
 	await _save_screenshot(resolution, "debrief_cards")
+	for locale in ["en", "zh_CN"]:
+		TranslationServer.set_locale(locale)
+		game.battle_debrief.refresh_locale()
+		await _wait_frames(5)
+		await _validate_debrief_rows(game.battle_debrief, viewport_rect, &"unit_card_id", game.simulation_host.current_snapshot.unit_cards.size(), "localized unit cards")
+		await _save_screenshot(resolution, "debrief_cards_" + locale)
 	await _activate_debrief_button(game.battle_debrief.causes_button)
 	await _validate_debrief_rows(game.battle_debrief, viewport_rect, &"cause_id", -1, "causes")
 	await _save_screenshot(resolution, "debrief_causes")
@@ -1106,6 +1112,25 @@ func _verify_contextual_card_decisions(game: GameRoot, resolution: Vector2i, vie
 	await _wait_frames(5)
 	_expect_control_in_viewport(game.support_panel.reinforcement_button, viewport_rect, "left support cooldown")
 	await _save_screenshot(resolution, "left_support_cooldown")
+	for locale in ["en", "zh_CN"]:
+		TranslationServer.set_locale(locale)
+		game._on_language_changed(locale)
+		game._apply_grey_ridge_hud_layout()
+		await _wait_frames(5)
+		other_action = _first_card_decision_button(desk, SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT)
+		var remaining_text := GameText.t(&"SUPPORT_COOLDOWN_REMAINING") % cooldown_seconds
+		if not game.support_panel.reinforcement_button.disabled or not game.support_panel.reinforcement_button.text.ends_with(remaining_text):
+			_fail("localized left reinforcement must remain disabled with its countdown")
+		if other_action == null or not other_action.disabled or not other_action.text.ends_with(remaining_text):
+			_fail("localized reinforcement decision must remain disabled with the same countdown")
+		if other_action != null:
+			scroll.ensure_control_visible(other_action)
+		support_scroll.ensure_control_visible(game.support_panel.reinforcement_button)
+		await _wait_frames(5)
+		_expect_no_horizontal_scroll(scroll, "localized reinforcement cooldown")
+		if game.support_panel.get_global_rect().intersects(game.get_grey_ridge_map_rect()):
+			_fail("localized support panel must not expand across the map")
+		await _save_screenshot(resolution, "left_support_cooldown_" + locale)
 	host.set_tactical_paused(true)
 	await create_timer(0.25).timeout
 	game.support_panel.update_snapshot(host.current_snapshot)

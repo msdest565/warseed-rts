@@ -321,14 +321,14 @@ func _set_narrow_header_typography(narrow: bool) -> void:
 	if support_panel != null:
 		var pair_selector := support_panel.get_node_or_null("Margin/Scroll/Layout/Pair") as OptionButton
 		if pair_selector != null:
-			pair_selector.fit_to_longest_item = not narrow
+			pair_selector.fit_to_longest_item = false
 			pair_selector.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		var support_layout := support_panel.get_node_or_null("Margin/Scroll/Layout") as Container
 		if support_layout != null:
 			for child in support_layout.get_children():
 				var button := child as Button
 				if button != null:
-					button.clip_text = narrow
+					button.clip_text = true
 
 
 func _layout_overlay_controls(compact: bool) -> void:

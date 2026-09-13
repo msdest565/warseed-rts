@@ -5,6 +5,7 @@ extends RefCounted
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_visibility_circles(failures)
+	_test_exploration_frontiers(failures)
 	_test_faction_snapshot_filters_true_state(failures)
 	_test_last_seen_contact_and_snapshot_copy(failures)
 	_test_current_visible_contact_index(failures)
@@ -30,6 +31,29 @@ func _test_visibility_circles(failures: Array[String]) -> void:
 					_expect(knowledge.is_visible(Vector2i(x, y)) == expected, "visibility circle must preserve exact radius and edge clipping", failures)
 	knowledge.begin_update()
 	_expect(not knowledge.cells.has(FactionKnowledge.CellState.VISIBLE), "all previous circles become explored at the next update", failures)
+
+
+func _test_exploration_frontiers(failures: Array[String]) -> void:
+	for dimensions in [Vector2i(1, 1), Vector2i(1, 8), Vector2i(8, 1), Vector2i(24, 20)]:
+		var knowledge := FactionKnowledge.new(2, dimensions)
+		for center in [Vector2i.ZERO, dimensions - Vector2i.ONE, dimensions / 2]:
+			knowledge.begin_update()
+			knowledge.reveal(center, 2)
+			var before := knowledge.cells.duplicate()
+			var expected: Array[Vector2i] = []
+			# Preserve the old row-major, four-neighbor definition, including edges.
+			for y in range(dimensions.y):
+				for x in range(dimensions.x):
+					var cell := Vector2i(x, y)
+					if knowledge.get_cell_state(cell) != FactionKnowledge.CellState.UNEXPLORED:
+						continue
+					for offset in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+						var neighbor: Vector2i = cell + offset
+						if Rect2i(Vector2i.ZERO, dimensions).has_point(neighbor) and knowledge.get_cell_state(neighbor) != FactionKnowledge.CellState.UNEXPLORED:
+							expected.append(cell)
+							break
+			_expect(knowledge.unexplored_frontier_cells() == expected, "frontier scan must preserve old candidates and stable order at map edges", failures)
+			_expect(knowledge.cells == before, "frontier queries must not reveal cells or mutate faction knowledge", failures)
 
 
 func _test_faction_snapshot_filters_true_state(failures: Array[String]) -> void:

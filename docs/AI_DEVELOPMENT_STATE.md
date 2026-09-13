@@ -1,7 +1,7 @@
 # WARSEED AI 开发状态与任务队列
 
-> 状态版本：55
-> 更新时间：2026-09-12
+> 状态版本：58
+> 更新时间：2026-09-13
 > 更新规则：每个完成、阻塞或重新规划的工作项都必须更新本文件
 > 执行规则：[`AI_DEVELOPMENT_WORKFLOW.md`](AI_DEVELOPMENT_WORKFLOW.md)
 > 目标命令：[`AI_GOAL_COMMANDS.md`](AI_GOAL_COMMANDS.md)
@@ -10,20 +10,20 @@
 
 ```yaml
 workflow_version: 1.1
-state_version: 55
-updated_at: 2026-09-12
+state_version: 58
+updated_at: 2026-09-13
 project: WARSEED
-current_phase: R3
-current_gate: GREY_RIDGE_TACTICAL_CONTENT
-phase_status: VERIFYING
+current_phase: R4
+current_gate: R4_IMPLEMENTATION
+phase_status: READY
 release_candidate: R1-FEEDBACK-RC2
 release_candidate_status: ENGINEERING_BASELINE_ARCHIVED
 release_candidate_package: build/playtest-kits/WARSEED-R1-Feedback-RC2-20260901.zip
 release_candidate_sha256: 730B7F496F8871D62CA887F5B955974CF540014F3B5EA9307E6F5D4070C10A08
-active_maintenance_work_item: WS-MAINT-20260912-001
+active_maintenance_work_item: none
 working_build_id: 0.1.0-r1-feedback.6-dev
 latest_maintenance_work_item: WS-MAINT-20260912-001
-latest_maintenance_status: BLOCKED
+latest_maintenance_status: DONE
 feedback_build_id: 0.1.0-r1-feedback.2
 feedback_schema_version: 1
 feedback_collection_status: COMPLETE_SIMULATED
@@ -44,12 +44,12 @@ human_validation_debt: CLOSED_BY_D026
 human_validation_test_plan: docs/HUMAN_VALIDATION_TEST_PLAN.md
 simulated_gate_authorized_at: 2026-08-21
 simulated_gate_authority: product_owner_user_message
-next_work_item: WS-R3-005
-next_work_item_status: VERIFYING
+next_work_item: WS-R4-001
+next_work_item_status: READY
 next_work_item_blocker_kind: none
 next_work_item_blocker: none
-machine_ready_work_item: none
-active_work_item: WS-R3-005
+machine_ready_work_item: WS-R4-001
+active_work_item: none
 queued_maintenance_work_item: none
 queued_maintenance_status: none
 expansion_implementation_allowed: true
@@ -68,6 +68,13 @@ r2_exit_authority: product_owner_goal_maintenance_then_R3_R4_R5
 r2_simulated_full_gate: PASS
 r2_simulated_full_gate_duration_seconds: 1426.714
 r2_simulated_verified_at: 2026-09-07
+r3_engineering_status: COMPLETE_SIMULATED
+r3_exit_status: ACCEPTED
+r3_exit_authorized_at: 2026-09-13
+r3_exit_authority: product_owner_goal_maintenance_then_R3_R4_R5
+r3_simulated_full_gate: PASS
+r3_simulated_full_gate_duration_seconds: 686.300
+r3_simulated_verified_at: 2026-09-13
 goal_protocol_version: 1.1
 gameplay_rework_roadmap: docs/GAMEPLAY_REWORK_ROADMAP.md
 recommended_goal_command: "/goal continue"
@@ -77,7 +84,7 @@ full_gate_command: >-
   -GodotConsolePath <godot-console>
 ```
 
-解释：产品负责人于 2026-09-07 接受 R1 工程出口并通过 D-026 取消真人证据硬门，同时通过 D-027 将 R2-R7 重排为玩法优先路线。2026-09-10 用户明确要求战术规划维护自检后完成 R3、R4、R5；维护现已通过完整发布门，以该授权接受已审查的 R2 工程出口并进入 R3。R3-001/002 已逐项完成，D-021 已按用户明确授权接受；控制交接与军团总览维护 `WS-MAINT-20260910-003` 已通过 1487.349 秒完整门并 DONE；R3-003 已按 D-021 实施并通过1745.289秒完整门；D-022 已于2026-09-11由用户明确接受；左侧冷却显示维护已完成，R3-004 已通过 1575.107 秒完整门并 DONE，R3-005 已解锁。001 临时文档已按用户要求删除，契约和验收归档在第 12 节；002 完成记录见第 13 节。自动化仍只能标记为 `SIMULATED`，不得宣称已经证明真人理解或主观乐趣。D-021/D-022 均已接受；完整 R3/R4/R5 goal 尚未完成。
+解释：产品负责人于 2026-09-07 接受 R1 工程出口并通过 D-026 取消真人证据硬门，同时通过 D-027 将 R2-R7 重排为玩法优先路线。2026-09-10 用户明确要求战术规划维护自检后完成 R3、R4、R5；维护现已通过完整发布门，以该授权接受已审查的 R2 工程出口并进入 R3。R3-001/002 已逐项完成，D-021 已按用户明确授权接受；控制交接与军团总览维护 `WS-MAINT-20260910-003` 已通过 1487.349 秒完整门并 DONE；R3-003 已按 D-021 实施并通过1745.289秒完整门；D-022 已于2026-09-11由用户明确接受；左侧冷却显示维护已完成，R3-004 已通过 1575.107 秒完整门并 DONE，R3-005已通过最终686.300秒完整门；R3-006出口审查完成，当前仅解锁R4-001。001 临时文档已按用户要求删除，契约和验收归档在第 12 节；002 完成记录见第 13 节。自动化仍只能标记为 `SIMULATED`，不得宣称已经证明真人理解或主观乐趣。D-021/D-022 均已接受；完整 R3/R4/R5 goal 尚未完成。
 
 2026-09-07 已完成开发标准与路线重排：新建 `GAMEPLAY_REWORK_ROADMAP.md`，R2 从正式地图管线改为灰脊乐趣基准，后续依次处理卡牌战术语法、我方分层 AI、敌方行动 AI、第一章行动层与内容生产。旧扩充路线保留为架构和迁移参考，不再决定任务领取。
 
@@ -107,12 +114,12 @@ full_gate_command: >-
 | 存档 | 军团 v4（v1/v2/v3 保守迁移、备份及原子写入已验证）、教程 v2、试玩记录 v3；尚无战役行动图状态 |
 | 自动化 | 18 套 headless 测试、四关 smoke、逐关矩阵、72 案例早期窗口审计、灰脊 15 案例完整对局基线、五档分辨率矩阵 |
 | 反馈 | 战后双语问卷、本地 pending/sent、HTTP 临时收集服务、HTML/JSON/CSV 汇总；真人可用性未运行 |
-| 性能 | 2026-09-10 维护 003 发布门：80 实体模拟 P95 10.472 ms，通过；120 实体模拟 P95 15.429 ms，仅保留为压力测量 |
+| 性能 | 2026-09-13 R3最终门：80实体模拟P95 6.037ms；正式80实渲帧13.743ms、输入呈现107.407ms；120仅压力测量 |
 | 可选产品研究 | P6.7 与集中真人用例尚未执行；D-026 后不参与工程、阶段或发布门 |
 
 ## 3. 当前阶段目标
 
-2026-09-12 状态复核：R1/R2 已完成，维护项与 R3-001 至 R3-004 已完成。R3-005 的六卡内容和四种 typed 战法已接入，现有完整发布脚本 `artifacts/r3-005-release-final4.log` 在 1040.251 秒退出 0；但 `GameplayObservabilityReport._observe_events` 未消费新战术事件，`_record_supply_commitment` 仍复用同 tick 上下文，`AfterActionCardContribution` 未提供战术贡献字段。因此撤销此前错误的 DONE/出口解锁记录，恢复审查返工 REWORK；下一项仍为 R3-005。R3-006、R4、R5 尚未完成，整个用户目标未达成；此前 goal 工具的 complete 标记也是误操作，不能作为产品完成证据。
+2026-09-13 状态复核：共享增援冷却维护及R3-001至R3-006已完成。最终686.300秒发布门、双语五档、四关存档链和正式60/80实渲通过；606文件哈希复核变化0。R3工程出口已按用户R3/R4/R5继续授权接受，唯一下一项WS-R4-001（公平态势评估黑板）。R4/R5尚未实现完成，完整目标继续。下文带日期的中途返工和旧阻塞仅作历史，当前结论以本段、控制块及第19节为准。
 
 2026-09-10 活动目标：`WS-MAINT-20260910-002` 已完成战术暂停中的规划、右侧决策/底部军团与选项说明并通过完整自检；现在按独立工作项顺序推进 R3、R4、R5。本目标覆盖上述完整范围，不以 HUD 完成替代阶段完成。维护契约见 `work_items/WS-MAINT-20260910-002.md`，完整门 `1884.207s` PASS (`SIMULATED`)。R3-001/002 现已完成，R3-002 完整门 `1930.230s` PASS；旧记录中的“唯一 R2 审查入口”均为当时历史状态。D-021 已由用户接受，维护 003 已完整验证并 DONE，R3-003 已完成；D-022已接受，R3-004依赖满足，先处理新增的左侧冷却显示。
 
@@ -273,11 +280,11 @@ R2 的目标是建立灰脊玩法基准，不在本阶段批量增加地图、�
 ## 11. 下一次 AI 接手检查单
 
 1. 读取根目录 `AGENTS.md`、本文件控制块、D-026、D-027 与 `GAMEPLAY_REWORK_ROADMAP.md`；
-2. R2 出口已按用户继续授权接受，维护 001/002/003 与 R3-001/002/003 已完成；D-021/D-022 均已明确接受，不重复确认。左侧冷却维护已完成，继续 `WS-R3-004` 的性能返工与验证；
-3. R3 按第 14 节逐项执行，契约与当前验证日志在对应工作项中；不得同时实现兄弟任务或越过 D-021/D-022。完整活动 goal 包括维护自检后 R3、R4、R5，不能只完成 HUD 就结束；
+2. R3出口与共享冷却维护已完成；D-021/D-022均已接受，不重复确认。下一项为WS-R4-001，只从FactionSnapshot建立公平态势黑板；
+3. R4按第19节逐项执行，契约与当前验证日志在对应工作项中；不得同时实现兄弟任务或越过依赖。完整活动 goal 包括维护自检后 R3、R4、R5，不能只完成 HUD 就结束；
 4. 所有自主试玩、规则代理和自动化证据继续标记为 `SIMULATED`，但真人 `NOT_RUN` 不再阻塞；
 5. 若出现真人记录，可按构建哈希和原始记录审计为 `HUMAN` 可选研究，不改变工程完成状态；
-6. R2-001 至 R2-006 已建立并验证完整对局观测、只读态势叠层、高层意图/异常队列、因果复盘、差异策略空间和发布门；后续 R3 必须优先解决卡牌战术动词与同质化，不能把固定脚本策略外推为真人主观乐趣。
+6. R2-001 至 R2-006 已建立并验证完整对局观测、只读态势叠层、高层意图/异常队列、因果复盘、差异策略空间和发布门；R3已完成卡牌战术动词；R4继续方案与阶段任务图，不能把固定脚本策略外推为真人主观乐趣。
 7. Markdown 清理 `WS-MAINT-20260907-001` 已完成；`AI_HANDOFF.md` 已删除，历史/打包文档已明确保留边界，后续不得重新把归档文档声明为实时状态源。
 8. 决策区维护 `WS-MAINT-20260908-001` 已完成；后续若扩展异常动作，必须复用具名回执与统一命令管线，并保持撤离高于该将领的待执行自动指令。
 9. 指挥协同维护 `WS-MAINT-20260909-001` 已完成；将领撤离是安全集结而非永久退场，同将领整卡协同只消费合法阵营知识并服从玩家接管、侦察、撤离和撤退优先级；后续修改必须保留这些边界。
@@ -444,7 +451,7 @@ rollback: >-
 - 证据：`artifacts/maint-002-summary.json`、`artifacts/maint-002-release-final.log`、`artifacts/maint-002-focused-final2.log`、`artifacts/maint-002-ui-final2.log`、`artifacts/maint-002-evidence/`。第一次中止的发布门不计 PASS。
 - 无存档格式变化；合法知识、值拷贝、统一命令和 10 Hz 边界保持。diff 审查与 `git diff --check` 通过，无提交/推送/分支/PR。全部工程与视觉证据为 `SIMULATED`；真人理解与主观操作体验 `OPTIONAL_NOT_RUN (HUMAN)`。旧英文复盘重复 key 保留。
 
-## 14. R3 当前队列
+## 14. R3 已完成队列
 
 R2 出口审查已复核，用户“维护自检后完成 R3、R4、R5”的明确指令作为继续授权，未重复索取阶段顺序确认。产品决定方案见 `R3_ENTRY_REVIEW.md`；技术准备见 `R3_TACTICAL_GRAMMAR.md`。D-021 已于 2026-09-10 按用户要求接受，D-022 已于 2026-09-11 明确接受。
 
@@ -454,8 +461,8 @@ R2 出口审查已复核，用户“维护自检后完成 R3、R4、R5”的明�
 | WS-R3-002 | DONE (`SIMULATED`) | 首条效果注册器纵向切片 | R3-001 已满足 |
 | WS-R3-003 | DONE (`SIMULATED`) | composition 与安全存档兼容 | R3-002、D-021、维护 003 均满足 |
 | WS-R3-004 | DONE (`SIMULATED`) | 首批差异卡 | 1575.107 秒完整门、五档、生命周期、最终 60/80 实窗通过 |
-| WS-R3-005 | VERIFYING | 灰脊内容迁移 | 战后贡献和独立成本归因已接通，专项通过；完整门和实窗尚待验收 |
-| WS-R3-006 | BLOCKED | R3 出口 | 等待 R3-005 实际验收完成 |
+| WS-R3-005 | DONE (`SIMULATED`) | 灰脊内容迁移 | 686.300秒完整门、606文件哈希、双语五档、四关联动、正式60/80实渲全部通过 |
+| WS-R3-006 | DONE (`SIMULATED`) | R3 出口 | 606文件一致，契约、最终完整门和风险审查通过 |
 
 R3-001 已完成七类 typed Resource 与加载验证、无效内容拒绝和旧十二战法兼容。证据：`artifacts/r3-001-import.log`、`artifacts/r3-001-focused-final.log`、`artifacts/r3-001-tests.log`（18/18 PASS）。无运行行为或存档变化，本项按数据矩阵不额外重跑完整门。首次测试 fixture 外部 Resource 共享问题已用完整深复制修复，缓存污染断言保留。`git diff --check` 通过；证据均为 `SIMULATED`。
 
@@ -531,4 +538,25 @@ R3-004现已返回VERIFYING：artifacts/r3-004-rework-ui.log五档全部PASS，a
 
 R3-005已接通独立Supply来源/卡ID及战术贡献报告、typed DTO和中英复盘。五动作、同tick费用、有效压制封顶、隐藏事件污染、旧报告值拷贝、三战法改ID/改参数及中英UI专项PASS；最终18/18和编制存档专项PASS。完整发布脚本 `artifacts/r3-005-contributions-release.log` 1059.921秒退出0，30场完整对局质量与确定性、四关兼容、80实体、工具、Windows导出与包校验PASS。80实体模拟/表现更新P95 6.409/0.814ms；PCK SHA-256 `041F68E844D5907940E6CD4117B25CAF1851EFB78DCDF5A47CFD9D46FE629C65`。运行源码474文件哈希已记录并复核。详见工作项末尾；仍待五档/60-80实渲及四关联动实窗证据复核，R3-005保持VERIFYING、R3-006仍BLOCKED。以上为SIMULATED，HUMAN仍可选未运行。
 
-Git交接：用户已授权push，2026-09-12再次执行 `git add -A` 因 `.git/index.lock: Permission denied` 失败；提升权限申请被自动审批服务503拒绝。2026-09-13再次重试普通与提升权限均得到相同结果；未暂存、未产生新提交、未push，未绕过权限。当前HEAD仍为 `a1a876b`，保留全部工作区改动。当前环境未发现可执行的 Godot 命令，本轮未重复运行测试；后续需恢复Git写入与桌面验证环境，再提交推送并闭环实窗验收。
+Git交接：此前 `.git/index.lock` 权限与审批服务503阻塞已于2026-09-13在用户开放完整访问后解除。当前实现提交 `2cc0343` 与七个资源末尾空行修正 `b9a34a3` 已成功push到origin/main；远程引用已核对。已找到既有Godot 4.6.3安装，未将开发机路径写入运行代码。474文件冻结清单中467个逐字节一致，七个资源仅删除文件末尾空行；此前完整门行为证据仍有效。
+
+2026-09-13恢复实窗验收：五档矩阵 `artifacts/r3-005-ui-full-access.log` 全部通过，异常鼠标坐标未复现，左右补员入口同时置灰并显示30秒；正在追加中英冷却和战后贡献截图。五卡样板60/80实体15秒实渲 `artifacts/r3-005-render-full-access.json` PASS，80实体帧/模拟/输入呈现P95为10.767/7.254/103.006ms，150/150 tick、零路径失败；卡住事件7，不宣称全部恢复或480秒长局通过。四关连续实窗尚在执行；维护回到VERIFYING，R3-005保持VERIFYING，不提前解锁出口。
+
+## 19. R3出口与R4当前队列
+
+2026-09-13：增援共享冷却维护及WS-R3-005、WS-R3-006均DONE。最终完整门686.300秒、两轮18/18、Legacy/四关、72案例、30场完整对局、反馈工具、Windows导出及包校验全部PASS。606文件哈希复核变化0，完整策略指纹保持4fb412b52bca4e5aee0f659694f5b7e9ab086c1b570571d5890f329b2030855f。完整审查见[WS-R3-006](work_items/WS-R3-006.md)。
+
+双语五档通过，左右补员同步致灰/倒计时、暂停、AI交接、六卡及十二卡总览和战后贡献均覆盖；英文标题撑宽左栏问题已修复。四关实窗链4次结算、补充3人、荣誉/累计损失保持，四场失败仅作流程证据。正式60/80实体15秒实渲帧P95 12.601/13.743ms，80输入呈现107.407ms、模拟5.808ms，150/150tick，路径失败0。80卡住事件30、恢复峰值7，未证明全部恢复或480秒长局；tasks_completed=0由R4阶段任务图继续处理。固定脚本过拟合与真人理解未知保留，HUMAN研究OPTIONAL_NOT_RUN。全部工程证据为SIMULATED。
+
+证据：artifacts/r3-005-final-evidence/、artifacts/r3-005-summary.json；PCK 6311428 bytes / B41CA543B86845DF57178D0877C84CFCA6AF974A42E1E3DBCF58320CBD82AB70。最终修复与正常状态文档待本次提交推送；此前2cc0343和b9a34a3已在origin/main。用户已授权push，权限阻塞已经解除。
+
+| ID | 状态 | 工作项 | 依赖 |
+|---|---|---|---|
+| WS-R4-001 | READY | 公平态势评估黑板 | R3出口已满足 |
+| WS-R4-002 | BLOCKED | 行动方案定义、生成与效用比较 | R4-001 |
+| WS-R4-003 | BLOCKED | 参谋方案比较与玩家确认UI | R4-002 |
+| WS-R4-004 | BLOCKED | 将领阶段化任务图 | R4-002，按队列先完成003 |
+| WS-R4-005 | BLOCKED | 预备队、增援、撤退与受阻重规划 | R4-004 |
+| WS-R4-006 | BLOCKED | R4阶段出口 | R4-003、R4-005 |
+
+用户已授权按独立工作项完成R3/R4/R5，本次R3工程出口审查通过后仅解锁R4-001；R4和R5尚未完成。临时WS-MAINT-20260910-001文档保持删除，契约仍在第12节，不另建交接文档。
