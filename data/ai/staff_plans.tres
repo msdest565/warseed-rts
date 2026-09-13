@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="StaffPlanCatalog" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://src/data/staff_plan_catalog.gd" id="1"]
+[ext_resource type="Script" path="res://src/data/staff_plan_profile.gd" id="2"]
+
+[sub_resource type="Resource" id="Direct"]
+script = ExtResource("2")
+profile_id = &"direct_commitment"
+kind = 0
+name_key = &"STAFF_PLAN_DIRECT"
+force_percent = 100
+risk_weight = 1
+permits_reserve_deployment = true
+
+[sub_resource type="Resource" id="Recon"]
+script = ExtResource("2")
+profile_id = &"reconnaissance_first"
+kind = 1
+name_key = &"STAFF_PLAN_RECON"
+force_percent = 50
+preparation_ticks = 50
+risk_weight = 3
+
+[sub_resource type="Resource" id="Flank"]
+script = ExtResource("2")
+profile_id = &"flanking_advance"
+kind = 2
+name_key = &"STAFF_PLAN_FLANK"
+force_percent = 75
+preparation_ticks = 20
+risk_weight = 2
+
+[resource]
+script = ExtResource("1")
+profiles = Array[ExtResource("2")]([SubResource("Direct"), SubResource("Recon"), SubResource("Flank")])

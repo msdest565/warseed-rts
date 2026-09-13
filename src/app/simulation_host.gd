@@ -77,6 +77,10 @@ func get_staff_assessment() -> StaffSituationSnapshot:
 	return StaffSituationAssessor.new().assess(current_snapshot, SimulationWorld.LOCAL_PLAYER_ID)
 
 
+func get_staff_plans(request: StaffPlanRequest) -> StaffPlanSet:
+	return StaffPlanGenerator.new().generate(current_snapshot, SimulationWorld.LOCAL_PLAYER_ID, request)
+
+
 func is_tactical_paused() -> bool:
 	return _tactical_paused
 
