@@ -33,4 +33,3 @@ production_ticks = 40
 sight_range = 260.0
 combat = SubResource("Combat")
 tactical_weapon = SubResource("Weapon")
-

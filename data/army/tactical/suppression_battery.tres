@@ -29,4 +29,3 @@ unit_definition_id = &"suppression_vehicle"
 supply_cost = 3
 deployment_ticks = 80
 tactical_ability = SubResource("Ability")
-
