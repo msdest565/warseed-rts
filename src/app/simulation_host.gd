@@ -72,6 +72,11 @@ func _process(delta: float) -> void:
 		advance_tick()
 
 
+func get_staff_assessment() -> StaffSituationSnapshot:
+	# Use the same published, faction-filtered input as the HUD. No world access.
+	return StaffSituationAssessor.new().assess(current_snapshot, SimulationWorld.LOCAL_PLAYER_ID)
+
+
 func is_tactical_paused() -> bool:
 	return _tactical_paused
 
