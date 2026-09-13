@@ -98,6 +98,7 @@ func _run_resolution(resolution: Vector2i) -> void:
 		return
 
 	await _validate_battlefield(game, viewport_rect)
+	await _verify_staff_plans(game, resolution)
 	await _verify_tactical_planning(game, resolution)
 	await _verify_contextual_card_decisions(game, resolution, viewport_rect)
 	await _verify_control_handoff(game, resolution)
@@ -250,6 +251,91 @@ func _position_physical_pointer(point: Vector2) -> void:
 		await _wait_frames(4)
 	root.warp_mouse(point)
 	await _wait_frames(2)
+
+
+func _verify_staff_plans(game: GameRoot, resolution: Vector2i) -> void:
+	var host := game.simulation_host
+	var desk := game.command_desk
+	var panel := desk.staff_plan_panel
+	var was_paused := host.is_tactical_paused()
+	host.set_tactical_paused(true)
+	await _wait_frames(3)
+	for locale in ["en", "zh_CN"]:
+		TranslationServer.set_locale(locale)
+		game._on_language_changed(locale)
+		await _wait_frames(4)
+		for label in [desk.commander_label, desk.objective_label, desk.axis_label, desk.risk_label, desk.reserve_label]:
+			if label.visible == desk._compact:
+				_fail("localized intent field labels must preserve the compact layout")
+		await _click_control(desk.staff_plan_button)
+		await _wait_frames(8)
+		if not panel.visible or not host.is_tactical_paused() or panel.current_plans == null:
+			_fail("staff comparison must open from the normal decision button with alternatives")
+			return
+		if panel.title_label.text == "STAFF_TITLE":
+			_fail("staff title is not localized")
+		_expect_no_horizontal_scroll(panel.scroll, "staff plan comparison")
+		for button in panel._approve_buttons:
+			panel.scroll.ensure_control_visible(button)
+			await _wait_frames(4)
+			if button.get_global_rect().intersection(panel.scroll.get_global_rect()).size.y < 30:
+				_fail("each staff approval button must be reachable")
+			button.grab_focus()
+			if panel.gui_get_focus_owner() != button:
+				_fail("staff approval must accept keyboard focus")
+		panel.scroll.scroll_vertical = 0
+		await _wait_frames(4)
+		await _save_screenshot(resolution, "staff_plans_" + locale)
+		var old_tick := host.current_snapshot.tick
+		panel.budget.value = 1
+		if panel.current_plans != null:
+			_fail("editing staff conditions must invalidate old alternatives")
+		await _click_popup_control(panel, panel.generate_button)
+		if panel.current_plans == null or panel.current_plans.request.max_supply_cost != 1:
+			_fail("staff request edits must regenerate plans")
+		await _click_popup_control(panel, panel.reject_button)
+		if panel.visible or host.current_snapshot.tick != old_tick or not host.is_tactical_paused():
+			_fail("rejecting staff suggestions must preserve paused battle: visible=%s tick=%d/%d pause=%s reject=%s popup=%s" % [panel.visible,host.current_snapshot.tick,old_tick,host.is_tactical_paused(),panel.reject_button.get_global_rect(),panel.size])
+	# Approve while paused: queue and published authority must remain distinct.
+	await _click_control(desk.staff_plan_button)
+	await _wait_frames(8)
+	if panel.current_plans == null:
+		_fail("staff approval requires alternatives")
+		return
+	await _click_popup_control(panel, panel._approve_buttons[0])
+	if panel.visible or panel.pending_command_id == 0:
+		_fail("staff approval must close with a pending command")
+	if not host.current_snapshot.staff_plan_decisions.is_empty():
+		_fail("paused approval cannot publish an applied decision")
+	host.set_tactical_paused(false)
+	host.advance_tick()
+	host.set_tactical_paused(true)
+	await _wait_frames(5)
+	if panel.pending_command_id != 0 or host.current_snapshot.staff_plan_decisions.is_empty() or not host.current_snapshot.staff_plan_decisions[0].accepted:
+		_fail("staff approval must receive its authority snapshot after resuming")
+	await _save_screenshot(resolution, "staff_plan_approved")
+	desk.staff_plan_status.visible = false
+	host.set_tactical_paused(was_paused)
+
+
+func _click_popup_control(panel: StaffPlanPanel, button: Button) -> void:
+	if not panel.is_ancestor_of(button):
+		_fail("invalid staff popup control")
+		return
+	if panel.scroll.is_ancestor_of(button):
+		panel.scroll.ensure_control_visible(button)
+	await _wait_frames(5)
+	var point := button.get_global_rect().get_center() + Vector2(panel.position)
+	var presses: Array[int] = []
+	var observe_press := func() -> void: presses.append(1)
+	button.pressed.connect(observe_press)
+	# Route through root input so Godot targets the embedded popup itself.
+	# Button rectangles are popup-local; the input router needs root coordinates.
+	await _click_position(point)
+	if presses.size() != 1:
+		_fail("staff popup mouse click must activate exactly once: %s (%d)" % [button.text, presses.size()])
+	if is_instance_valid(button):
+		button.pressed.disconnect(observe_press)
 
 
 func _verify_control_handoff(game: GameRoot, resolution: Vector2i) -> void:

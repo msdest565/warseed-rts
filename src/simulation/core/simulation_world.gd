@@ -160,6 +160,7 @@ var _next_unit_id: int = 1100
 var _next_formation_id: int = 2
 var _next_building_id: int = FIRST_CONSTRUCTED_BUILDING_ID
 var _next_command_id: int = 1
+var staff_plan_system := StaffPlanSystem.new()
 var _next_task_id: int = 1
 var _last_friendly_autonomy_tick: int = -FRIENDLY_AUTONOMY_INTERVAL_TICKS
 var _next_enemy_strategic_decision_tick: int = 0
@@ -896,7 +897,7 @@ func submit_command(command: GameCommand) -> CommandValidationResult:
 			if commander_order.order_kind == CommanderOrderCommand.OrderKind.SET_POSTURE \
 					and commander_order.posture == CommanderState.Posture.DISENGAGE:
 				_cancel_pending_commander_automation(commander_order.commander_id)
-		command_queue.enqueue(command)
+		command_queue.enqueue(command.duplicate_value() if command is StaffPlanApprovalCommand else command)
 		event_kind = SimulationEvent.Kind.COMMAND_ACCEPTED
 	events.append(SimulationEvent.new(current_tick, event_kind, command.target_entity_id, result.describe()))
 	metrics.record_events(events, event_start)
@@ -919,6 +920,11 @@ func validate_command(command: GameCommand) -> CommandValidationResult:
 	# refreshed immediately before agent evaluation.
 	if not _is_advancing_tick:
 		_update_faction_knowledge()
+	if command is StaffPlanApprovalCommand:
+		for queued in command_queue.snapshot():
+			if queued is StaffPlanApprovalCommand and queued.issuer_id == command.issuer_id:
+				return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.TASK_CONFLICT)
+		return staff_plan_system.validate(self, command as StaffPlanApprovalCommand)
 	var result := tactical_ability_system.validate(self, command as TacticalAbilityCommand) if command is TacticalAbilityCommand else command_validator.validate(command, units, _battlefield_bounds(), pathfinder, formations, buildings, ore_fields, factions, UNIT_CATALOG, BUILDING_CATALOG, faction_knowledge, logic_grid, tasks, unit_cards, strategic_regions, commanders, doctrine_definitions, battle_definition)
 	if result.is_accepted() and command is CommanderOrderCommand:
 		result = _validate_resolved_commander_objective(command as CommanderOrderCommand)
@@ -2716,7 +2722,7 @@ func create_true_state_snapshot() -> WorldSnapshot:
 	for faction_id in faction_ids:
 		faction_snapshots.append(FactionSnapshot.new(factions[faction_id] as FactionState))
 	var task_snapshots := _create_task_snapshots()
-	return WorldSnapshot.new(current_tick, unit_snapshots, formation_snapshots, projectile_snapshots, metrics.create_snapshot(), faction_snapshots, building_snapshots, ore_snapshots, 0, null, true, task_snapshots, MissionSnapshot.new(mission_state), _create_commander_snapshots(), _create_unit_card_snapshots(), _create_strategic_region_snapshots(), _create_intel_report_snapshots(), _create_enemy_reaction_snapshots(), objective_system.create_snapshots(), battle_outcome)
+	return WorldSnapshot.new(current_tick, unit_snapshots, formation_snapshots, projectile_snapshots, metrics.create_snapshot(), faction_snapshots, building_snapshots, ore_snapshots, 0, null, true, task_snapshots, MissionSnapshot.new(mission_state), _create_commander_snapshots(), _create_unit_card_snapshots(), _create_strategic_region_snapshots(), _create_intel_report_snapshots(), _create_enemy_reaction_snapshots(), objective_system.create_snapshots(), battle_outcome, staff_plan_system.create_snapshots(0))
 
 
 func create_snapshot(faction_id: int = LOCAL_PLAYER_ID) -> WorldSnapshot:
@@ -2781,7 +2787,7 @@ func create_faction_snapshot(faction_id: int) -> WorldSnapshot:
 		var ore_field := ore_fields[ore_id] as OreFieldState
 		if knowledge.get_cell_state(logic_grid.world_to_cell(ore_field.position)) != FactionKnowledge.CellState.UNEXPLORED:
 			ore_snapshots.append(OreFieldSnapshot.new(ore_field))
-	return WorldSnapshot.new(current_tick, unit_snapshots, formation_snapshots, projectile_snapshots, metrics.create_snapshot(), faction_snapshots, building_snapshots, ore_snapshots, faction_id, FactionKnowledgeSnapshot.new(knowledge), false, _create_task_snapshots(), MissionSnapshot.new(mission_state), _create_commander_snapshots(faction_id), _create_unit_card_snapshots(faction_id), _create_strategic_region_snapshots(), _create_intel_report_snapshots(faction_id), [], objective_system.create_snapshots(), battle_outcome)
+	return WorldSnapshot.new(current_tick, unit_snapshots, formation_snapshots, projectile_snapshots, metrics.create_snapshot(), faction_snapshots, building_snapshots, ore_snapshots, faction_id, FactionKnowledgeSnapshot.new(knowledge), false, _create_task_snapshots(), MissionSnapshot.new(mission_state), _create_commander_snapshots(faction_id), _create_unit_card_snapshots(faction_id), _create_strategic_region_snapshots(), _create_intel_report_snapshots(faction_id), [], objective_system.create_snapshots(), battle_outcome, staff_plan_system.create_snapshots(faction_id))
 
 
 func _create_task_snapshots() -> Array[TaskSnapshot]:
@@ -4628,6 +4634,9 @@ func _refresh_unit_card_control_states() -> void:
 
 
 func _apply_command(command: GameCommand) -> void:
+	if command is StaffPlanApprovalCommand:
+		staff_plan_system.apply(self, command as StaffPlanApprovalCommand)
+		return
 	if _is_direct_player_order(command) or command is UnitCardControlCommand or command is CommanderOrderCommand:
 		tactical_ability_system.cancel_for_order(self, command)
 	if command is TacticalAbilityCommand:

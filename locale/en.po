@@ -2848,3 +2848,93 @@ msgstr "Action executed: %s"
 
 msgid "AFTER_ACTION_TACTICAL_ACTION_INTERRUPTED"
 msgstr "Action interrupted: %s"
+
+msgid "STAFF_OPEN"
+msgstr "Compare staff plans"
+
+msgid "STAFF_TITLE"
+msgstr "Staff plans"
+
+msgid "STAFF_COMPARE_HINT"
+msgstr "Compare forces, costs and risks. Scores guide comparison; strategic routes still require movement checks."
+
+msgid "STAFF_OBJECTIVE"
+msgstr "Objective"
+
+msgid "STAFF_BUDGET"
+msgstr "Deployment Supply limit"
+
+msgid "STAFF_RISK_PREFERENCE"
+msgstr "Risk preference"
+
+msgid "STAFF_RISK_LOW"
+msgstr "Risk tolerant"
+
+msgid "STAFF_RISK_MEDIUM"
+msgstr "Balanced"
+
+msgid "STAFF_RISK_HIGH"
+msgstr "Cautious"
+
+msgid "STAFF_ALLOWED_CARDS"
+msgstr "Allowed cards (manual and returning cards stay protected)"
+
+msgid "STAFF_GENERATE"
+msgstr "Generate plans"
+
+msgid "STAFF_REJECT"
+msgstr "Reject suggestions / Close"
+
+msgid "STAFF_CHOOSE"
+msgstr "Compare before choosing. The highest score is never approved automatically."
+
+msgid "STAFF_EDITED"
+msgstr "Conditions changed. Generate new plans."
+
+msgid "STAFF_NO_ALTERNATIVES"
+msgstr "These conditions do not support two different plans. Adjust the objective or allowed cards."
+
+msgid "STAFF_PLAN_DIRECT"
+msgstr "Concentrated commitment"
+
+msgid "STAFF_PLAN_RECON"
+msgstr "Reconnaissance first"
+
+msgid "STAFF_PLAN_FLANK"
+msgstr "Flanking advance"
+
+msgid "STAFF_PLAN_SUMMARY"
+msgstr "Committed %d · Reserve %d\nDeployment Supply %d · Preparation %.1f s\nRisk index %d · Comparison score %d"
+
+msgid "STAFF_ASSIGNMENT"
+msgstr "%s · %d troops · %s\nAxis: %s"
+
+msgid "STAFF_ROLE_0"
+msgstr "Advance"
+
+msgid "STAFF_ROLE_1"
+msgstr "Reconnaissance"
+
+msgid "STAFF_ROLE_2"
+msgstr "Flank"
+
+msgid "STAFF_RISK_COMPONENTS"
+msgstr "Known threat %d · Uncertainty %d · Readiness gaps %d"
+
+msgid "STAFF_APPROVE"
+msgstr "Approve this plan"
+
+msgid "STAFF_QUEUED"
+msgstr "Plan queued. Resume the battle to confirm."
+
+msgid "STAFF_APPROVED"
+msgstr "Plan approved, awaiting execution."
+
+msgid "STAFF_APPROVAL_FAILED"
+msgstr "Plan approval failed: %s"
+
+msgid "STAFF_REJECTED"
+msgstr "Suggestions rejected. Unit orders are unchanged."
+
+msgid "REASON_STAFF_PLAN_STALE"
+msgstr "Situation or plan changed; generate new plans"

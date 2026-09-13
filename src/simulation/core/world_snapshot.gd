@@ -21,6 +21,7 @@ var intel_reports: Array[IntelReportSnapshot]
 var enemy_reactions: Array[EnemyReactionSnapshot]
 var objectives: Array[ObjectiveSnapshot]
 var outcome: BattleOutcome
+var staff_plan_decisions: Array[StaffPlanDecisionSnapshot] = []
 
 
 func _init(
@@ -43,7 +44,8 @@ func _init(
 	new_intel_reports: Array[IntelReportSnapshot] = [],
 	new_enemy_reactions: Array[EnemyReactionSnapshot] = [],
 	new_objectives: Array[ObjectiveSnapshot] = [],
-	new_outcome: BattleOutcome = null
+	new_outcome: BattleOutcome = null,
+	new_staff_plan_decisions: Array[StaffPlanDecisionSnapshot] = []
 ) -> void:
 	tick = new_tick
 	units = new_units
@@ -65,6 +67,8 @@ func _init(
 	enemy_reactions = new_enemy_reactions
 	objectives = new_objectives
 	outcome = new_outcome.duplicate_value() if new_outcome != null else BattleOutcome.new()
+	for decision in new_staff_plan_decisions:
+		staff_plan_decisions.append(decision.duplicate_value())
 
 
 func get_objective(objective_id: StringName) -> ObjectiveSnapshot:

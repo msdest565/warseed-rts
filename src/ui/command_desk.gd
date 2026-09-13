@@ -59,9 +59,28 @@ var _row_insert_index: int = 0
 var _targeting_decision: CardActionSnapshot
 var _card_receipt := ""
 var _card_receipt_until: int = -1
+var staff_plan_button: Button
+var staff_plan_status: Label
+var staff_plan_panel: StaffPlanPanel
 
 
 func _ready() -> void:
+	staff_plan_button = Button.new()
+	staff_plan_button.clip_text = true
+	staff_plan_button.custom_minimum_size.y = 30
+	$Intent.add_child(staff_plan_button)
+	staff_plan_status = Label.new()
+	staff_plan_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	staff_plan_status.add_theme_font_size_override("font_size", 11)
+	staff_plan_status.visible = false
+	$Intent.add_child(staff_plan_status)
+	staff_plan_panel = StaffPlanPanel.new()
+	add_child(staff_plan_panel)
+	staff_plan_button.pressed.connect(func() -> void:
+		staff_plan_panel.open_plans(simulation_host, StringName(_selected_metadata(objective_selector, &""))))
+	staff_plan_panel.status_changed.connect(func(message: String) -> void:
+		staff_plan_status.text = message
+		staff_plan_status.visible = true)
 	apply_button.pressed.connect(_submit_intent)
 	cancel_button.pressed.connect(_cancel_intent)
 	guide_button.pressed.connect(_show_guide)
@@ -73,6 +92,8 @@ func _ready() -> void:
 	objective_selector.item_selected.connect(_preview_selected_objective.unbind(1))
 	axis_selector.item_selected.connect(_preview_selected_axis.unbind(1))
 	mouse_exited.connect(_clear_decision_preview)
+	_compact_initialized = false
+	set_compact(_compact)
 	_populate_static_options()
 	refresh_locale()
 
@@ -103,6 +124,10 @@ func configure(host: SimulationHost, input: InputController, camera: CameraContr
 
 
 func reset_decision_session() -> void:
+	if staff_plan_panel != null:
+		staff_plan_panel.reset_session()
+	if staff_plan_status != null:
+		staff_plan_status.visible = false
 	_loaded_intent_id = &""
 	for selector in [commander_selector, objective_selector, axis_selector]:
 		if selector != null:
@@ -135,18 +160,24 @@ func update_command_situation(snapshot: WorldSnapshot, command_situation: Comman
 
 
 func set_compact(compact: bool) -> void:
+	if intent_title == null:
+		_compact = compact
+		return
 	if _compact_initialized and _compact == compact:
 		return
 	_compact_initialized = true
 	_compact = compact
+	$Intent.add_theme_constant_override("separation", 2 if compact else 3)
 	$Intent.custom_minimum_size.x = 0.0
 	$Exceptions.custom_minimum_size.x = 0.0
 	$Intent.size_flags_vertical = Control.SIZE_FILL
 	$Exceptions.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	$Intent/Selectors.columns = 2
+	$Intent/Selectors.columns = 3 if compact else 2
+	if approval_hint != null:
+		approval_hint.visible = not compact
 	for field in [commander_label, objective_label, axis_label, risk_label, reserve_label]:
 		if field != null:
-			field.visible = true
+			field.visible = not compact
 	for selector in [commander_selector, objective_selector, axis_selector, risk_selector, reserve_selector]:
 		if selector == null:
 			continue
@@ -160,6 +191,10 @@ func set_compact(compact: bool) -> void:
 func refresh_locale() -> void:
 	if intent_title == null:
 		return
+	if staff_plan_button != null:
+		staff_plan_button.text = GameText.t(&"STAFF_OPEN")
+	if staff_plan_panel != null:
+		staff_plan_panel.refresh_locale()
 	intent_title.text = GameText.t(&"COMMAND_DESK_INTENT_TITLE")
 	approval_hint.text = GameText.t(&"TACTICAL_APPROVAL_HINT")
 	commander_label.text = GameText.t(&"COMMAND_DESK_COMMANDER")
@@ -168,7 +203,7 @@ func refresh_locale() -> void:
 	risk_label.text = GameText.t(&"COMMAND_DESK_RISK")
 	reserve_label.text = GameText.t(&"COMMAND_DESK_RESERVE")
 	for label in [commander_label, objective_label, axis_label, risk_label, reserve_label]:
-		label.visible = true
+		label.visible = not _compact
 	commander_selector.tooltip_text = ""
 	objective_selector.tooltip_text = ""
 	axis_selector.tooltip_text = ""

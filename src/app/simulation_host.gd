@@ -81,6 +81,17 @@ func get_staff_plans(request: StaffPlanRequest) -> StaffPlanSet:
 	return StaffPlanGenerator.new().generate(current_snapshot, SimulationWorld.LOCAL_PLAYER_ID, request)
 
 
+func approve_staff_plan(request: StaffPlanRequest, plan: StaffCourseOfAction) -> CommandValidationResult:
+	if plan == null:
+		return CommandValidationResult.new(CommandValidationResult.Status.REJECTED, CommandValidationResult.Reason.INVALID_TARGET)
+	return submit_command(create_staff_plan_approval_command(request, plan))
+
+
+func create_staff_plan_approval_command(request: StaffPlanRequest, plan: StaffCourseOfAction) -> StaffPlanApprovalCommand:
+	return StaffPlanApprovalCommand.new(world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID,
+		current_snapshot.tick, request, plan.profile_id, plan.fingerprint())
+
+
 func is_tactical_paused() -> bool:
 	return _tactical_paused
 

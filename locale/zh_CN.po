@@ -2787,3 +2787,93 @@ msgstr "动作执行：%s"
 
 msgid "AFTER_ACTION_TACTICAL_ACTION_INTERRUPTED"
 msgstr "动作中断：%s"
+
+msgid "STAFF_OPEN"
+msgstr "比较参谋方案"
+
+msgid "STAFF_TITLE"
+msgstr "参谋方案"
+
+msgid "STAFF_COMPARE_HINT"
+msgstr "比较兵力、代价与风险。评分是参考；路线为战略方向，行进时仍需检验。"
+
+msgid "STAFF_OBJECTIVE"
+msgstr "目标地区"
+
+msgid "STAFF_BUDGET"
+msgstr "部署 Supply 上限"
+
+msgid "STAFF_RISK_PREFERENCE"
+msgstr "风险偏好"
+
+msgid "STAFF_RISK_LOW"
+msgstr "愿意冒险"
+
+msgid "STAFF_RISK_MEDIUM"
+msgstr "均衡"
+
+msgid "STAFF_RISK_HIGH"
+msgstr "谨慎"
+
+msgid "STAFF_ALLOWED_CARDS"
+msgstr "允许使用的部队卡（手控及归队中部队仍受保护）"
+
+msgid "STAFF_GENERATE"
+msgstr "重新生成方案"
+
+msgid "STAFF_REJECT"
+msgstr "拒绝本次建议 / 关闭"
+
+msgid "STAFF_CHOOSE"
+msgstr "请比较后选择；不会自动批准排名最高的方案。"
+
+msgid "STAFF_EDITED"
+msgstr "条件已修改，请重新生成方案。"
+
+msgid "STAFF_NO_ALTERNATIVES"
+msgstr "当前条件不足以形成两个不同方案。请调整目标或允许的部队。"
+
+msgid "STAFF_PLAN_DIRECT"
+msgstr "集中投入"
+
+msgid "STAFF_PLAN_RECON"
+msgstr "先侦察后推进"
+
+msgid "STAFF_PLAN_FLANK"
+msgstr "侧翼推进"
+
+msgid "STAFF_PLAN_SUMMARY"
+msgstr "投入 %d 人 · 预备 %d 人\n部署 Supply %d · 准备 %.1f 秒\n风险指标 %d · 比较评分 %d"
+
+msgid "STAFF_ASSIGNMENT"
+msgstr "%s · %d 人 · %s\n方向：%s"
+
+msgid "STAFF_ROLE_0"
+msgstr "推进"
+
+msgid "STAFF_ROLE_1"
+msgstr "先行侦察"
+
+msgid "STAFF_ROLE_2"
+msgstr "侧翼"
+
+msgid "STAFF_RISK_COMPONENTS"
+msgstr "已知威胁 %d · 情报不足 %d · 战备缺口 %d"
+
+msgid "STAFF_APPROVE"
+msgstr "批准此方案"
+
+msgid "STAFF_QUEUED"
+msgstr "方案已入队，等待恢复战场后确认。"
+
+msgid "STAFF_APPROVED"
+msgstr "方案已批准，等待执行。"
+
+msgid "STAFF_APPROVAL_FAILED"
+msgstr "方案未获批准：%s"
+
+msgid "STAFF_REJECTED"
+msgstr "已拒绝本次建议，部队命令未改变。"
+
+msgid "REASON_STAFF_PLAN_STALE"
+msgstr "战况或方案已变化，请重新生成"

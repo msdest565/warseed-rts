@@ -45,6 +45,7 @@ enum Reason {
 	LOW_ORGANIZATION,
 	RESUPPLY_NOT_NEEDED,
 	TACTICAL_UNSAFE,
+	STAFF_PLAN_STALE,
 }
 
 var status: Status
