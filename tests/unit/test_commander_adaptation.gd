@@ -12,6 +12,7 @@ func run() -> Array[String]:
 	_test_retreat(failures)
 	_test_boundaries(failures)
 	_test_dependencies_and_policy(failures)
+	_test_deployed_reserve(failures)
 	return failures
 
 func _world() -> SimulationWorld:
@@ -184,3 +185,24 @@ func _test_dependencies_and_policy(failures: Array[String]) -> void:
 	world.advance_tick()
 	world.advance_tick()
 	_expect(recon.lifecycle != Life.BLOCKED and graph.replan_count == graph.adaptation_policy.max_replans, "dependency recovery actually applied without resetting quota", failures)
+
+func _test_deployed_reserve(failures: Array[String]) -> void:
+	var world := SimulationWorld.new(true, false, SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var request := TestStaffPlans.request()
+	for plan in StaffPlanGenerator.new().generate(world.create_snapshot(), 1, request).plans:
+		if plan.profile_id == &"reconnaissance_first":
+			world.submit_command(StaffPlanApprovalCommand.new(world.allocate_command_id(),1,0,request,plan.profile_id,plan.fingerprint()))
+	for _tick in range(35): world.advance_tick()
+	_damage(world, &"falcon_recon_group",5)
+	var command := _proposal(world,Action.COMMIT_RESERVE)
+	_expect(command != null and command.target_card_id == &"ironwall_assault_group", "already deployed approved reserve usable without deployment budget",failures)
+	if command == null: return
+	var old_supply := world.create_snapshot().get_faction(1).supply
+	_expect(world.submit_command(command).is_accepted(),"deployed reserve request accepted",failures)
+	world.advance_tick()
+	var graph := world.commander_task_graph_system._graph
+	var muster := graph.get_node(&"ironwall_assault_group/muster")
+	_expect(muster != null and not muster.requires_deployment and graph.adaptation_budget_remaining == 0 and world.create_snapshot().get_faction(1).supply == old_supply,"deployed reserve is assigned without charging second deployment",failures)
+	_expect(muster.target_position.distance_to(world.create_snapshot().get_unit_card(command.target_card_id).center_position)<100, "deployed reserve musters where it already is",failures)
+	for _tick in range(10): world.advance_tick()
+	_expect(muster.task_id > 0,"deployed reserve actually receives task",failures)

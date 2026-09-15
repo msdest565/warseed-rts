@@ -41,7 +41,7 @@ func apply(world: SimulationWorld, owner: CommanderTaskGraphSystem, graph: Comma
 			reason = &"COMMANDER_ADAPT_REINFORCED"
 		Action.COMMIT_RESERVE:
 			var card := world.create_commander_task_snapshot(graph.faction_id).get_unit_card(command.target_card_id)
-			cost = card.supply_cost
+			cost = card.supply_cost if card.deployment_state == UnitCardState.DeploymentState.RESERVE else 0
 			_append_reserve(world, graph, card)
 			graph.reserve_card_ids.erase(card.definition_id)
 			graph.reserve_commits += 1
@@ -103,15 +103,17 @@ func _append_reserve(world: SimulationWorld, graph: CommanderTaskGraphSnapshot, 
 		node.card_id = card.definition_id
 		node.commander_id = card.commander_definition_id
 		node.phase = stage.phase
-		node.baseline_strength = card.available_strength
+		node.baseline_strength = card.available_strength if card.deployment_state == UnitCardState.DeploymentState.RESERVE else card.current_strength
 		node.timeout_ticks = stage.timeout_ticks
 		node.dwell_ticks = stage.dwell_ticks
 		node.arrival_radius = stage.arrival_radius
 		node.earliest_tick = world.current_tick
 		node.changed_tick = world.current_tick
 		node.target_position = safe_position if stage.phase in [Phase.MUSTER, Phase.RETREAT] else objective.position
+		if stage.phase == Phase.MUSTER and card.deployment_state == UnitCardState.DeploymentState.DEPLOYED:
+			node.target_position = card.center_position
 		node.route_points = PackedVector2Array([node.target_position])
-		node.requires_deployment = stage.phase == Phase.MUSTER
+		node.requires_deployment = stage.phase == Phase.MUSTER and card.deployment_state == UnitCardState.DeploymentState.RESERVE
 		node.supply_cost = card.supply_cost if node.requires_deployment else 0
 		node.is_required = stage.phase != Phase.RECON
 		for prerequisite in stage.prerequisite_ids:

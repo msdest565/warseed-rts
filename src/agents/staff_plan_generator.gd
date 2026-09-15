@@ -78,7 +78,12 @@ func _generate_profile(snapshot: WorldSnapshot, board: StaffSituationSnapshot, r
 		return null
 	var axis: StrategicRegionSnapshot
 	if profile.kind == StaffPlanProfile.Kind.FLANK:
-		axis = _flank_axis(snapshot, objective, available[0].position)
+		var weighted_origin := Vector2.ZERO
+		var total_strength := 0
+		for card in available:
+			weighted_origin += card.position * card.current_strength
+			total_strength += card.current_strength
+		axis = _flank_axis(snapshot, objective, weighted_origin / maxi(1, total_strength))
 		if axis == null:
 			return null
 	var plan := StaffCourseOfAction.new()
@@ -107,7 +112,16 @@ func _generate_profile(snapshot: WorldSnapshot, board: StaffSituationSnapshot, r
 			plan.reserve_card_ids.append(card.card_id)
 			plan.reserve_strength += card.available_strength
 	plan.assignments.sort_custom(func(a: StaffPlanAssignment, b: StaffPlanAssignment) -> bool: return String(a.card_id) < String(b.card_id))
-	plan.reserve_card_ids.sort()
+	if axis != null:
+		# Stage along our own rear before crossing to the selected flank.
+		var rear := _reserve_origin(snapshot, board.observer_faction_id)
+		plan.route_distance = 0.0
+		for assignment in plan.assignments:
+			var origin := assignment.route_points[0]
+			assignment.route_points = PackedVector2Array([origin, Vector2(origin.x, rear.y), Vector2(axis.position.x, rear.y), axis.position, objective.position])
+			for route_index in range(1, assignment.route_points.size()):
+				plan.route_distance += assignment.route_points[route_index - 1].distance_to(assignment.route_points[route_index])
+	plan.reserve_card_ids.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
 	_score(plan, board, objective, profile, request)
 	return plan
 
@@ -183,7 +197,7 @@ func _score(plan: StaffCourseOfAction, board: StaffSituationSnapshot, objective:
 	plan.utility_score = plan.objective_value + plan.committed_strength * 2 - plan.supply_cost * 4 \
 		- ceili(plan.route_distance / 512.0) - ceili(plan.preparation_ticks / 10.0) \
 		- ceili(plan.risk_score * profile.risk_weight * request.risk_aversion / 2.0)
-	plan.evidence_fact_ids.sort()
+	plan.evidence_fact_ids.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
 	plan.reason_keys.assign([&"STAFF_STRATEGIC_ROUTE_ONLY", &"STAFF_UTILITY_HEURISTIC"])
 	if plan.uncertainty_score > 0:
 		plan.reason_keys.append(&"STAFF_RECON_REQUIRED")

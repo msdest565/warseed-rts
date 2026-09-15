@@ -4,6 +4,7 @@ extends RefCounted
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_stable_id_order(failures)
 	_test_definitions_and_rejections(failures)
 	_test_alternatives_and_copy(failures)
 	_test_budget_and_control(failures)
@@ -72,7 +73,7 @@ func _test_alternatives_and_copy(failures: Array[String]) -> void:
 	var recon := _kind(plans, StaffPlanProfile.Kind.RECON_FIRST)
 	var flank := _kind(plans, StaffPlanProfile.Kind.FLANK)
 	_expect(direct.committed_strength > recon.committed_strength and recon.reserve_strength > direct.reserve_strength, "recon holds more force than concentration", failures)
-	_expect(flank.assignments[0].route_points.size() == 3 and direct.assignments[0].route_points.size() == 2, "flanking uses a different strategic axis", failures)
+	_expect(flank.assignments[0].route_points.size() == 5 and direct.assignments[0].route_points.size() == 2, "flanking uses a different strategic axis", failures)
 	var scouts := 0
 	for assignment in recon.assignments:
 		if assignment.role == StaffPlanAssignment.Role.RECONNAISSANCE:
@@ -237,3 +238,13 @@ func _assigned(plan: StaffCourseOfAction, card_id: StringName) -> bool:
 func _expect(condition: bool, message: String, failures: Array[String]) -> void:
 	if not condition:
 		failures.append("Staff plans: " + message)
+
+
+func _test_stable_id_order(failures: Array[String]) -> void:
+	var intent := request()
+	intent.allowed_card_ids.assign([&"z_last", &"a_first", &"m_middle"])
+	_expect(intent.to_dictionary().allowed_card_ids == [&"a_first", &"m_middle", &"z_last"], "request IDs use lexical order independent of StringName allocation", failures)
+	for plan in StaffPlanGenerator.new().generate(_world().create_snapshot(), 1, request()).plans:
+		for ids in [plan.reserve_card_ids, plan.evidence_fact_ids]:
+			for index in range(1, ids.size()):
+				_expect(String(ids[index-1]) <= String(ids[index]), "plan IDs use deterministic lexical order", failures)

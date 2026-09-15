@@ -1,6 +1,6 @@
 # WARSEED AI 开发状态与任务队列
 
-> 状态版本：74
+> 状态版本：76
 > 更新时间：2026-09-16
 > 更新规则：每个完成、阻塞或重新规划的工作项都必须更新本文件
 > 执行规则：[`AI_DEVELOPMENT_WORKFLOW.md`](AI_DEVELOPMENT_WORKFLOW.md)
@@ -10,12 +10,12 @@
 
 ```yaml
 workflow_version: 1.2
-state_version: 74
+state_version: 76
 updated_at: 2026-09-16
 project: WARSEED
-current_phase: R4
-current_gate: R4_EXIT_METRICS_REVIEW
-phase_status: BLOCKED
+current_phase: R5
+current_gate: R5_ENEMY_OPERATION_IMPLEMENTATION
+phase_status: READY
 release_candidate: R1-FEEDBACK-RC2
 release_candidate_status: ENGINEERING_BASELINE_ARCHIVED
 release_candidate_package: build/playtest-kits/WARSEED-R1-Feedback-RC2-20260901.zip
@@ -44,24 +44,24 @@ human_validation_debt: CLOSED_BY_D026
 human_validation_test_plan: docs/HUMAN_VALIDATION_TEST_PLAN.md
 simulated_gate_authorized_at: 2026-08-21
 simulated_gate_authority: product_owner_user_message
-next_work_item: WS-R4-006
-next_work_item_status: BLOCKED
-next_work_item_blocker_kind: PRODUCT_DECISION
-next_work_item_blocker: R4_PLAN_COMPLETION_THRESHOLD_PENDING_USER
-machine_ready_work_item: none
-active_work_item: WS-R4-006
+next_work_item: WS-R5-001
+next_work_item_status: READY
+next_work_item_blocker_kind: none
+next_work_item_blocker: none
+machine_ready_work_item: WS-R5-001
+active_work_item: none
 queued_maintenance_work_item: none
 queued_maintenance_status: none
-expansion_implementation_allowed: false
+expansion_implementation_allowed: true
 agent_playbook: docs/AI_AGENT_PLAYBOOK.md
 delegation_template: docs/AI_DELEGATION_TEMPLATE.md
 low_cost_provider_guide: docs/AI_LOW_COST_PROVIDER.md
 preferred_external_text_model: gpt-5.6-luna
 external_model_qualification: SINGLE_REVIEW_SAMPLE_ONLY
-primary_model_budget_usd: 200
+primary_model_budget_usd: 400
 primary_model_billing_source: USER_CONFIRMED_INPUT_10_OUTPUT_50_USD_PER_MILLION
 primary_model_budget_enforcement: LOCAL_TOKEN_RECORD_CONSERVATIVE_ESTIMATE
-primary_model_implementation_stop_usd: 170
+primary_model_implementation_stop_usd: 370
 performance_gate_policy: DEFERRED_BY_D028
 external_luna_cost_in_budget: false
 phase_exit_requires_product_owner: true
@@ -86,6 +86,12 @@ r3_exit_authority: product_owner_goal_maintenance_then_R3_R4_R5
 r3_simulated_full_gate: PASS
 r3_simulated_full_gate_duration_seconds: 686.300
 r3_simulated_verified_at: 2026-09-13
+r4_engineering_status: COMPLETE_SIMULATED
+r4_exit_status: ACCEPTED
+r4_exit_authority: USER_CONTINUATION_AND_D029
+r4_simulated_full_gate_duration_seconds: 819.106
+r4_simulated_verified_at: 2026-09-16
+
 goal_protocol_version: 1.1
 gameplay_rework_roadmap: docs/GAMEPLAY_REWORK_ROADMAP.md
 recommended_goal_command: "/goal continue"
@@ -571,7 +577,8 @@ Git交接：此前 `.git/index.lock` 权限与审批服务503阻塞已于2026-09
 | WS-R4-003 | DONE (`SIMULATED`) | 参谋方案比较与玩家确认UI | R4-002 |
 | WS-R4-004 | DONE | 将领阶段化任务图 | 完整门与8场定向审计通过 |
 | WS-R4-005 | DONE | 预备队、增援、撤退与受阻重规划 | 功能专项、8场审计、五档与681.26秒发布门PASS |
-| WS-R4-006 | BLOCKED | R4阶段出口 | 依赖已满足；出口完成率门槛等待用户冻结 |
+| WS-R4-006 | DONE | R4阶段出口 | D-029：8/9组合、两方案全覆盖；18场确定性、819.106秒完整门及五档UI通过 |
+| WS-R5-001 | READY | 敌方Doctrine与阶段计划 | R4出口已接受；下一项 |
 
 用户已授权按独立工作项完成R3/R4/R5，本次R3工程出口审查通过后仅解锁R4-001；R4和R5尚未完成。临时WS-MAINT-20260910-001文档保持删除，契约仍在第12节，不另建交接文档。
 
@@ -626,3 +633,7 @@ R4-005已冻结独立契约并进入IMPLEMENTING；当前下一步为四类适�
 R4-005功能专项及8场整局审计PASS，进入VERIFYING；完整门artifacts/r4-005-release.log与五档UI进行中，不提前DONE。当前主模型本地保守估算约117美元，170美元停止新增实现规则保持。
 
 R4-005最终DONE：完整门681.26秒及最终UI/导出/包校验PASS，性能DEFERRED；原运行源码冻结未漂移，最后三处纯UI文案变化已单独验证并导出。下一项R4-006为PRODUCT_DECISION阻塞，用户尚未回复出口指标建议（不是已接受）；当前只读研究正确计数5/9，9場均结束但会战胜利0，不能将其报告为R4阶段完成。新接手按R4_R5_NEXT_AGENT_HANDOFF.md和WS-R4-006.md进行，R5依赖尚未解锁。R4/R5持续目标未完成，预算基线不重置，主模型本地估算最近约151美元，最终实际估算以budget-latest.json为准。
+
+2026-09-16最新授权：用户扩大主模型累计额度至400美元（原用量基线不变，370美元停止新增实现），并接受R4出口指标，D-029 Accepted。R4-006解除PRODUCT_DECISION阻塞，按BLOCKED → READY → DISCOVERY → CONTRACT → IMPLEMENTING继续；R5仍依赖真实出口通过。
+
+R4-006最终DONE：VERIFYING → REVIEWING → DONE。D-029指标8/9、集中投入与侧翼推进各3/3；18场重复指纹相同，纠正0或1次/10分钟，失败例有实际撤退凭据与主力恢复结果。完整发布门819.106秒、五档真实UI、702受验文件哈希无漂移；详细表见[R4_EXIT_EVIDENCE.md](R4_EXIT_EVIDENCE.md)。R4工程出口依据用户持续推进及D-029授权接受，R5-001 READY。HUMAN为可选NOT_RUN，性能DEFERRED。主模型累计保守估算250.37美元，400美元上限及370美元停止新增实现保持。

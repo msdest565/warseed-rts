@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_definitions(failures)
 	_test_compilation(failures)
+	_test_approved_route_waypoints(failures)
 	_test_node_copy_fields(failures)
 	_test_execution(failures)
 	_test_retreat_completion(failures)
@@ -423,3 +424,12 @@ func _test_mixed_card(failures: Array[String]) -> void:
 		for id in card.member_entity_ids:
 			if (world.units[id] as UnitState).enabled:
 				_expect(task.participant_entity_ids.has(id), "graph keeps every live mixed entry member, including support roles", failures)
+
+func _test_approved_route_waypoints(failures: Array[String]) -> void:
+	var world := _approved_world(0, &"flanking_advance")
+	var graph := world.create_snapshot().commander_task_graphs[0]
+	for assignment in graph.approved_plan.assignments:
+		var node := graph.get_node(StringName("%s/deploy" % assignment.card_id))
+		_expect(assignment.route_points.size() >= 5, "flank approval includes explicit rear staging and lateral approach",failures)
+		_expect(node.route_points == assignment.route_points.slice(1,assignment.route_points.size()-1), "deployment preserves every approved intermediate waypoint",failures)
+		_expect(node.target_position == assignment.route_points[-2],"deployment targets final flank waypoint",failures)

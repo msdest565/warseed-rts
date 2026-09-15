@@ -49,12 +49,26 @@ func propose(snapshot: WorldSnapshot, graph: CommanderTaskGraphSnapshot) -> Arra
 		for card in damaged:
 			if card.current_strength < card.authorized_strength and graph.reinforcement_supply_cost <= mini(graph.adaptation_budget_remaining, faction.supply):
 				result.append(_command(snapshot, graph, card, Action.REINFORCE))
-	if not graph.retreat_requested and strength < baseline and graph.reserve_commits < graph.adaptation_policy.max_reserve_commits:
+	var reconnaissance_contact := false
+	var reconnaissance_complete := false
+	for node in nodes:
+		if node.phase == Phase.RECON and node.is_required and node.lifecycle == Life.COMPLETED:
+			reconnaissance_complete = true
+		if node.phase != Phase.RECON or node.lifecycle not in [Life.ACTIVE, Life.BLOCKED]:
+			continue
+		for hostile in snapshot.units:
+			if hostile.faction_id != graph.faction_id and hostile.enabled and hostile.is_visible_to_local_player and hostile.position.distance_to(node.target_position) <= node.arrival_radius * 2.0:
+				reconnaissance_contact = true
+	if not graph.retreat_requested and (strength < baseline or reconnaissance_contact or reconnaissance_complete) and graph.reserve_commits < graph.adaptation_policy.max_reserve_commits:
 		var reserve_ids := graph.reserve_card_ids.duplicate()
-		reserve_ids.sort()
+		reserve_ids.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
 		for id in reserve_ids:
 			var card := snapshot.get_unit_card(id)
-			if _controllable(snapshot, card) and card.deployment_state == UnitCardState.DeploymentState.RESERVE and card.available_strength > 0 and card.supply_cost <= mini(graph.adaptation_budget_remaining, faction.supply):
+			if not _controllable(snapshot, card):
+				continue
+			var deployed := card.deployment_state == UnitCardState.DeploymentState.DEPLOYED and card.current_strength > 0
+			var fresh := card.deployment_state == UnitCardState.DeploymentState.RESERVE and card.available_strength > 0 and card.supply_cost <= mini(graph.adaptation_budget_remaining, faction.supply)
+			if deployed or fresh:
 				result.append(_command(snapshot, graph, card, Action.COMMIT_RESERVE))
 	var replans_used := graph.retreat_replan_count if graph.retreat_requested else graph.replan_count
 	if replans_used < graph.adaptation_policy.max_replans:

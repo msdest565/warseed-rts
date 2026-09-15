@@ -32,6 +32,6 @@ func duplicate_value() -> StaffPlanRequest:
 
 func to_dictionary() -> Dictionary:
 	var sorted_ids := allowed_card_ids.duplicate()
-	sorted_ids.sort()
+	sorted_ids.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
 	return {"objective_region_id": String(objective_region_id), "max_supply_cost": max_supply_cost,
 		"risk_aversion": risk_aversion, "allowed_card_ids": sorted_ids}

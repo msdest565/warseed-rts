@@ -47,7 +47,7 @@ func build(snapshot: WorldSnapshot, plan: StaffCourseOfAction, definition: Comma
 	graph.approved_plan = plan.duplicate_value()
 	graph.created_tick = snapshot.tick
 	graph.reserve_card_ids.assign(plan.reserve_card_ids)
-	graph.reserve_card_ids.sort()
+	graph.reserve_card_ids.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
 	for assignment in plan.assignments:
 		for stage in definition.stages:
 			var node := CommanderTaskNodeSnapshot.new()
@@ -74,7 +74,10 @@ func build(snapshot: WorldSnapshot, plan: StaffCourseOfAction, definition: Comma
 					node.is_required = assignment.role == StaffPlanAssignment.Role.RECONNAISSANCE
 					node.target_position = origin.lerp(objective.position, 0.75)
 				CommanderTaskStageDefinition.Phase.DEPLOY:
-					node.target_position = assignment.route_points[1] if assignment.route_points.size() > 2 else origin.lerp(objective.position, 0.85)
+					node.target_position = assignment.route_points[-2] if assignment.route_points.size() > 2 else origin.lerp(objective.position, 0.85)
+					if assignment.route_points.size() > 2:
+						for route_index in range(1, assignment.route_points.size() - 2):
+							node.route_points.append(assignment.route_points[route_index])
 					# Main forces cannot deploy before every assigned advance scout reports.
 					for scout in plan.assignments:
 						if scout.card_id != assignment.card_id and scout.role == StaffPlanAssignment.Role.RECONNAISSANCE:
@@ -82,7 +85,7 @@ func build(snapshot: WorldSnapshot, plan: StaffCourseOfAction, definition: Comma
 				CommanderTaskStageDefinition.Phase.RETREAT:
 					node.target_position = headquarters.position + Vector2(0.0, -160.0)
 			node.route_points.append(node.target_position)
-			node.prerequisite_ids.sort()
+			node.prerequisite_ids.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
 			graph.nodes.append(node)
 	graph.nodes.sort_custom(func(a: CommanderTaskNodeSnapshot, b: CommanderTaskNodeSnapshot) -> bool: return String(a.node_id) < String(b.node_id))
 	return graph
