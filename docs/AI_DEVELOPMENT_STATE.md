@@ -1,6 +1,6 @@
 # WARSEED AI 开发状态与任务队列
 
-> 状态版本：76
+> 状态版本：77
 > 更新时间：2026-09-16
 > 更新规则：每个完成、阻塞或重新规划的工作项都必须更新本文件
 > 执行规则：[`AI_DEVELOPMENT_WORKFLOW.md`](AI_DEVELOPMENT_WORKFLOW.md)
@@ -10,7 +10,7 @@
 
 ```yaml
 workflow_version: 1.2
-state_version: 76
+state_version: 77
 updated_at: 2026-09-16
 project: WARSEED
 current_phase: R5
@@ -44,11 +44,11 @@ human_validation_debt: CLOSED_BY_D026
 human_validation_test_plan: docs/HUMAN_VALIDATION_TEST_PLAN.md
 simulated_gate_authorized_at: 2026-08-21
 simulated_gate_authority: product_owner_user_message
-next_work_item: WS-R5-001
+next_work_item: WS-R5-002
 next_work_item_status: READY
 next_work_item_blocker_kind: none
 next_work_item_blocker: none
-machine_ready_work_item: WS-R5-001
+machine_ready_work_item: WS-R5-002
 active_work_item: none
 queued_maintenance_work_item: none
 queued_maintenance_status: none
@@ -578,7 +578,8 @@ Git交接：此前 `.git/index.lock` 权限与审批服务503阻塞已于2026-09
 | WS-R4-004 | DONE | 将领阶段化任务图 | 完整门与8场定向审计通过 |
 | WS-R4-005 | DONE | 预备队、增援、撤退与受阻重规划 | 功能专项、8场审计、五档与681.26秒发布门PASS |
 | WS-R4-006 | DONE | R4阶段出口 | D-029：8/9组合、两方案全覆盖；18场确定性、819.106秒完整门及五档UI通过 |
-| WS-R5-001 | READY | 敌方Doctrine与阶段计划 | R4出口已接受；下一项 |
+| WS-R5-001 | DONE | 敌方Doctrine与阶段计划 | 765.543秒完整门；719受验文件无漂移 |
+| WS-R5-002 | READY | 兵力分配与预备策略 | 依赖已满足 |
 
 用户已授权按独立工作项完成R3/R4/R5，本次R3工程出口审查通过后仅解锁R4-001；R4和R5尚未完成。临时WS-MAINT-20260910-001文档保持删除，契约仍在第12节，不另建交接文档。
 
@@ -637,3 +638,5 @@ R4-005最终DONE：完整门681.26秒及最终UI/导出/包校验PASS，性能DE
 2026-09-16最新授权：用户扩大主模型累计额度至400美元（原用量基线不变，370美元停止新增实现），并接受R4出口指标，D-029 Accepted。R4-006解除PRODUCT_DECISION阻塞，按BLOCKED → READY → DISCOVERY → CONTRACT → IMPLEMENTING继续；R5仍依赖真实出口通过。
 
 R4-006最终DONE：VERIFYING → REVIEWING → DONE。D-029指标8/9、集中投入与侧翼推进各3/3；18场重复指纹相同，纠正0或1次/10分钟，失败例有实际撤退凭据与主力恢复结果。完整发布门819.106秒、五档真实UI、702受验文件哈希无漂移；详细表见[R4_EXIT_EVIDENCE.md](R4_EXIT_EVIDENCE.md)。R4工程出口依据用户持续推进及D-029授权接受，R5-001 READY。HUMAN为可选NOT_RUN，性能DEFERRED。主模型累计保守估算250.37美元，400美元上限及370美元停止新增实现保持。
+
+R5-001 DONE：typed准则、阶段化行动、命令与快照、公平目标和实际撤退完成。完整发布门765.543秒通过；黄金迁移与集中进攻侦察修复均已解释并验证。R5-002 READY，其余R5尚未完成。模块入口[ENEMY_OPERATION_GUIDE.md](ENEMY_OPERATION_GUIDE.md)。

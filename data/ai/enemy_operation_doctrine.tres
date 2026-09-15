@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="EnemyOperationDoctrine" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/data/enemy_operation_doctrine.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+doctrine_id = &"deliberate_pressure"
+max_committed_strength = 40
+retreat_strength_ratio = 0.25
+minimum_commitment_ticks = 0

@@ -4,6 +4,7 @@ extends RefCounted
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	failures.append_array(TestEnemyOperation.new().run())
 	failures.append_array(TestCompositionPersistence.new().run())
 	failures.append_array(TestControlHandoff.new().run())
 	failures.append_array(TestDoctrineEffectRuntime.new().run())

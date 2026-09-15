@@ -245,6 +245,7 @@ func validate(unit_catalog: UnitDefinitionCatalog = null) -> DataValidationResul
 	for plan in enemy_plans:
 		if plan == null:
 			continue
+		result.issues.append_array(EnemyOperationDefinition.compile_legacy(self, plan).validate(self).issues)
 		_require_reference(result, formation_role_ids, plan.assault_formation_role_id, "plan '%s' assault formation" % plan.plan_id)
 		_require_reference(result, formation_role_ids, plan.probe_formation_role_id, "plan '%s' probe formation" % plan.plan_id)
 		_require_reference(result, region_ids, plan.assault_target_region_id, "plan '%s' assault target" % plan.plan_id)

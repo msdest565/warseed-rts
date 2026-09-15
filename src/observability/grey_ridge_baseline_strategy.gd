@@ -113,6 +113,19 @@ func _concentrated_attack(snapshot: WorldSnapshot, issued: Dictionary) -> Array[
 			))
 	if snapshot.tick >= 200 and _support_ready(snapshot, SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT) and _local_supply(snapshot) >= 2 and _card_can_be_reinforced(snapshot, &"armored_spearhead"):
 		_add_once(intents, issued, "reinforce_armor", _support_intent(SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT, &"armored_spearhead", "concentrated_spearhead_reinforced"))
+	# A retreating defender may no longer pull the vanguard into headquarters vision.
+	# Search forward only after our own force reaches the authored approach unseen.
+	if _visible_enemy_headquarters_id(snapshot) == 0:
+		for card_id in [&"ironwall_assault_group", &"armored_spearhead"]:
+			var card := snapshot.get_unit_card(card_id)
+			if card == null or card.current_strength <= 0: continue
+			var formation := snapshot.get_formation(card.formation_id)
+			var approach := SPLIT_HEADQUARTERS_APPROACH if card_id == &"ironwall_assault_group" else CONCENTRATED_HEADQUARTERS_APPROACH
+			if formation == null or formation.is_moving or formation.anchor_position.distance_to(approach) > 64.0: continue
+			var search := _formation_attack_move_intent(card_id, approach + Vector2(0, -96), PackedVector2Array(), "concentrated_reconnoiter_unseen_objective")
+			search["is_correction"] = true
+			search["correction_reason"] = "approach_reached_without_objective_contact"
+			_add_once(intents, issued, "search_objective_" + String(card_id), search)
 	return intents
 
 

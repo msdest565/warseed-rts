@@ -14,26 +14,27 @@ const OPENING_PLAN_IDS: Array[StringName] = [
 	SimulationWorld.ENEMY_PLAN_WESTERN_HOOK,
 	SimulationWorld.ENEMY_PLAN_WESTERN_FEINT,
 ]
+# R5-001: doctrine withdrawal and typed phase receipts; counterfactual recovers all 18 old goldens.
 const EXPECTED_FINGERPRINTS: Dictionary = {
-	"a_central_fire/central_assault": "3a9c98ea161894c7fd76b294c2b533724e83c47967bc3351d3ceea6446add6ee",
-	"a_central_fire/western_hook": "1c470142993a2ff70ba77855dbb8c20de470113d9dc8b34621f16251360146e1",
-	"a_central_fire/western_feint": "662ed69248679fa9bc9969dd44eacde4b47a8e88433fe7f1c69a6dac858a94e8",
-	"b_split_armor/central_assault": "6a2ba51fa4b493e07b004fc641253ba99ea88c91539ba35bf94b806810bfc4c4",
+	"a_central_fire/central_assault": "a6e11c8ae5b10e5823e5c4840b93e7fdbb61af7107971550fd860ffad37606b6",
+	"a_central_fire/western_hook": "ba37173a3f1c368365d8359dd45621bd85cf98d1b407d544e1896e0e7dfeb916",
+	"a_central_fire/western_feint": "7bae769e7e68de9326932d96e64620ce0063b2cbc16def34517a5ce9b4e4f253",
+	"b_split_armor/central_assault": "ba9ab6afe4f439ff5b0cb235594a122e09585f3a3be97ba15a34517c8ce07980",
 	"b_split_armor/western_hook": "5e98a13f057a242dcfaa57a5c5d7125310ae266bd99e1579bf54faae97c30e10",
 	# Manual armor now fires in range while preserving its move order (maintenance 20260914).
-	"b_split_armor/western_feint": "368fa11c096912e3ae8ec3a425fc22b3a558023697fbca5fa1f8abd7ea4e4e67",
-	"c_intel_first/central_assault": "019c7072bf5c104cf29c638ad471bb26df7b4c88b02d42e79e996c4b104d3072",
-	"c_intel_first/western_hook": "280cf205f564ef1b340aded7d733b3b96a4433578c1ecaaef5bb85600d5bebd4",
-	"c_intel_first/western_feint": "2e0a0a5223162a0eba859035ef0fc20f16890c8e4122096c20bd2dd6b6d4c409",
-	"custom_western_breakthrough/central_assault": "a6b47b9cd3c39aeae275de5f571153f18aa1187b53521593ee98900009a6deee",
-	"custom_western_breakthrough/western_hook": "00ff4e31fbd6c1e261c378244c17e901787d223baf859f580d9e679054e04a42",
-	"custom_western_breakthrough/western_feint": "afa855c91d8b98d08eb849b2852e9b37c50fa4c2944c78b72c4c0bc90acb46f1",
-	"custom_eastern_recon_fire/central_assault": "b686bae3c0cc29b8f4e355cbe3d378e6b6a49d020e15ef3844dae9194bd2e8ac",
+	"b_split_armor/western_feint": "58765e5a43c4e0422e23914b58381e133eebd5b41e66a2d80724f6f66b39d623",
+	"c_intel_first/central_assault": "dbfc245bd459a1d89e8d4347789c3f01aee55d7d5efd8e73c77e78b635d289ea",
+	"c_intel_first/western_hook": "9c796cebb47532089c88ae73630ee9ae98ae4ac0b45ea389f738595bc8a258ed",
+	"c_intel_first/western_feint": "1aa7f370711ede7652c94c5e4253a388741677b8b7220f5bf812c0414b8d9a0b",
+	"custom_western_breakthrough/central_assault": "40ab556ef41752a597e010db1702cb81d09f4d4c4b462a57e3a8fa129e5e180c",
+	"custom_western_breakthrough/western_hook": "b0dfbe1d14bccf14df90f114bad3064f45fcb75ef0c59b70140319a677ee7feb",
+	"custom_western_breakthrough/western_feint": "e8dbbf0e9bbea73337e0d55c6bc60c8149d03eb63bcc6a7acf65c2ae072132ef",
+	"custom_eastern_recon_fire/central_assault": "1b8e7a17f46c5915aeb6fd4a87c033bdab070ab1fbb0b15a2a1f3ed9c2805f08",
 	"custom_eastern_recon_fire/western_hook": "579f3e06fcf0507739d67346df9a03c5dcb7c8871e2eb697de22dd77428fedcb",
-	"custom_eastern_recon_fire/western_feint": "7f7da9f16a8458ba50726ed056096b8899a402967a135e7a2423b40325234993",
-	"custom_central_fortify/central_assault": "8aa08bfc0b09b1ad637b85961ef73c7049befa063b750ad7463bfa49585c621c",
-	"custom_central_fortify/western_hook": "51cc1f61b9dc312442bf214849961bb3d6a1e214d84931ca638e54151228c0dd",
-	"custom_central_fortify/western_feint": "fcb429200e31d78ad698a20742003db492cbf559e2567240aa765e21406c2194",
+	"custom_eastern_recon_fire/western_feint": "faca2d07502e9b26593b28583f7dbee85452e8cd2e776c98a7b76fe10ba345aa",
+	"custom_central_fortify/central_assault": "a80b8578ea798642628cf692ead898ad1511cbed6e9c68ce3f58a9afc3eabea4",
+	"custom_central_fortify/western_hook": "06edcbc386daa6abfa2504f75f9fc04eda73bead180487cb9de0c799ac6487e3",
+	"custom_central_fortify/western_feint": "7d459aeabebaaadaaf687ca16ad0a505665c6af711927664ed994263e090715d",
 }
 
 
@@ -43,6 +44,8 @@ func _initialize() -> void:
 		for opening_plan_id in OPENING_PLAN_IDS:
 			var key := "%s/%s" % [strategy_id, opening_plan_id]
 			var fingerprint := _run_case(strategy_id, opening_plan_id, failures)
+			if fingerprint != _run_case(strategy_id, opening_plan_id, failures):
+				failures.append("repeat divergence: " + key)
 			print("WARSEED_MATRIX %s %s" % [key, fingerprint])
 			if not EXPECTED_FINGERPRINTS.has(key):
 				failures.append("missing golden fingerprint for %s" % key)

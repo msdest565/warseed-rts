@@ -123,6 +123,7 @@ var doctrine_definitions: Dictionary = {
 }
 var air_recon_until_by_faction: Dictionary = {}
 var intel_reports: Array[IntelReportState] = []
+var enemy_operation_system := EnemyOperationSystem.new()
 var enemy_reaction_rules: Array[EnemyReactionRuleState] = []
 var opened_engineering_routes: Dictionary = {}
 var enemy_reaction_committed_until_tick: int = GREY_RIDGE_OPENING_COMMITMENT_TICKS
@@ -190,6 +191,7 @@ func _init(
 		_configure_battle_navigation()
 		doctrine_definitions = battle_definition.doctrine_dictionary()
 		enemy_opening_plan_id = _select_enemy_opening_plan(army_roster_record, locked_enemy_opening_plan_id)
+		enemy_operation_system.lock_plan(battle_definition, enemy_opening_plan_id)
 		grey_ridge_army_plan = army_plan.duplicate_plan() if army_plan != null else battle_definition.create_default_army_plan()
 		if not get_grey_ridge_army_plan_errors(grey_ridge_army_plan).is_empty():
 			grey_ridge_army_plan = battle_definition.create_default_army_plan()
@@ -521,35 +523,8 @@ func _setup_grey_ridge_scenario() -> void:
 	_refresh_battle_population()
 
 
-func _apply_grey_ridge_opening_plan(enemy_formation: FormationState, enemy_probe: FormationState) -> void:
-	var plan := battle_definition.enemy_plan_dictionary().get(enemy_opening_plan_id) as BattleEnemyPlanDefinition
-	if plan == null:
-		return
-	var assault_target := plan.assault_target_position
-	var assault_route := PackedVector2Array()
-	for region_id in plan.assault_route_region_ids:
-		var region_definition := battle_definition.region_dictionary().get(region_id) as BattleRegionDefinition
-		if region_definition != null:
-			assault_route.append(region_definition.position)
-	var probe_target := plan.probe_target_position
-	var action := String(plan.action_key)
-	enemy_reaction_committed_until_tick = plan.commitment_ticks
-	_apply_locked_formation_move(enemy_formation, assault_target, assault_route)
-	_apply_locked_formation_move(enemy_probe, probe_target)
-	enemy_reaction_log.append("tick=0;source=LOCKED_OPENING_PLAN;plan=%s;action=%s;formations=%d,%d;commit_until=%d" % [
-		enemy_opening_plan_id, action, enemy_formation.formation_id, enemy_probe.formation_id,
-		enemy_reaction_committed_until_tick,
-	])
-
-
-func _apply_locked_formation_move(formation: FormationState, target: Vector2, route: PackedVector2Array = PackedVector2Array()) -> void:
-	var command := FormationMoveCommand.new(
-		allocate_command_id(), ENEMY_PLAYER_ID, GameCommand.IssuerKind.AGENT, current_tick,
-		formation.leader_entity_id, formation.formation_id, target, route
-	)
-	command.agent_id = battle_definition.enemy_agent_id
-	command.task_id = battle_definition.enemy_task_id
-	_apply_command(command)
+func _apply_grey_ridge_opening_plan(_enemy_formation: FormationState, _enemy_probe: FormationState) -> void:
+	enemy_operation_system.start(self)
 
 
 func _setup_grey_ridge_enemy_reaction_table() -> void:
@@ -2132,6 +2107,7 @@ func _advance_escort_supply_node() -> void:
 
 
 func _advance_escort_interception() -> void:
+	if enemy_operation_system.is_withdrawing(): return
 	if battle_definition == null or not battle_definition.enemy_intercepts_escort or escort_supply_node_active:
 		return
 	var enemy_knowledge := faction_knowledge.get(ENEMY_PLAYER_ID) as FactionKnowledge
@@ -2374,6 +2350,7 @@ func _card_leader_entity_id(card: UnitCardState) -> int:
 
 
 func _advance_grey_ridge_enemy_reactions() -> void:
+	if enemy_operation_system.is_withdrawing(): return
 	var formation := _enemy_formation_state(&"assault")
 	if formation == null:
 		return
@@ -2407,6 +2384,7 @@ func _advance_grey_ridge_enemy_reactions() -> void:
 
 
 func _advance_enemy_strategic_ai() -> void:
+	if enemy_operation_system.is_withdrawing(): return
 	if battle_definition == null or current_tick < enemy_reaction_committed_until_tick or current_tick < _next_enemy_strategic_decision_tick:
 		return
 	_next_enemy_strategic_decision_tick = current_tick + ENEMY_STRATEGIC_DECISION_INTERVAL_TICKS
@@ -2536,58 +2514,7 @@ func _formation_has_scout(formation: FormationState) -> bool:
 
 
 func _advance_grey_ridge_locked_plan_followup() -> void:
-	var plan := battle_definition.enemy_plan_dictionary().get(enemy_opening_plan_id) as BattleEnemyPlanDefinition if battle_definition != null else null
-	if plan != null and plan.followup_tick >= 0 and not enemy_opening_followup_executed and current_tick >= plan.followup_tick:
-		var probe := _enemy_formation_state(plan.followup_formation_role_id)
-		if probe != null:
-			_prune_disabled_formation_members(probe)
-			if probe.member_entity_ids.is_empty():
-				enemy_opening_followup_executed = true
-				enemy_reaction_log.append("tick=%d;source=LOCKED_PLAN_TIMELINE;plan=%s;action=FEINT_ABORTED;reason=probe_destroyed" % [current_tick, enemy_opening_plan_id])
-			elif not probe.is_moving and probe.order_target_entity_id == 0:
-				var redirect := FormationMoveCommand.new(
-					allocate_command_id(), ENEMY_PLAYER_ID, GameCommand.IssuerKind.AGENT, current_tick,
-					probe.leader_entity_id, probe.formation_id, plan.followup_target_position
-				)
-				redirect.agent_id = battle_definition.enemy_agent_id
-				redirect.task_id = battle_definition.enemy_task_id
-				if submit_command(redirect).is_accepted():
-					enemy_opening_followup_executed = true
-					enemy_reaction_log.append("tick=%d;source=LOCKED_PLAN_TIMELINE;plan=%s;action=FEINT_REDIRECT_CENTRAL;formation=%d;commit_until=%d" % [
-						current_tick, enemy_opening_plan_id, probe.formation_id, enemy_reaction_committed_until_tick,
-					])
-	_advance_grey_ridge_offensive_followup()
-
-
-func _advance_grey_ridge_offensive_followup() -> void:
-	var followup_tick := battle_definition.enemy_offensive_followup_tick if battle_definition != null else GREY_RIDGE_OFFENSIVE_FOLLOWUP_TICK
-	if current_tick < followup_tick or current_tick < enemy_reaction_committed_until_tick:
-		return
-	var formation := _enemy_formation_state(&"assault")
-	var headquarters := buildings.get(PLAYER_COMMAND_CENTER_ID) as BuildingState
-	if formation == null or headquarters == null or not headquarters.enabled:
-		return
-	_prune_disabled_formation_members(formation)
-	if formation.member_entity_ids.is_empty() or formation.is_moving or formation.order_target_entity_id != 0:
-		return
-	var desired_position := get_attack_destination(PLAYER_COMMAND_CENTER_ID, formation.anchor_position)
-	var deployment_radius := battle_definition.deployment_radius if battle_definition != null else GREY_RIDGE_DEPLOYMENT_RADIUS
-	var destination := find_formation_deployment_position(formation, desired_position, deployment_radius)
-	if not destination.is_finite():
-		return
-	var command := AttackMoveCommand.new(
-		allocate_command_id(), ENEMY_PLAYER_ID, GameCommand.IssuerKind.AGENT, current_tick,
-		formation.leader_entity_id, formation.formation_id, destination
-	)
-	command.agent_id = battle_definition.enemy_agent_id
-	command.task_id = battle_definition.enemy_task_id
-	if not submit_command(command).is_accepted():
-		return
-	if not enemy_offensive_followup_executed:
-		enemy_offensive_followup_executed = true
-		enemy_reaction_log.append("tick=%d;source=LOCKED_PLAN_TIMELINE;plan=%s;action=EXPLOIT_PLAYER_HEADQUARTERS;formation=%d" % [
-			current_tick, enemy_opening_plan_id, formation.formation_id,
-		])
+	enemy_operation_system.advance(self)
 
 
 func _formation_for_enemy_reaction(
@@ -2748,6 +2675,7 @@ func create_true_state_snapshot() -> WorldSnapshot:
 		faction_snapshots.append(FactionSnapshot.new(factions[faction_id] as FactionState))
 	var task_snapshots := _create_task_snapshots()
 	var snapshot := WorldSnapshot.new(current_tick, unit_snapshots, formation_snapshots, projectile_snapshots, metrics.create_snapshot(), faction_snapshots, building_snapshots, ore_snapshots, 0, null, true, task_snapshots, MissionSnapshot.new(mission_state), _create_commander_snapshots(), _create_unit_card_snapshots(), _create_strategic_region_snapshots(), _create_intel_report_snapshots(), _create_enemy_reaction_snapshots(), objective_system.create_snapshots(), battle_outcome, staff_plan_system.create_snapshots(0))
+	snapshot.enemy_operation = enemy_operation_system.snapshot_for(0)
 	snapshot.commander_task_graphs = commander_task_graph_system.create_snapshots(0)
 	return snapshot
 
@@ -2815,6 +2743,7 @@ func create_faction_snapshot(faction_id: int) -> WorldSnapshot:
 		if knowledge.get_cell_state(logic_grid.world_to_cell(ore_field.position)) != FactionKnowledge.CellState.UNEXPLORED:
 			ore_snapshots.append(OreFieldSnapshot.new(ore_field))
 	var snapshot := WorldSnapshot.new(current_tick, unit_snapshots, formation_snapshots, projectile_snapshots, metrics.create_snapshot(), faction_snapshots, building_snapshots, ore_snapshots, faction_id, FactionKnowledgeSnapshot.new(knowledge), false, _create_task_snapshots(), MissionSnapshot.new(mission_state), _create_commander_snapshots(faction_id), _create_unit_card_snapshots(faction_id), _create_strategic_region_snapshots(), _create_intel_report_snapshots(faction_id), [], objective_system.create_snapshots(), battle_outcome, staff_plan_system.create_snapshots(faction_id))
+	snapshot.enemy_operation = enemy_operation_system.snapshot_for(faction_id)
 	snapshot.commander_task_graphs = commander_task_graph_system.create_snapshots(faction_id)
 	return snapshot
 

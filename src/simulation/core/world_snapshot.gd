@@ -19,6 +19,7 @@ var unit_cards: Array[UnitCardSnapshot]
 var strategic_regions: Array[StrategicRegionSnapshot]
 var intel_reports: Array[IntelReportSnapshot]
 var enemy_reactions: Array[EnemyReactionSnapshot]
+var enemy_operation: EnemyOperationSnapshot
 var objectives: Array[ObjectiveSnapshot]
 var outcome: BattleOutcome
 var staff_plan_decisions: Array[StaffPlanDecisionSnapshot] = []
