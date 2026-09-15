@@ -1,7 +1,7 @@
 # WARSEED AI 开发状态与任务队列
 
-> 状态版本：69
-> 更新时间：2026-09-14
+> 状态版本：73
+> 更新时间：2026-09-16
 > 更新规则：每个完成、阻塞或重新规划的工作项都必须更新本文件
 > 执行规则：[`AI_DEVELOPMENT_WORKFLOW.md`](AI_DEVELOPMENT_WORKFLOW.md)
 > 目标命令：[`AI_GOAL_COMMANDS.md`](AI_GOAL_COMMANDS.md)
@@ -9,20 +9,20 @@
 ## 1. 机器可读控制块
 
 ```yaml
-workflow_version: 1.1
-state_version: 69
-updated_at: 2026-09-14
+workflow_version: 1.2
+state_version: 73
+updated_at: 2026-09-16
 project: WARSEED
 current_phase: R4
-current_gate: R4_USER_PAUSE
-phase_status: BLOCKED
+current_gate: R4_IMPLEMENTATION
+phase_status: IMPLEMENTING
 release_candidate: R1-FEEDBACK-RC2
 release_candidate_status: ENGINEERING_BASELINE_ARCHIVED
 release_candidate_package: build/playtest-kits/WARSEED-R1-Feedback-RC2-20260901.zip
 release_candidate_sha256: 730B7F496F8871D62CA887F5B955974CF540014F3B5EA9307E6F5D4070C10A08
 active_maintenance_work_item: none
 working_build_id: 0.1.0-playable.20260914
-latest_maintenance_work_item: WS-MAINT-20260914-001
+latest_maintenance_work_item: WS-MAINT-20260916-001
 latest_maintenance_status: DONE
 feedback_build_id: 0.1.0-r1-feedback.2
 feedback_schema_version: 1
@@ -44,15 +44,26 @@ human_validation_debt: CLOSED_BY_D026
 human_validation_test_plan: docs/HUMAN_VALIDATION_TEST_PLAN.md
 simulated_gate_authorized_at: 2026-08-21
 simulated_gate_authority: product_owner_user_message
-next_work_item: WS-R4-004
-next_work_item_status: BLOCKED
-next_work_item_blocker_kind: USER_PAUSE
-next_work_item_blocker: Playable package delivered; await explicit user instruction to resume development
+next_work_item: WS-R4-005
+next_work_item_status: READY
+next_work_item_blocker_kind: none
+next_work_item_blocker: none
 machine_ready_work_item: none
 active_work_item: none
 queued_maintenance_work_item: none
 queued_maintenance_status: none
-expansion_implementation_allowed: false
+expansion_implementation_allowed: true
+agent_playbook: docs/AI_AGENT_PLAYBOOK.md
+delegation_template: docs/AI_DELEGATION_TEMPLATE.md
+low_cost_provider_guide: docs/AI_LOW_COST_PROVIDER.md
+preferred_external_text_model: gpt-5.6-luna
+external_model_qualification: SINGLE_REVIEW_SAMPLE_ONLY
+primary_model_budget_usd: 200
+primary_model_billing_source: USER_CONFIRMED_INPUT_10_OUTPUT_50_USD_PER_MILLION
+primary_model_budget_enforcement: LOCAL_TOKEN_RECORD_CONSERVATIVE_ESTIMATE
+primary_model_implementation_stop_usd: 170
+performance_gate_policy: DEFERRED_BY_D028
+external_luna_cost_in_budget: false
 phase_exit_requires_product_owner: true
 r1_engineering_status: COMPLETE
 r1_exit_status: ACCEPTED
@@ -77,7 +88,7 @@ r3_simulated_full_gate_duration_seconds: 686.300
 r3_simulated_verified_at: 2026-09-13
 goal_protocol_version: 1.1
 gameplay_rework_roadmap: docs/GAMEPLAY_REWORK_ROADMAP.md
-recommended_goal_command: "/goal status"
+recommended_goal_command: "/goal continue"
 full_gate_command: >-
   powershell -ExecutionPolicy Bypass -File
   .\tools\verify_grey_ridge_release.ps1
@@ -282,8 +293,9 @@ R2 的目标是建立灰脊玩法基准，不在本阶段批量增加地图、�
 ## 11. 下一次 AI 接手检查单
 
 1. 读取根目录 `AGENTS.md`、本文件控制块、D-026、D-027 与 `GAMEPLAY_REWORK_ROADMAP.md`；
+   成本分工和最短阅读路径见 `AI_AGENT_PLAYBOOK.md`；任务交接用 `AI_DELEGATION_TEMPLATE.md`。同一上下文内未变化的规范不重复读取，历史按需追溯。
 2. R3出口、共享冷却及本次手控维护已完成；D-021/D-022均已接受，不重复确认。R4-001/002/003已完成，R4-004保留实现并因用户要求暂停而BLOCKED；
-3. 先读第20节交付与暂停结论，未收到用户明确恢复指令不得继续开发。R3/R4/R5完整目标尚未完成，不能将维护包交付记为阶段出口；
+3. 先读第22节最新恢复指令：用户已恢复R4/R5，旧暂停记录仅作历史；先验收R4-004再按依赖继续。主模型200美元预算的计费来源尚待明确，不将未知费用写成预算内保证；
 4. 所有自主试玩、规则代理和自动化证据继续标记为 `SIMULATED`，但真人 `NOT_RUN` 不再阻塞；
 5. 若出现真人记录，可按构建哈希和原始记录审计为 `HUMAN` 可选研究，不改变工程完成状态；
 6. R2-001 至 R2-006 已建立并验证完整对局观测、只读态势叠层、高层意图/异常队列、因果复盘、差异策略空间和发布门；R3已完成卡牌战术动词；R4继续方案与阶段任务图，不能把固定脚本策略外推为真人主观乐趣。
@@ -557,8 +569,8 @@ Git交接：此前 `.git/index.lock` 权限与审批服务503阻塞已于2026-09
 | WS-R4-001 | DONE (`SIMULATED`) | 公平态势评估黑板 | R3出口已满足 |
 | WS-R4-002 | DONE (`SIMULATED`) | 行动方案定义、生成与效用比较 | R4-001 |
 | WS-R4-003 | DONE (`SIMULATED`) | 参谋方案比较与玩家确认UI | R4-002 |
-| WS-R4-004 | BLOCKED | 将领阶段化任务图 | 用户2026-09-14要求先修复出包，随后暂停 |
-| WS-R4-005 | BLOCKED | 预备队、增援、撤退与受阻重规划 | R4-004 |
+| WS-R4-004 | DONE | 将领阶段化任务图 | 完整门与8场定向审计通过 |
+| WS-R4-005 | READY | 预备队、增援、撤退与受阻重规划 | R4-004 DONE |
 | WS-R4-006 | BLOCKED | R4阶段出口 | R4-003、R4-005 |
 
 用户已授权按独立工作项完成R3/R4/R5，本次R3工程出口审查通过后仅解锁R4-001；R4和R5尚未完成。临时WS-MAINT-20260910-001文档保持删除，契约仍在第12节，不另建交接文档。
@@ -589,3 +601,22 @@ R4-004已接通批准后的真实六阶段任务、依赖/整卡执行、手控�
 VERIFYING → REVIEWING → DONE：`artifacts/manual-release-final2.log` 完整发布门727.735秒PASS、退出0、无脚本错误。两轮18/18、Legacy及四关smoke/矩阵、72案例、30场确定性完整对局、反馈工具、Windows导出与包校验均通过。80实体headless模拟/表现更新P95为6.429/0.946ms，120实体只作压力测量；此结果不替代上述实渲帧数例外。首轮唯一黄金漂移已单变量证明来自新增手控自主攻击，仅更新对应灰脊案例；其余黄金与确定性要求不变。
 
 714项冻结清单中现存712文件哈希均未变化，仅移除两个未使用的临时启动测试文件；不是受验运行代码变化。两次导出PCK的636项内容逐项比较，唯一差异为 `.godot/uid_cache.bin`，635项内容一致，详见 `artifacts/manual-package-pck-comparison.json`。最终ZIP独立解压清单校验和真实窗口选关→编成→战场→空格暂停再次通过；`manual-package-final-visible.log` 无脚本错误。源码diff已审查，`git diff --check`通过。上述证据全部为SIMULATED，HUMAN仍可选未运行；无存档格式变化。交付后停止开发，R4-004保持BLOCKED / USER_PAUSE。
+
+## 21. 低成本开发与后续代理入口
+
+2026-09-16 `WS-MAINT-20260916-001` 已DONE。用户授权建立低成本分工规范，并比较Kimi K3、GPT-5.6-Luna、Agents-A1、DeepSeek-V4-Flash-0731。此为开发流程维护，未恢复游戏开发；R4_USER_PAUSE、R4-004 BLOCKED和09-14可玩包保持原状。
+
+正常入口 `AGENTS.md` 已接入 `AI_AGENT_PLAYBOOK.md`（渐进阅读、L0–L3风险分工、代码导航、后续阶段恢复顺序）、`AI_DELEGATION_TEMPLATE.md`（输入/交付/验收契约）和 `AI_LOW_COST_PROVIDER.md`（本机接入及对比事实）。修正主工作流与目标协议的旧阶段提示和14套旧口径；验证仅在同一受验源码/环境/命令及可复核日志下复用，核心工程门不降低。
+
+四模型同题各一次，Luna在27.605秒内六项判断正确、零误报，服务报告输入648/输出1247token；Kimi与Agents响应没有可用正文，DeepSeek请求超时。选择 `gpt-5.6-luna` 为当前低风险文本委派首选，仅完成一个审查题样本，不能声称模型综合最强或代码实现资质已认证。详细回执与失败边界见服务指南，费用UNKNOWN，不持续付费重试。
+
+`tools/ask_low_cost_ai.py` 提供固定同源HTTPS、显式文件输入、无自动重试、重复run-id拒绝、输出usage的一次文本请求；不执行外部补丁/工具。`python tests/tools/test_low_cost_ai.py` 离线5/5通过，文档20条本地链接/围栏及11文件密钥检查通过，实际diff和空白检查通过；本机配置只保存凭据路径，位于Git忽略目录。未改游戏源码，不重复游戏发布门；证据SIMULATED，HUMAN不适用。当前流程维护改动未提交/推送，游戏最新提交仍238613a。后续只有用户明确恢复时才验收R4-004，不从头重做，也不越过依赖执行R4-005/R5。
+
+
+## 22. R4/R5 恢复与预算约束（当前）
+
+2026-09-16 用户明确恢复并持续完成 R4、R5，使用 GPT-5.6-Luna 辅助；此前 USER_PAUSE 和第20/21节暂停结论已被本次授权替代。R4-004 恢复 VERIFYING，005 仍等待004 DONE，不重复既有实现。用户授权主模型上限200美元，小模型费用排除；按用户确认输入10美元/百万、输出50美元/百万，以本地会话 token_usage_record 的累计差值保守估算，全部输入不计缓存折扣。基线输入292997349、输出927181，对应本轮请求之前的记录；本地脚本 artifacts/check-r4-r5-budget.py 与 budget-latest.json 保存用量。170美元停止新增实现，保留30美元用于验证、交接；此为估算控制，不冒充服务商美元账单，也不自设goal token预算。
+
+D-028 已按用户最新指示 Accepted：整体逻辑优先，性能门暂缓，数据仅供参考；功能、10Hz逻辑语义、确定性、公平知识、存档安全、UI和导出门继续执行。R4-004 8场整局定向审计通过（含撤退、跨策略差异、阻塞原因和重复确定性）；节点反射复制改为显式值拷贝并通过全字段与数组隔离测试。60/80实渲本次frame P95为13.820/15.590ms，80模拟8.196ms，150/150tick；性能记录保留，不继续调优或以其取代功能验收。当前完整发布门日志 artifacts/r4-004-resume-release.log 尚在执行，不提前DONE。所有工程证据SIMULATED，HUMAN仍OPTIONAL_NOT_RUN。
+
+R4-004最终DONE：完整发布门退出0，8场postcopy定向整局审计PASS，704受验文件无漂移；详见工作项最终证据。当前唯一下一项R4-005 READY。低成本流程与D-028已提交并推送1cb7499；原第21节未推送描述仅是历史。

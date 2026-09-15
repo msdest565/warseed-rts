@@ -33,10 +33,26 @@ func is_satisfied() -> bool:
 
 func duplicate_value() -> CommanderTaskNodeSnapshot:
 	var result := CommanderTaskNodeSnapshot.new()
-	for property in get_property_list():
-		var key := StringName(property.name)
-		if property.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
-			result.set(key, get(key))
+	result.node_id = node_id
+	result.card_id = card_id
+	result.commander_id = commander_id
+	result.phase = phase
+	result.lifecycle = lifecycle
+	result.target_position = target_position
+	result.timeout_ticks = timeout_ticks
+	result.dwell_ticks = dwell_ticks
+	result.arrival_radius = arrival_radius
+	result.earliest_tick = earliest_tick
+	result.started_tick = started_tick
+	result.paused_tick = paused_tick
+	result.paused_duration_ticks = paused_duration_ticks
+	result.changed_tick = changed_tick
+	result.progress_ticks = progress_ticks
+	result.task_id = task_id
+	result.reason_key = reason_key
+	result.requires_deployment = requires_deployment
+	result.supply_cost = supply_cost
+	result.is_required = is_required
 	result.prerequisite_ids = prerequisite_ids.duplicate()
 	result.route_points = route_points.duplicate()
 	return result

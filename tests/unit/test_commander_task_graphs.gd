@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_definitions(failures)
 	_test_compilation(failures)
+	_test_node_copy_fields(failures)
 	_test_execution(failures)
 	_test_retreat_completion(failures)
 	_test_command_boundaries(failures)
@@ -13,6 +14,28 @@ func run() -> Array[String]:
 	_test_deployment_and_failures(failures)
 	_test_mixed_card(failures)
 	return failures
+
+
+func _test_node_copy_fields(failures: Array[String]) -> void:
+	var source := CommanderTaskNodeSnapshot.new()
+	for property in source.get_property_list():
+		if not property.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
+			continue
+		match property.type:
+			TYPE_INT: source.set(property.name, 3)
+			TYPE_FLOAT: source.set(property.name, 12.5)
+			TYPE_BOOL: source.set(property.name, not source.get(property.name))
+			TYPE_STRING_NAME: source.set(property.name, &"copy_probe")
+			TYPE_VECTOR2: source.set(property.name, Vector2(11, 23))
+	source.prerequisite_ids.assign([&"first", &"second"])
+	source.route_points = PackedVector2Array([Vector2(4, 9)])
+	var copied := source.duplicate_value()
+	for property in source.get_property_list():
+		if property.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
+			_expect(copied.get(property.name) == source.get(property.name), "node copy preserves field %s" % property.name, failures)
+	source.prerequisite_ids.clear()
+	source.route_points[0] = Vector2.ZERO
+	_expect(copied.prerequisite_ids.size() == 2 and copied.route_points[0] == Vector2(4, 9), "node arrays remain independent values", failures)
 
 
 func _test_definitions(failures: Array[String]) -> void:
