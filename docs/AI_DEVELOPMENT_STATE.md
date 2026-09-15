@@ -1,6 +1,6 @@
 # WARSEED AI 开发状态与任务队列
 
-> 状态版本：77
+> 状态版本：78
 > 更新时间：2026-09-16
 > 更新规则：每个完成、阻塞或重新规划的工作项都必须更新本文件
 > 执行规则：[`AI_DEVELOPMENT_WORKFLOW.md`](AI_DEVELOPMENT_WORKFLOW.md)
@@ -10,12 +10,12 @@
 
 ```yaml
 workflow_version: 1.2
-state_version: 77
+state_version: 78
 updated_at: 2026-09-16
 project: WARSEED
 current_phase: R5
-current_gate: R5_ENEMY_OPERATION_IMPLEMENTATION
-phase_status: READY
+current_gate: R5_BUDGET_RESERVE
+phase_status: PAUSED_BUDGET_RESERVE
 release_candidate: R1-FEEDBACK-RC2
 release_candidate_status: ENGINEERING_BASELINE_ARCHIVED
 release_candidate_package: build/playtest-kits/WARSEED-R1-Feedback-RC2-20260901.zip
@@ -44,15 +44,15 @@ human_validation_debt: CLOSED_BY_D026
 human_validation_test_plan: docs/HUMAN_VALIDATION_TEST_PLAN.md
 simulated_gate_authorized_at: 2026-08-21
 simulated_gate_authority: product_owner_user_message
-next_work_item: WS-R5-002
-next_work_item_status: READY
-next_work_item_blocker_kind: none
-next_work_item_blocker: none
-machine_ready_work_item: WS-R5-002
+next_work_item: WS-R5-003
+next_work_item_status: BLOCKED
+next_work_item_blocker_kind: BUDGET_RESERVE
+next_work_item_blocker: PRIMARY_MODEL_IMPLEMENTATION_RESERVE_REACHED
+machine_ready_work_item: none
 active_work_item: none
 queued_maintenance_work_item: none
 queued_maintenance_status: none
-expansion_implementation_allowed: true
+expansion_implementation_allowed: false
 agent_playbook: docs/AI_AGENT_PLAYBOOK.md
 delegation_template: docs/AI_DELEGATION_TEMPLATE.md
 low_cost_provider_guide: docs/AI_LOW_COST_PROVIDER.md
@@ -579,7 +579,10 @@ Git交接：此前 `.git/index.lock` 权限与审批服务503阻塞已于2026-09
 | WS-R4-005 | DONE | 预备队、增援、撤退与受阻重规划 | 功能专项、8场审计、五档与681.26秒发布门PASS |
 | WS-R4-006 | DONE | R4阶段出口 | D-029：8/9组合、两方案全覆盖；18场确定性、819.106秒完整门及五档UI通过 |
 | WS-R5-001 | DONE | 敌方Doctrine与阶段计划 | 765.543秒完整门；719受验文件无漂移 |
-| WS-R5-002 | READY | 兵力分配与预备策略 | 依赖已满足 |
+| WS-R5-002 | DONE | 兵力分配与预备策略 | 815.577秒完整门；724受验文件无漂移 |
+| WS-R5-003 | BLOCKED | 多轴与补给切断模板 | 工程依赖已满足；预算预留暂停 |
+| WS-R5-004 | BLOCKED | 反应审计与复盘 | 依赖R5-003 |
+| WS-R5-005 | BLOCKED | R5出口 | 依赖R5-004 |
 
 用户已授权按独立工作项完成R3/R4/R5，本次R3工程出口审查通过后仅解锁R4-001；R4和R5尚未完成。临时WS-MAINT-20260910-001文档保持删除，契约仍在第12节，不另建交接文档。
 
@@ -640,3 +643,5 @@ R4-005最终DONE：完整门681.26秒及最终UI/导出/包校验PASS，性能DE
 R4-006最终DONE：VERIFYING → REVIEWING → DONE。D-029指标8/9、集中投入与侧翼推进各3/3；18场重复指纹相同，纠正0或1次/10分钟，失败例有实际撤退凭据与主力恢复结果。完整发布门819.106秒、五档真实UI、702受验文件哈希无漂移；详细表见[R4_EXIT_EVIDENCE.md](R4_EXIT_EVIDENCE.md)。R4工程出口依据用户持续推进及D-029授权接受，R5-001 READY。HUMAN为可选NOT_RUN，性能DEFERRED。主模型累计保守估算250.37美元，400美元上限及370美元停止新增实现保持。
 
 R5-001 DONE：typed准则、阶段化行动、命令与快照、公平目标和实际撤退完成。完整发布门765.543秒通过；黄金迁移与集中进攻侦察修复均已解释并验证。R5-002 READY，其余R5尚未完成。模块入口[ENEMY_OPERATION_GUIDE.md](ENEMY_OPERATION_GUIDE.md)。
+
+R5-002最终DONE：预备队实际执行与公平条件、完整发布门815.577秒、724文件哈希无漂移通过。当前主模型累计保守估算371.95美元（记录时间2026-09-15T20:54:08.621Z，不是账单；Luna排除），总上限400美元、370美元停止新增实现的预留规则不变。已进入预算预留区，本轮停在已验证的002基线；R5-003工程依赖满足但因预算保持BLOCKED，004/005依赖阻塞。剩余契约和接手文档已完成，R5总体与持续goal尚未完成；不进入R6/R7。此暂停与真人证据、性能或产品门无关。

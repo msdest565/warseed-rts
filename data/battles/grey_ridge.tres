@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="BattleDefinition" load_steps=51 format=3]
+[gd_resource type="Resource" script_class="BattleDefinition" load_steps=53 format=3]
 
 [ext_resource type="Script" path="res://src/data/battle_definition.gd" id="1_battle"]
 [ext_resource type="Resource" path="res://data/objectives/standard_card_battle_objectives.tres" id="objectives"]
@@ -104,7 +104,7 @@ definition_id = &"grey_ridge_enemy_assault"
 display_name_key = &"UNIT_CARD_IRONWALL"
 role_key = &"UNIT_CARD_ROLE_ASSAULT"
 unit_definition_id = &"assault_vehicle"
-authorized_strength = 12
+authorized_strength = 8
 enforce_organization_rules = true
 
 [sub_resource type="Resource" id="EnemyProbeCard"]
@@ -122,7 +122,7 @@ formation_id = 3
 role_id = &"assault"
 faction_id = 2
 unit_definition_id = &"assault_vehicle"
-strength = 12
+strength = 8
 spawn_position = Vector2(3344, 1040)
 first_entity_id = 1001
 facing = Vector2(0, 1)
@@ -172,8 +172,35 @@ duration_ticks = 0
 cooldown_ticks = 300
 strength = 2
 
+[sub_resource type="Resource" id="EnemyReserveCard"]
+script = ExtResource("26_card")
+definition_id = &"grey_ridge_enemy_reserve"
+display_name_key = &"UNIT_CARD_IRONWALL"
+role_key = &"UNIT_CARD_ROLE_ASSAULT"
+unit_definition_id = &"assault_vehicle"
+authorized_strength = 4
+enforce_organization_rules = true
+
+
+[sub_resource type="Resource" id="FormationReserve"]
+script = ExtResource("4_formation")
+formation_id = 5
+role_id = &"reserve"
+faction_id = 2
+unit_definition_id = &"assault_vehicle"
+strength = 4
+spawn_position = Vector2(3408, 592)
+first_entity_id = 1009
+facing = Vector2(0, 1)
+agent_id = 301
+task_id = 9001
+tactical_role = 2
+unit_card_definition = SubResource("EnemyReserveCard")
+
+
 [sub_resource type="Resource" id="PlanCentral"]
 script = ExtResource("6_plan")
+reserve_formation_role_id = &"reserve"
 plan_id = &"central_assault"
 action_key = &"CENTRAL_ASSAULT_WITH_WESTERN_PROBE"
 assault_target_region_id = &"central_relay"
@@ -184,6 +211,7 @@ commitment_ticks = 180
 
 [sub_resource type="Resource" id="PlanWest"]
 script = ExtResource("6_plan")
+reserve_formation_role_id = &"reserve"
 plan_id = &"western_hook"
 action_key = &"WESTERN_HOOK_WITH_CENTRAL_SCREEN"
 assault_target_region_id = &"west_mine"
@@ -195,6 +223,7 @@ commitment_ticks = 180
 
 [sub_resource type="Resource" id="PlanFeint"]
 script = ExtResource("6_plan")
+reserve_formation_role_id = &"reserve"
 plan_id = &"western_feint"
 action_key = &"WESTERN_FEINT_STAGE_ONE"
 assault_target_region_id = &"central_relay"
@@ -281,7 +310,7 @@ enemy_headquarters_position = Vector2(3088, 272)
 friendly_formation_ids = Array[int]([1, 2])
 friendly_spawn_positions = Array[Vector2]([Vector2(2832, 2512), Vector2(3344, 2960)])
 next_dynamic_unit_id = 1100
-next_dynamic_formation_id = 5
+next_dynamic_formation_id = 6
 enemy_offensive_followup_tick = 1800
 enemy_agent_id = 301
 enemy_task_id = 9001
@@ -297,7 +326,7 @@ default_starting_unit_card_ids = Array[StringName]([&"falcon_recon_group", &"iro
 engineering_routes = Array[SubResource("GreyRoute")]([SubResource("GreyRoute")])
 strategic_regions = Array[SubResource("RegionWest")]([SubResource("RegionWest"), SubResource("RegionCentral"), SubResource("RegionEast")])
 initial_intel = Array[SubResource("IntelCentral")]([SubResource("IntelCentral"), SubResource("IntelWest"), SubResource("IntelEast")])
-enemy_formations = Array[SubResource("FormationAssault")]([SubResource("FormationAssault"), SubResource("FormationProbe")])
+enemy_formations = Array[SubResource("FormationAssault")]([SubResource("FormationAssault"), SubResource("FormationProbe"), SubResource("FormationReserve")])
 support_abilities = Array[SubResource("SupportRecon")]([SubResource("SupportRecon"), SubResource("SupportFortify"), SubResource("SupportReinforcement")])
 enemy_plans = Array[SubResource("PlanCentral")]([SubResource("PlanCentral"), SubResource("PlanWest"), SubResource("PlanFeint")])
 enemy_reaction_rules = Array[SubResource("ReactionHq")]([SubResource("ReactionHq"), SubResource("ReactionWithdraw"), SubResource("ReactionFlank"), SubResource("ReactionCentral")])

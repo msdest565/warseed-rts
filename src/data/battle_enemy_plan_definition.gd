@@ -5,6 +5,7 @@ extends Resource
 @export var action_key: StringName
 @export var operation: EnemyOperationDefinition
 @export var operation_doctrine: EnemyOperationDoctrine = preload("res://data/ai/enemy_operation_doctrine.tres")
+@export var reserve_formation_role_id: StringName
 @export var assault_formation_role_id: StringName = &"assault"
 @export var assault_target_region_id: StringName
 @export var assault_target_position: Vector2

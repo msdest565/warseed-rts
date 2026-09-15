@@ -14,6 +14,7 @@ func lock_plan(battle: BattleDefinition, plan_id: StringName) -> void:
 	_state.operation_id = plan_id
 	_state.doctrine = definition.doctrine
 	_state.retreat_position = definition.retreat_position
+	_state.reserve_policy = definition.reserve_policy.duplicate_deep(Resource.DEEP_DUPLICATE_ALL) as EnemyReservePolicy if definition.reserve_policy != null else null
 	var roles: Array[StringName] = []
 	for phase in definition.phases:
 		var node := EnemyOperationPhaseSnapshot.new()
@@ -21,6 +22,7 @@ func lock_plan(battle: BattleDefinition, plan_id: StringName) -> void:
 		var formation := battle.enemy_formation_by_role(phase.formation_role_id)
 		node.formation_id = formation.formation_id
 		_state.phases.append(node)
+		if phase.kind == Kind.OPENING: _state.initial_committed_strength += formation.strength
 		if not roles.has(phase.formation_role_id):
 			roles.append(phase.formation_role_id)
 			_state.initial_strength += formation.strength
@@ -78,6 +80,15 @@ func advance(world: SimulationWorld) -> void:
 			node.changed_tick = world.current_tick
 			node.reason = &"OBJECTIVE_AREA_REACHED"
 		if node.status != Status.WAITING or world.current_tick < node.definition.earliest_tick: continue
+		if node.definition.kind not in [Kind.OPENING, Kind.RESERVE] and not _state.committed_formation_ids.has(node.formation_id):
+			var held_reserve := false
+			for other in _state.phases:
+				if other.formation_id == node.formation_id and other.definition.kind == Kind.RESERVE: held_reserve = true
+			if held_reserve: continue
+		if node.definition.kind == Kind.RESERVE:
+			var release_reason := EnemyReserveEvaluator.release_reason(snapshot, _state, node, _state.reserve_policy)
+			if release_reason.is_empty(): continue
+			node.reason = release_reason
 		if node.definition.kind == Kind.EXPLOIT and world.current_tick < world.enemy_reaction_committed_until_tick: continue
 		if node.definition.requires_idle and (formation.is_moving or formation.order_target_entity_id != 0): continue
 		_issue(world, node, false)
@@ -100,10 +111,11 @@ func _issue(world: SimulationWorld, node: EnemyOperationPhaseSnapshot, immediate
 			return
 	var target := node.definition.target_position
 	var command: GameCommand
-	if node.definition.kind == Kind.EXPLOIT:
+	if node.definition.kind in [Kind.EXPLOIT, Kind.RESERVE]:
+		if node.definition.kind == Kind.RESERVE and _state.reserve_committed_strength + formation.member_entity_ids.size() > _state.reserve_policy.max_release_strength: return
 		target = world.find_formation_deployment_position(formation, target, world.battle_definition.deployment_radius)
 		if not target.is_finite(): return
-		command = AttackMoveCommand.new(world.allocate_command_id(), 2, GameCommand.IssuerKind.AGENT, world.current_tick, formation.leader_entity_id, formation.formation_id, target)
+		command = AttackMoveCommand.new(world.allocate_command_id(), 2, GameCommand.IssuerKind.AGENT, world.current_tick, formation.leader_entity_id, formation.formation_id, target, node.definition.route_points)
 	else:
 		command = FormationMoveCommand.new(world.allocate_command_id(), 2, GameCommand.IssuerKind.AGENT, world.current_tick, formation.leader_entity_id, formation.formation_id, target, node.definition.route_points)
 	command.agent_id = world.battle_definition.enemy_agent_id
@@ -124,6 +136,9 @@ func _issue(world: SimulationWorld, node: EnemyOperationPhaseSnapshot, immediate
 	elif node.definition.kind == Kind.EXPLOIT:
 		world.enemy_offensive_followup_executed = true
 		world.enemy_reaction_log.append("tick=%d;source=LOCKED_PLAN_TIMELINE;plan=%s;action=EXPLOIT_PLAYER_HEADQUARTERS;formation=%d;phase=%s;command=%d;target_source=AUTHORED_MAP_OBJECTIVE" % [world.current_tick, _state.operation_id, formation.formation_id, node.definition.phase_id, command.command_id])
+	elif node.definition.kind == Kind.RESERVE:
+		_state.reserve_committed_strength += formation.member_entity_ids.size()
+		world.enemy_reaction_log.append("tick=%d;source=LEGAL_FACTION_OBSERVATION;rule=%s;action=RESERVE_COMMITTED;reason=%s;formation=%d;strength=%d;cost=0;command=%d" % [world.current_tick, _state.reserve_policy.policy_id, node.reason, node.formation_id, formation.member_entity_ids.size(), command.command_id])
 
 func _withdraw(world: SimulationWorld, formation_ids: Array[int]) -> void:
 	for node in _state.phases:

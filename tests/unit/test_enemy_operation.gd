@@ -7,6 +7,7 @@ func run() -> Array[String]:
 	_test_lock_and_fairness(failures)
 	_test_withdrawal(failures)
 	_test_threshold(failures)
+	_test_reserve(failures)
 	return failures
 
 func _test_content(failures: Array[String]) -> void:
@@ -91,3 +92,50 @@ func _test_threshold(failures: Array[String]) -> void:
 		world.current_tick = 200
 		world.enemy_operation_system.advance(world)
 		_expect(world.enemy_operation_system.is_withdrawing() == (survivors == 7), "retreat threshold includes equality, not above boundary", failures)
+
+
+func _test_reserve(failures: Array[String]) -> void:
+	var world := SimulationWorld.new(true, false, SimulationWorld.ScenarioKind.GREY_RIDGE)
+	var state := world.enemy_operation_system._state
+	var node: EnemyOperationPhaseSnapshot
+	for phase in state.phases:
+		if phase.definition.kind == EnemyOperationPhaseDefinition.Kind.RESERVE: node = phase
+	_expect(node != null and state.initial_strength == 14 and state.initial_committed_strength == 10, "reserve reallocates existing 14 units, no free force", failures)
+	if node == null: return
+	_expect(not state.committed_formation_ids.has(node.formation_id), "reserve uncommitted at opening", failures)
+	var formation := world.formations[node.formation_id] as FormationState
+	_expect(not formation.is_moving, "reserve actually waits at opening", failures)
+	var assault := world._enemy_formation_state(&"assault")
+	for index in range(3): (world.units[assault.member_entity_ids[index]] as UnitState).enabled = false
+	world.current_tick = 119
+	world.enemy_operation_system.advance(world)
+	_expect(node.status == EnemyOperationPhaseSnapshot.Status.WAITING, "minimum hold blocks early release despite losses", failures)
+	world.current_tick = 120
+	world.enemy_operation_system.advance(world)
+	_expect(node.status == EnemyOperationPhaseSnapshot.Status.ACTIVE and node.reason == &"OWN_LOSSES", "observed loss condition releases reserve after hold", failures)
+	world.advance_tick()
+	_expect(formation.order_kind == FormationState.OrderKind.ATTACK_MOVE and formation.is_moving, "reserve order really executes", failures)
+	var original_command := node.command_id
+	for _tick in range(3): world.advance_tick()
+	_expect(node.command_id == original_command and state.committed_formation_ids.count(node.formation_id) == 1, "reserve cannot be committed twice", failures)
+	var snapshot := world.create_faction_snapshot(2)
+	var copy := state.duplicate_value()
+	copy.initial_committed_strength = 0
+	var candidate := node.duplicate_value()
+	candidate.status = EnemyOperationPhaseSnapshot.Status.WAITING
+	snapshot.units.clear()
+	for phase in copy.phases: phase.status = EnemyOperationPhaseSnapshot.Status.WAITING
+	_expect(EnemyReserveEvaluator.release_reason(snapshot,copy,candidate,copy.reserve_policy).is_empty(), "unseen enemies cannot trigger reserve", failures)
+	copy.phases[0].status = EnemyOperationPhaseSnapshot.Status.COMPLETED
+	_expect(EnemyReserveEvaluator.release_reason(snapshot,copy,candidate,copy.reserve_policy) == &"OBJECTIVE_REACHED", "real preceding objective permits release", failures)
+	copy.phases[0].status = EnemyOperationPhaseSnapshot.Status.WAITING
+	var contact := world.create_faction_snapshot(1).units[0]
+	contact.is_visible_to_local_player = true
+	contact.position = candidate.definition.target_position
+	snapshot.units.append(contact)
+	_expect(EnemyReserveEvaluator.release_reason(snapshot,copy,candidate,copy.reserve_policy) == &"VISIBLE_CONTACT", "current visible contact permits release", failures)
+	snapshot.is_true_state = true
+	_expect(EnemyReserveEvaluator.release_reason(snapshot,copy,candidate,copy.reserve_policy).is_empty(), "true-state input forbidden", failures)
+	var bad := EnemyReservePolicy.new()
+	bad.release_loss_ratio = NAN
+	_expect(not bad.validate().is_valid(), "nonfinite reserve policy rejected", failures)

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="EnemyReservePolicy" load_steps=2 format=3]
+[ext_resource type="Script" path="res://src/data/enemy_reserve_policy.gd" id="1"]
+[resource]
+script = ExtResource("1")
+policy_id = &"measured_reserve"
+minimum_hold_ticks = 120
+release_loss_ratio = 0.75
+visible_contact_radius = 384.0
+max_release_strength = 4
+release_on_objective_reached = true
+release_phase_id = &"opening_assault"

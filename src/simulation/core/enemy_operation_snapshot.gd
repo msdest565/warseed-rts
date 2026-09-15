@@ -10,6 +10,9 @@ var initial_strength: int = 0
 var withdrawing: bool = false
 var withdrawn_formation_ids: Array[int] = []
 var committed_formation_ids: Array[int] = []
+var reserve_policy: EnemyReservePolicy
+var initial_committed_strength: int = 0
+var reserve_committed_strength: int = 0
 
 func duplicate_value() -> EnemyOperationSnapshot:
 	var result := EnemyOperationSnapshot.new()
@@ -21,5 +24,8 @@ func duplicate_value() -> EnemyOperationSnapshot:
 	result.withdrawing = withdrawing
 	result.withdrawn_formation_ids.assign(withdrawn_formation_ids)
 	result.committed_formation_ids.assign(committed_formation_ids)
+	result.reserve_policy = reserve_policy.duplicate_deep(Resource.DEEP_DUPLICATE_ALL) as EnemyReservePolicy if reserve_policy != null else null
+	result.initial_committed_strength = initial_committed_strength
+	result.reserve_committed_strength = reserve_committed_strength
 	for phase in phases: result.phases.append(phase.duplicate_value())
 	return result

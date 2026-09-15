@@ -14,27 +14,27 @@ const OPENING_PLAN_IDS: Array[StringName] = [
 	SimulationWorld.ENEMY_PLAN_WESTERN_HOOK,
 	SimulationWorld.ENEMY_PLAN_WESTERN_FEINT,
 ]
-# R5-001: doctrine withdrawal and typed phase receipts; counterfactual recovers all 18 old goldens.
+# R5-002: 8 assault + 2 probe + 4 held reserve; counterfactual restores all 18 R5-001 goldens.
 const EXPECTED_FINGERPRINTS: Dictionary = {
-	"a_central_fire/central_assault": "a6e11c8ae5b10e5823e5c4840b93e7fdbb61af7107971550fd860ffad37606b6",
-	"a_central_fire/western_hook": "ba37173a3f1c368365d8359dd45621bd85cf98d1b407d544e1896e0e7dfeb916",
-	"a_central_fire/western_feint": "7bae769e7e68de9326932d96e64620ce0063b2cbc16def34517a5ce9b4e4f253",
-	"b_split_armor/central_assault": "ba9ab6afe4f439ff5b0cb235594a122e09585f3a3be97ba15a34517c8ce07980",
-	"b_split_armor/western_hook": "5e98a13f057a242dcfaa57a5c5d7125310ae266bd99e1579bf54faae97c30e10",
+	"a_central_fire/central_assault": "2251f107a8ae1994524994b61a6abc3343cb14d1f0004b27fd07732bc9b2e99f",
+	"a_central_fire/western_hook": "5ed09ef85bfaaeda055c98a1db705d265657751907260fa33a09263321f46560",
+	"a_central_fire/western_feint": "42b934c7e496676d1f88c4cfeb70087c59c6c55eeec69b61c367ba11cf4d73b8",
+	"b_split_armor/central_assault": "e5d8de605552f16eb68947780f00b8207c978e30a9a54a0c390026be55da60b1",
+	"b_split_armor/western_hook": "389e3bf4fdafa6427e5847a31f7f91552a6a58df751a9f093a210009cae77630",
 	# Manual armor now fires in range while preserving its move order (maintenance 20260914).
-	"b_split_armor/western_feint": "58765e5a43c4e0422e23914b58381e133eebd5b41e66a2d80724f6f66b39d623",
-	"c_intel_first/central_assault": "dbfc245bd459a1d89e8d4347789c3f01aee55d7d5efd8e73c77e78b635d289ea",
-	"c_intel_first/western_hook": "9c796cebb47532089c88ae73630ee9ae98ae4ac0b45ea389f738595bc8a258ed",
-	"c_intel_first/western_feint": "1aa7f370711ede7652c94c5e4253a388741677b8b7220f5bf812c0414b8d9a0b",
-	"custom_western_breakthrough/central_assault": "40ab556ef41752a597e010db1702cb81d09f4d4c4b462a57e3a8fa129e5e180c",
-	"custom_western_breakthrough/western_hook": "b0dfbe1d14bccf14df90f114bad3064f45fcb75ef0c59b70140319a677ee7feb",
-	"custom_western_breakthrough/western_feint": "e8dbbf0e9bbea73337e0d55c6bc60c8149d03eb63bcc6a7acf65c2ae072132ef",
-	"custom_eastern_recon_fire/central_assault": "1b8e7a17f46c5915aeb6fd4a87c033bdab070ab1fbb0b15a2a1f3ed9c2805f08",
-	"custom_eastern_recon_fire/western_hook": "579f3e06fcf0507739d67346df9a03c5dcb7c8871e2eb697de22dd77428fedcb",
-	"custom_eastern_recon_fire/western_feint": "faca2d07502e9b26593b28583f7dbee85452e8cd2e776c98a7b76fe10ba345aa",
-	"custom_central_fortify/central_assault": "a80b8578ea798642628cf692ead898ad1511cbed6e9c68ce3f58a9afc3eabea4",
-	"custom_central_fortify/western_hook": "06edcbc386daa6abfa2504f75f9fc04eda73bead180487cb9de0c799ac6487e3",
-	"custom_central_fortify/western_feint": "7d459aeabebaaadaaf687ca16ad0a505665c6af711927664ed994263e090715d",
+	"b_split_armor/western_feint": "dd5ab20826e226e776ac309ef69c009580c2a025d384a36dff4c937a29ab0b54",
+	"c_intel_first/central_assault": "95579ca68b638ef83034eaede9ac4c6119f08e48e1459db4bd7483161855cf32",
+	"c_intel_first/western_hook": "7bcaf86844f8cbcfe399d14613f6708f51e6bb9941ac9285f24af102ede58581",
+	"c_intel_first/western_feint": "bd5422ab450113b0270b38b06b6cb2aa46cfad9e5da9506bf15f2604e0566c56",
+	"custom_western_breakthrough/central_assault": "3162e34ca449b9730c7eb4c682c04bd6c8aa3940e16a08098b5914fdb28b8b95",
+	"custom_western_breakthrough/western_hook": "65b038f7567bbe74875955e432706bcd7f4ff66d18fb6573db00473a11bb58f7",
+	"custom_western_breakthrough/western_feint": "ed3287f39c1771d0154c36b3ef9b883d80381591e1a214020e524c1a85751764",
+	"custom_eastern_recon_fire/central_assault": "d15313846ff63f5aefcbf9db643d330bd4ee1f85e2348912034336dfa5390534",
+	"custom_eastern_recon_fire/western_hook": "caca16bdc26bacd94aeddc8dfb6ccce0d11cda675daab81b4f68ac1c545e3bad",
+	"custom_eastern_recon_fire/western_feint": "c15755380a3c70f33eda7044b87e30836812111f10aa38997e310a86b7013a6f",
+	"custom_central_fortify/central_assault": "75d4a61be37186c78881a336cde307ef6aad9cbd99659e7129c28031ae981b45",
+	"custom_central_fortify/western_hook": "bf2fb9a6ce0335472a8f598a102ec8979f2d23b63712a8bf54eef426b7f5e53e",
+	"custom_central_fortify/western_feint": "05872e8f72dad44bc57941cb17dd3ffd38bc9730e289b1224369046fc308366e",
 }
 
 
