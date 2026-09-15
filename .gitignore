@@ -49,3 +49,7 @@ export_credentials.cfg
 # Local Godot test profiles and generated verification evidence
 /.test-profile/
 /artifacts/
+
+# Python development-tool bytecode
+__pycache__/
+*.py[cod]

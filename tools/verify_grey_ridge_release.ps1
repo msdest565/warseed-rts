@@ -2,7 +2,8 @@
 param(
     [string]$GodotConsolePath = "",
     [string]$ExportPath = "",
-    [string]$SessionId = ""
+    [string]$SessionId = "",
+    [switch]$EnforcePerformance
 )
 
 Set-StrictMode -Version Latest
@@ -148,7 +149,11 @@ Invoke-ExternalStep "Fog Forest decision matrix" $godot @("--headless", "--path"
 Invoke-ExternalStep "Black Well smoke" $godot @("--headless", "--path", $repositoryRoot, "--script", "res://tests/black_well_smoke.gd")
 Invoke-ExternalStep "Black Well decision matrix" $godot @("--headless", "--path", $repositoryRoot, "--script", "res://tests/scenarios/black_well_decision_matrix.gd")
 Invoke-ExternalStep "Four-operation release balance audit" $godot @("--headless", "--path", $repositoryRoot, "--script", "res://tests/scenarios/four_operation_release_balance_audit.gd")
-Invoke-ExternalStep "Grey Ridge entity benchmark" $godot @("--headless", "--path", $repositoryRoot, "--script", "res://tests/performance/grey_ridge_entity_benchmark.gd")
+if ($EnforcePerformance) {
+    Invoke-ExternalStep "Grey Ridge entity benchmark" $godot @("--headless", "--path", $repositoryRoot, "--script", "res://tests/performance/grey_ridge_entity_benchmark.gd")
+} else {
+    Write-Host "Performance gate DEFERRED by D-028; no performance PASS is claimed."
+}
 Invoke-ExternalStep "Feedback UI five-viewport selfplay" $godot @("--headless", "--path", $repositoryRoot, "--script", "res://tests/tools/feedback_ui_selfplay.gd")
 
 $toolSmokes = @(

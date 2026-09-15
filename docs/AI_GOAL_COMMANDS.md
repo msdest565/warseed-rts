@@ -98,7 +98,7 @@ constraints:
   - 不改变存档格式
   - 不修改 UI
 required_verification:
-  - 14 套 headless tests
+  - tests/test_runner.gd 全套 headless tests（当前18套）
   - 受影响数据测试
 stop_when:
   - 需要新增产品决策
@@ -164,7 +164,9 @@ stop_when:
 
 ## 5. 当前阶段可直接发送的命令
 
-R1-001 至 R1-008 已完成并由产品负责人接受。D-026 已取消真人证据硬门，D-027 已启用 [`GAMEPLAY_REWORK_ROADMAP.md`](GAMEPLAY_REWORK_ROADMAP.md)。R2 工程出口已通过，并于 2026-09-10 按用户“维护自检后完成 R3、R4、R5”的明确授权进入 R3。当前用 `/goal continue` 继续活动目标，严格按独立工作项依赖执行；具体状态以 `AI_DEVELOPMENT_STATE.md` 为准。D-021 已由用户明确接受按文档实施，R3-003 的编制决定门已解除；D-022 已于 2026-09-11 由用户明确接受，R3-004 的决定门已解除。
+2026-09-16当前入口：用户已明确恢复R4/R5，使用 `/goal continue` 继续原范围并逐项检查依赖。09-14暂停已经解除；D-021/D-022已接受无需重复确认。D-028暂缓性能通过要求，其他功能门保持。实时进度以状态文件第1及22节为准。
+
+R1-001至R1-008已完成并由产品负责人接受。D-026取消真人证据硬门，D-027启用 [`GAMEPLAY_REWORK_ROADMAP.md`](GAMEPLAY_REWORK_ROADMAP.md)。R2/R3及D-021/D-022的接受记录保留在状态文件；R4继续须服从最新用户暂停和工作项依赖，不从历史授权自动恢复。
 
 ### 5.1 已完成的 R2 阶段出口审查示例
 
@@ -209,7 +211,7 @@ out_of_scope:
   - 不扩大当前 R2 工作项
 done_when:
   - 原问题自动复现通过
-  - 14 套回归和受影响关卡通过
+  - 全套回归（当前18套）和受影响关卡通过
   - 可选真人研究不作为完成条件
 ```
 
@@ -410,7 +412,7 @@ write_changes: false
 5. 有真人记录时可选执行 `/goal review human-validation`，但不改变工程状态
 ```
 
-当前已有覆盖维护及 R3、R4、R5 的用户活动目标，继续命令是：
+当前目标覆盖维护及R3、R4、R5，用户已恢复后续工作，可使用：
 
 ```text
 /goal continue
