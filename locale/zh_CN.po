@@ -2805,7 +2805,7 @@ msgid "STAFF_OBJECTIVE"
 msgstr "目标地区"
 
 msgid "STAFF_BUDGET"
-msgstr "部署 Supply 上限"
+msgstr "方案 Supply 上限"
 
 msgid "STAFF_RISK_PREFERENCE"
 msgstr "风险偏好"
@@ -2971,3 +2971,27 @@ msgstr "已发现的敌方指挥所"
 
 msgid "CARD_ATTACK_HEADQUARTERS_CONTEXT"
 msgstr "该将领部队向已确认的指挥所所在地进攻；手控部队交还AI。"
+
+msgid "COMMANDER_ADAPT_LOSS_RETREAT"
+msgstr "兵力不足，撤退重整"
+
+msgid "COMMANDER_ADAPT_REINFORCED"
+msgstr "已补充兵员"
+
+msgid "COMMANDER_ADAPT_RESERVE_COMMITTED"
+msgstr "预备队已受领任务"
+
+msgid "COMMANDER_ADAPT_REPLANNED"
+msgstr "受阻路线已重规划"
+
+msgid "COMMANDER_ADAPT_REPLAN_BLOCKED"
+msgstr "路线仍受阻，稍后重试"
+
+msgid "COMMANDER_ADAPT_REPLAN_EXHAUSTED"
+msgstr "重试已用尽，请调整命令"
+
+msgid "COMMANDER_GRAPH_DEPENDENCY_READY"
+msgstr "前置任务已恢复"
+
+msgid "STAFF_BUDGET_HELP"
+msgstr "包含初始部署；未用额度允许将领自动补员和投入预备队。"

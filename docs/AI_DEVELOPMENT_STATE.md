@@ -1,6 +1,6 @@
 # WARSEED AI 开发状态与任务队列
 
-> 状态版本：73
+> 状态版本：74
 > 更新时间：2026-09-16
 > 更新规则：每个完成、阻塞或重新规划的工作项都必须更新本文件
 > 执行规则：[`AI_DEVELOPMENT_WORKFLOW.md`](AI_DEVELOPMENT_WORKFLOW.md)
@@ -10,12 +10,12 @@
 
 ```yaml
 workflow_version: 1.2
-state_version: 73
+state_version: 74
 updated_at: 2026-09-16
 project: WARSEED
 current_phase: R4
-current_gate: R4_IMPLEMENTATION
-phase_status: IMPLEMENTING
+current_gate: R4_EXIT_METRICS_REVIEW
+phase_status: BLOCKED
 release_candidate: R1-FEEDBACK-RC2
 release_candidate_status: ENGINEERING_BASELINE_ARCHIVED
 release_candidate_package: build/playtest-kits/WARSEED-R1-Feedback-RC2-20260901.zip
@@ -44,15 +44,15 @@ human_validation_debt: CLOSED_BY_D026
 human_validation_test_plan: docs/HUMAN_VALIDATION_TEST_PLAN.md
 simulated_gate_authorized_at: 2026-08-21
 simulated_gate_authority: product_owner_user_message
-next_work_item: WS-R4-005
-next_work_item_status: READY
-next_work_item_blocker_kind: none
-next_work_item_blocker: none
+next_work_item: WS-R4-006
+next_work_item_status: BLOCKED
+next_work_item_blocker_kind: PRODUCT_DECISION
+next_work_item_blocker: R4_PLAN_COMPLETION_THRESHOLD_PENDING_USER
 machine_ready_work_item: none
-active_work_item: none
+active_work_item: WS-R4-006
 queued_maintenance_work_item: none
 queued_maintenance_status: none
-expansion_implementation_allowed: true
+expansion_implementation_allowed: false
 agent_playbook: docs/AI_AGENT_PLAYBOOK.md
 delegation_template: docs/AI_DELEGATION_TEMPLATE.md
 low_cost_provider_guide: docs/AI_LOW_COST_PROVIDER.md
@@ -570,8 +570,8 @@ Git交接：此前 `.git/index.lock` 权限与审批服务503阻塞已于2026-09
 | WS-R4-002 | DONE (`SIMULATED`) | 行动方案定义、生成与效用比较 | R4-001 |
 | WS-R4-003 | DONE (`SIMULATED`) | 参谋方案比较与玩家确认UI | R4-002 |
 | WS-R4-004 | DONE | 将领阶段化任务图 | 完整门与8场定向审计通过 |
-| WS-R4-005 | READY | 预备队、增援、撤退与受阻重规划 | R4-004 DONE |
-| WS-R4-006 | BLOCKED | R4阶段出口 | R4-003、R4-005 |
+| WS-R4-005 | DONE | 预备队、增援、撤退与受阻重规划 | 功能专项、8场审计、五档与681.26秒发布门PASS |
+| WS-R4-006 | BLOCKED | R4阶段出口 | 依赖已满足；出口完成率门槛等待用户冻结 |
 
 用户已授权按独立工作项完成R3/R4/R5，本次R3工程出口审查通过后仅解锁R4-001；R4和R5尚未完成。临时WS-MAINT-20260910-001文档保持删除，契约仍在第12节，不另建交接文档。
 
@@ -620,3 +620,9 @@ VERIFYING → REVIEWING → DONE：`artifacts/manual-release-final2.log` 完整�
 D-028 已按用户最新指示 Accepted：整体逻辑优先，性能门暂缓，数据仅供参考；功能、10Hz逻辑语义、确定性、公平知识、存档安全、UI和导出门继续执行。R4-004 8场整局定向审计通过（含撤退、跨策略差异、阻塞原因和重复确定性）；节点反射复制改为显式值拷贝并通过全字段与数组隔离测试。60/80实渲本次frame P95为13.820/15.590ms，80模拟8.196ms，150/150tick；性能记录保留，不继续调优或以其取代功能验收。当前完整发布门日志 artifacts/r4-004-resume-release.log 尚在执行，不提前DONE。所有工程证据SIMULATED，HUMAN仍OPTIONAL_NOT_RUN。
 
 R4-004最终DONE：完整发布门退出0，8场postcopy定向整局审计PASS，704受验文件无漂移；详见工作项最终证据。当前唯一下一项R4-005 READY。低成本流程与D-028已提交并推送1cb7499；原第21节未推送描述仅是历史。
+
+R4-005已冻结独立契约并进入IMPLEMENTING；当前下一步为四类适应动作纵向实现。R4-004提交23aa5a8，发布门694.338秒PASS。
+
+R4-005功能专项及8场整局审计PASS，进入VERIFYING；完整门artifacts/r4-005-release.log与五档UI进行中，不提前DONE。当前主模型本地保守估算约117美元，170美元停止新增实现规则保持。
+
+R4-005最终DONE：完整门681.26秒及最终UI/导出/包校验PASS，性能DEFERRED；原运行源码冻结未漂移，最后三处纯UI文案变化已单独验证并导出。下一项R4-006为PRODUCT_DECISION阻塞，用户尚未回复出口指标建议（不是已接受）；当前只读研究正确计数5/9，9場均结束但会战胜利0，不能将其报告为R4阶段完成。新接手按R4_R5_NEXT_AGENT_HANDOFF.md和WS-R4-006.md进行，R5依赖尚未解锁。R4/R5持续目标未完成，预算基线不重置，主模型本地估算最近约151美元，最终实际估算以budget-latest.json为准。

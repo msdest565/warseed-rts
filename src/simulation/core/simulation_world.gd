@@ -893,6 +893,10 @@ func submit_command(command: GameCommand) -> CommandValidationResult:
 	var event_start := events.size()
 	var event_kind := SimulationEvent.Kind.COMMAND_REJECTED
 	if result.is_accepted():
+		if command is UnitCardControlCommand and command.action in [UnitCardControlCommand.Action.TAKEOVER, UnitCardControlCommand.Action.STAY_MANUAL]:
+			command_queue.remove_if(func(queued: GameCommand) -> bool:
+				return queued is CommanderCardTaskCommand and queued.action >= CommanderCardTaskCommand.Action.AUTO_RETREAT and queued.target_card_id == command.unit_card_id
+			)
 		if command is CommanderOrderCommand:
 			var commander_order := command as CommanderOrderCommand
 			if commander_order.order_kind == CommanderOrderCommand.OrderKind.SET_POSTURE \
@@ -2833,7 +2837,10 @@ func create_commander_task_snapshot(faction_id: int) -> WorldSnapshot:
 		var leader := units.get(formation.leader_entity_id) as UnitState
 		if leader != null and leader.faction_id == faction_id:
 			own_formations.append(FormationSnapshot.new(formation))
-	return WorldSnapshot.new(current_tick, hostiles, own_formations, [], null, [], [], [], faction_id,
+	var own_factions: Array[FactionSnapshot] = []
+	if factions.has(faction_id):
+		own_factions.append(FactionSnapshot.new(factions[faction_id] as FactionState))
+	return WorldSnapshot.new(current_tick, hostiles, own_formations, [], null, own_factions, [], [], faction_id,
 		FactionKnowledgeSnapshot.new(knowledge), false, _create_task_snapshots(), null,
 		_create_commander_snapshots(faction_id), _create_unit_card_snapshots(faction_id),
 		_create_strategic_region_snapshots(), [], [], [], battle_outcome)

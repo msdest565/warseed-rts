@@ -8,6 +8,7 @@ func run() -> Array[String]:
 	failures.append_array(TestStaffPlans.new().run())
 	failures.append_array(TestStaffPlanApproval.new().run())
 	failures.append_array(TestCommanderTaskGraphs.new().run())
+	failures.append_array(TestCommanderAdaptation.new().run())
 	_test_friendly_agent_authorization(failures)
 	_test_autonomous_reconnaissance_and_defense_run_in_parallel(failures)
 	_test_autonomous_counterattack_preempts_routine_defense(failures)

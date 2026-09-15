@@ -53,6 +53,7 @@ func build(snapshot: WorldSnapshot, plan: StaffCourseOfAction, definition: Comma
 			var node := CommanderTaskNodeSnapshot.new()
 			node.node_id = _node_id(assignment.card_id, stage.stage_id)
 			node.card_id = assignment.card_id
+			node.baseline_strength = assignment.strength
 			node.commander_id = assignment.commander_id
 			node.phase = stage.phase
 			node.timeout_ticks = stage.timeout_ticks

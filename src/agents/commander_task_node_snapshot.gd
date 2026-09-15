@@ -25,6 +25,7 @@ var reason_key: StringName = &"COMMANDER_GRAPH_WAITING"
 var requires_deployment: bool = false
 var supply_cost: int = 0
 var is_required: bool = true
+var baseline_strength: int = 0
 
 
 func is_satisfied() -> bool:
@@ -53,6 +54,7 @@ func duplicate_value() -> CommanderTaskNodeSnapshot:
 	result.requires_deployment = requires_deployment
 	result.supply_cost = supply_cost
 	result.is_required = is_required
+	result.baseline_strength = baseline_strength
 	result.prerequisite_ids = prerequisite_ids.duplicate()
 	result.route_points = route_points.duplicate()
 	return result

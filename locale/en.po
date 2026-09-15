@@ -2866,7 +2866,7 @@ msgid "STAFF_OBJECTIVE"
 msgstr "Objective"
 
 msgid "STAFF_BUDGET"
-msgstr "Deployment Supply limit"
+msgstr "Plan Supply limit"
 
 msgid "STAFF_RISK_PREFERENCE"
 msgstr "Risk preference"
@@ -3032,3 +3032,27 @@ msgstr "Known enemy headquarters"
 
 msgid "CARD_ATTACK_HEADQUARTERS_CONTEXT"
 msgstr "Advance this commander's cards to the confirmed headquarters location; return manual cards to AI."
+
+msgid "COMMANDER_ADAPT_LOSS_RETREAT"
+msgstr "Heavy losses: withdrawing"
+
+msgid "COMMANDER_ADAPT_REINFORCED"
+msgstr "Personnel reinforced"
+
+msgid "COMMANDER_ADAPT_RESERVE_COMMITTED"
+msgstr "Reserve assigned"
+
+msgid "COMMANDER_ADAPT_REPLANNED"
+msgstr "Blocked route replanned"
+
+msgid "COMMANDER_ADAPT_REPLAN_BLOCKED"
+msgstr "Route blocked; retry pending"
+
+msgid "COMMANDER_ADAPT_REPLAN_EXHAUSTED"
+msgstr "Retries exhausted; revise order"
+
+msgid "COMMANDER_GRAPH_DEPENDENCY_READY"
+msgstr "Prerequisite restored"
+
+msgid "STAFF_BUDGET_HELP"
+msgstr "Includes initial deployment. Unused allowance permits automatic reinforcement and reserve commitment."

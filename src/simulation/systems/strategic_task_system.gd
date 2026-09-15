@@ -474,7 +474,8 @@ func _submit_scout_evasion(task: TaskState, formation: FormationState, destinati
 
 func _submit_formation_move(task: TaskState, formation: FormationState, destination: Vector2, world: SimulationWorld) -> bool:
 	var move: FormationMoveCommand
-	var executes_attack_route := task.kind != TaskState.Kind.SCOUT_AREA and not task.planned_route.is_empty()
+	var leader := world.units.get(formation.leader_entity_id) as UnitState
+	var executes_attack_route := task.kind != TaskState.Kind.SCOUT_AREA and not task.planned_route.is_empty() and leader != null and leader.can_attack
 	if executes_attack_route:
 		move = AttackMoveCommand.new(
 			world.allocate_command_id(), task.faction_id, GameCommand.IssuerKind.AGENT,

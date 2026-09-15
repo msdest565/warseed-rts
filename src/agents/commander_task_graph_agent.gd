@@ -37,6 +37,9 @@ func expected_action(snapshot: WorldSnapshot, graph: CommanderTaskGraphSnapshot,
 	if node.phase != Phase.RETREAT and graph.retreat_requested:
 		return Action.CANCEL
 	if node.lifecycle == Life.BLOCKED:
+		var blocked_card := snapshot.get_unit_card(node.card_id)
+		if node.reason_key == &"COMMANDER_GRAPH_DEPENDENCY_FAILED" and graph.dependencies_satisfied(node) and blocked_card != null and not blocked_card.is_player_overridden and blocked_card.control_state not in [UnitCardState.ControlState.PLAYER_OVERRIDDEN, UnitCardState.ControlState.RETURNING]:
+			return Action.RESUME
 		return -1
 	var card := snapshot.get_unit_card(node.card_id)
 	if card == null:
@@ -95,7 +98,7 @@ func expected_action(snapshot: WorldSnapshot, graph: CommanderTaskGraphSnapshot,
 
 func transition_reason(snapshot: WorldSnapshot, graph: CommanderTaskGraphSnapshot, node: CommanderTaskNodeSnapshot, action: int) -> StringName:
 	if graph.retreat_requested and node.phase != Phase.RETREAT:
-		return &"COMMANDER_GRAPH_PLAYER_RETREAT"
+		return graph.retreat_reason_key
 	var card := snapshot.get_unit_card(node.card_id)
 	if card == null or card.deployment_state == UnitCardState.DeploymentState.DEPLOYED and card.current_strength == 0:
 		return &"COMMANDER_GRAPH_CARD_LOST"

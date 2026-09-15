@@ -9,9 +9,10 @@ var _graph: CommanderTaskGraphSnapshot
 var _agent := CommanderTaskGraphAgent.new()
 var _installation_sequence: int = 0
 var _proposal_snapshot: WorldSnapshot
+var _adaptation := CommanderAdaptationSystem.new()
 
 
-func install(world: SimulationWorld, plan: StaffCourseOfAction) -> void:
+func install(world: SimulationWorld, plan: StaffCourseOfAction, supply_limit: int = 0) -> void:
 	var graph := CommanderTaskGraphBuilder.new().build(world.create_faction_snapshot(SimulationWorld.LOCAL_PLAYER_ID), plan)
 	if graph == null:
 		return
@@ -21,6 +22,9 @@ func install(world: SimulationWorld, plan: StaffCourseOfAction) -> void:
 		for node in _graph.nodes:
 			_finish_task(world, node, false)
 	_graph = graph
+	_graph.adaptation_budget_remaining = maxi(0, supply_limit - plan.supply_cost)
+	_graph.reinforcement_supply_cost = world.get_support_cost(SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT)
+	_graph.next_adaptation_tick = world.current_tick + _graph.adaptation_policy.interval_ticks
 	var held_ids := _graph.reserve_card_ids.duplicate()
 	for assignment in _graph.approved_plan.assignments:
 		held_ids.append(assignment.card_id)
@@ -104,6 +108,11 @@ func propose_commands(world: SimulationWorld) -> void:
 	var snapshot := world.create_commander_task_snapshot(_graph.faction_id)
 	# Submission only enqueues commands; all proposals observe the same world state.
 	_proposal_snapshot = snapshot
+	for adjustment in _adaptation.agent.propose(snapshot, _graph.duplicate_value()):
+		adjustment.command_id = world.allocate_command_id()
+		if world.submit_command(adjustment).is_accepted():
+			_proposal_snapshot = null
+			return
 	for command in _agent.propose(snapshot, _graph.duplicate_value()):
 		command.command_id = world.allocate_command_id()
 		var result := world.submit_command(command)
@@ -119,6 +128,8 @@ func validate(world: SimulationWorld, command: CommanderCardTaskCommand) -> Comm
 		return _reject(CommandValidationResult.Reason.INVALID_TASK)
 	if command.issuer_id != _graph.faction_id or command.issuer_id != SimulationWorld.LOCAL_PLAYER_ID:
 		return _reject(CommandValidationResult.Reason.NOT_CONTROLLER)
+	if command.action >= Action.AUTO_RETREAT:
+		return _adaptation.validate(world, _graph, command)
 	if command.action == Action.RETREAT:
 		if _graph.retreat_requested:
 			return _reject(CommandValidationResult.Reason.TASK_CONFLICT)
@@ -161,6 +172,9 @@ func apply(world: SimulationWorld, command: CommanderCardTaskCommand) -> void:
 	if not validation.is_accepted():
 		world.events.append(SimulationEvent.new(world.current_tick, SimulationEvent.Kind.COMMANDER_GRAPH_CHANGED, 0,
 			"graph=%s;node=%s;state=rejected;reason=%s" % [command.graph_id, command.node_id, validation.describe()]))
+		return
+	if command.action >= Action.AUTO_RETREAT:
+		_adaptation.apply(world, self, _graph, command)
 		return
 	if command.action == Action.RETREAT:
 		_graph.retreat_requested = true
@@ -207,10 +221,11 @@ func apply(world: SimulationWorld, command: CommanderCardTaskCommand) -> void:
 			node.paused_tick = world.current_tick
 			_set_state(world, node, Life.PAUSED, &"COMMANDER_GRAPH_PLAYER_CONTROL")
 		Action.RESUME:
+			var resume_reason: StringName = &"COMMANDER_GRAPH_DEPENDENCY_READY" if node.lifecycle == Life.BLOCKED else &"COMMANDER_GRAPH_CONTROL_RETURNED"
 			if node.started_tick >= 0 and node.paused_tick >= 0:
 				node.paused_duration_ticks += world.current_tick - node.paused_tick
 			node.paused_tick = -1
-			_set_state(world, node, Life.ACTIVE if node.started_tick >= 0 else Life.WAITING, &"COMMANDER_GRAPH_CONTROL_RETURNED")
+			_set_state(world, node, Life.ACTIVE if node.started_tick >= 0 else Life.WAITING, resume_reason)
 		Action.BLOCK, Action.FAIL, Action.CANCEL:
 			var snapshot := world.create_commander_task_snapshot(_graph.faction_id)
 			var reason := _agent.transition_reason(snapshot, _graph, node, command.action)

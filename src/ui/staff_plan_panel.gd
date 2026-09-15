@@ -172,6 +172,7 @@ func refresh_locale() -> void:
 	subtitle_label.text = GameText.t(&"STAFF_COMPARE_HINT")
 	objective_label.text = GameText.t(&"STAFF_OBJECTIVE")
 	budget_label.text = GameText.t(&"STAFF_BUDGET")
+	budget.tooltip_text = GameText.t(&"STAFF_BUDGET_HELP")
 	risk_label.text = GameText.t(&"STAFF_RISK_PREFERENCE")
 	cards_label.text = GameText.t(&"STAFF_ALLOWED_CARDS")
 	generate_button.text = GameText.t(&"STAFF_GENERATE")

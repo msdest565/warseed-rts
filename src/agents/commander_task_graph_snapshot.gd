@@ -8,6 +8,17 @@ var created_tick: int
 var retreat_requested: bool = false
 var nodes: Array[CommanderTaskNodeSnapshot] = []
 var reserve_card_ids: Array[StringName] = []
+var adaptation_policy: CommanderAdaptationPolicy = CommanderAdaptationPolicy.new()
+var adaptation_budget_remaining: int = 0
+var revision: int = 0
+var next_adaptation_tick: int = 0
+var reserve_commits: int = 0
+var reinforcement_requests: int = 0
+var replan_count: int = 0
+var retreat_replan_count: int = 0
+var reinforcement_supply_cost: int = 0
+var last_adaptation_reason: StringName
+var retreat_reason_key: StringName = &"COMMANDER_GRAPH_PLAYER_RETREAT"
 
 
 func get_node(id: StringName) -> CommanderTaskNodeSnapshot:
@@ -33,6 +44,17 @@ func duplicate_value() -> CommanderTaskGraphSnapshot:
 	result.created_tick = created_tick
 	result.retreat_requested = retreat_requested
 	result.reserve_card_ids = reserve_card_ids.duplicate()
+	result.adaptation_policy = adaptation_policy.duplicate(true) as CommanderAdaptationPolicy
+	result.adaptation_budget_remaining = adaptation_budget_remaining
+	result.revision = revision
+	result.next_adaptation_tick = next_adaptation_tick
+	result.reserve_commits = reserve_commits
+	result.reinforcement_requests = reinforcement_requests
+	result.replan_count = replan_count
+	result.retreat_replan_count = retreat_replan_count
+	result.reinforcement_supply_cost = reinforcement_supply_cost
+	result.last_adaptation_reason = last_adaptation_reason
+	result.retreat_reason_key = retreat_reason_key
 	for node in nodes:
 		result.nodes.append(node.duplicate_value())
 	return result
