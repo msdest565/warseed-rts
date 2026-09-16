@@ -1,0 +1,51 @@
+[gd_resource type="Resource" script_class="EnemyOperationDefinition" format=3]
+
+[ext_resource type="Script" path="res://src/data/enemy_operation_doctrine.gd" id="1_5u0l1"]
+[ext_resource type="Script" path="res://src/data/enemy_operation_phase_definition.gd" id="2_s86l5"]
+[ext_resource type="Resource" path="res://data/ai/enemy_reserve_policy.tres" id="3_23k4w"]
+[ext_resource type="Script" path="res://src/data/enemy_operation_definition.gd" id="4_r1jpl"]
+
+[sub_resource type="Resource" id="Resource_30sln"]
+script = ExtResource("1_5u0l1")
+minimum_commitment_ticks = 180
+
+[sub_resource type="Resource" id="Resource_0w3fq"]
+script = ExtResource("2_s86l5")
+phase_id = &"opening_assault"
+formation_role_id = &"assault"
+target_region_id = &"west_mine"
+target_position = Vector2(1440, 2080)
+route_points = PackedVector2Array(3072, 2080)
+
+[sub_resource type="Resource" id="Resource_3d2b6"]
+script = ExtResource("2_s86l5")
+phase_id = &"opening_probe"
+formation_role_id = &"probe"
+target_region_id = &"central_relay"
+target_position = Vector2(3072, 2080)
+route_points = PackedVector2Array()
+
+[sub_resource type="Resource" id="Resource_0uut1"]
+script = ExtResource("2_s86l5")
+phase_id = &"reserve_commit"
+kind = 3
+formation_role_id = &"reserve"
+target_region_id = &"west_mine"
+target_position = Vector2(1440, 2080)
+route_points = PackedVector2Array(3072, 2080)
+
+[sub_resource type="Resource" id="Resource_7vykh"]
+script = ExtResource("2_s86l5")
+phase_id = &"exploit"
+kind = 2
+formation_role_id = &"assault"
+target_position = Vector2(3088, 3408)
+route_points = PackedVector2Array()
+earliest_tick = 1800
+
+[resource]
+script = ExtResource("4_r1jpl")
+operation_id = &"western_hook"
+doctrine = SubResource("Resource_30sln")
+phases = Array[ExtResource("2_s86l5")]([SubResource("Resource_0w3fq"), SubResource("Resource_3d2b6"), SubResource("Resource_0uut1"), SubResource("Resource_7vykh")])
+retreat_position = Vector2(3088, 432)

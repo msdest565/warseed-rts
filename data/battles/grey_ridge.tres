@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="BattleDefinition" load_steps=53 format=3]
+[gd_resource type="Resource" script_class="BattleDefinition" load_steps=56 format=3]
 
 [ext_resource type="Script" path="res://src/data/battle_definition.gd" id="1_battle"]
 [ext_resource type="Resource" path="res://data/objectives/standard_card_battle_objectives.tres" id="objectives"]
@@ -31,6 +31,12 @@
 [ext_resource type="Resource" path="res://data/army/rally_reorganization.tres" id="28_rally"]
 [ext_resource type="Resource" path="res://data/army/elastic_defense.tres" id="29_elastic"]
 [ext_resource type="Resource" path="res://data/army/fighting_withdrawal.tres" id="30_withdrawal"]
+
+[ext_resource type="Resource" path="res://data/ai/grey_ridge_central_assault.tres" id="op_central_assault"]
+
+[ext_resource type="Resource" path="res://data/ai/grey_ridge_western_hook.tres" id="op_western_hook"]
+
+[ext_resource type="Resource" path="res://data/ai/grey_ridge_western_feint.tres" id="op_western_feint"]
 
 [sub_resource type="Resource" id="RegionWest"]
 script = ExtResource("2_region")
@@ -200,6 +206,7 @@ unit_card_definition = SubResource("EnemyReserveCard")
 
 [sub_resource type="Resource" id="PlanCentral"]
 script = ExtResource("6_plan")
+operation = ExtResource("op_central_assault")
 reserve_formation_role_id = &"reserve"
 plan_id = &"central_assault"
 action_key = &"CENTRAL_ASSAULT_WITH_WESTERN_PROBE"
@@ -211,6 +218,7 @@ commitment_ticks = 180
 
 [sub_resource type="Resource" id="PlanWest"]
 script = ExtResource("6_plan")
+operation = ExtResource("op_western_hook")
 reserve_formation_role_id = &"reserve"
 plan_id = &"western_hook"
 action_key = &"WESTERN_HOOK_WITH_CENTRAL_SCREEN"
@@ -223,6 +231,7 @@ commitment_ticks = 180
 
 [sub_resource type="Resource" id="PlanFeint"]
 script = ExtResource("6_plan")
+operation = ExtResource("op_western_feint")
 reserve_formation_role_id = &"reserve"
 plan_id = &"western_feint"
 action_key = &"WESTERN_FEINT_STAGE_ONE"

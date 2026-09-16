@@ -1,0 +1,61 @@
+[gd_resource type="Resource" script_class="EnemyOperationDefinition" format=3]
+
+[ext_resource type="Script" path="res://src/data/enemy_operation_doctrine.gd" id="1_6g63a"]
+[ext_resource type="Script" path="res://src/data/enemy_operation_phase_definition.gd" id="2_64tq4"]
+[ext_resource type="Resource" path="res://data/ai/enemy_reserve_policy.tres" id="3_qk7h7"]
+[ext_resource type="Script" path="res://src/data/enemy_operation_definition.gd" id="4_pd77u"]
+
+[sub_resource type="Resource" id="Resource_0320h"]
+script = ExtResource("1_6g63a")
+minimum_commitment_ticks = 300
+
+[sub_resource type="Resource" id="Resource_q4khe"]
+script = ExtResource("2_64tq4")
+phase_id = &"opening_assault"
+formation_role_id = &"assault"
+target_region_id = &"central_relay"
+target_position = Vector2(3344, 2064)
+route_points = PackedVector2Array()
+
+[sub_resource type="Resource" id="Resource_ddxfs"]
+script = ExtResource("2_64tq4")
+phase_id = &"opening_probe"
+formation_role_id = &"probe"
+target_region_id = &"west_mine"
+target_position = Vector2(1440, 2080)
+route_points = PackedVector2Array()
+
+[sub_resource type="Resource" id="Resource_tog40"]
+script = ExtResource("2_64tq4")
+phase_id = &"reserve_commit"
+kind = 3
+formation_role_id = &"reserve"
+target_region_id = &"central_relay"
+target_position = Vector2(3344, 2064)
+route_points = PackedVector2Array()
+
+[sub_resource type="Resource" id="Resource_qaiew"]
+script = ExtResource("2_64tq4")
+phase_id = &"feint_redirect"
+kind = 1
+formation_role_id = &"probe"
+target_region_id = &"central_relay"
+target_position = Vector2(3072, 2080)
+route_points = PackedVector2Array()
+earliest_tick = 240
+
+[sub_resource type="Resource" id="Resource_xj2sr"]
+script = ExtResource("2_64tq4")
+phase_id = &"exploit"
+kind = 2
+formation_role_id = &"assault"
+target_position = Vector2(3088, 3408)
+route_points = PackedVector2Array()
+earliest_tick = 1800
+
+[resource]
+script = ExtResource("4_pd77u")
+operation_id = &"western_feint"
+doctrine = SubResource("Resource_0320h")
+phases = Array[ExtResource("2_64tq4")]([SubResource("Resource_q4khe"), SubResource("Resource_ddxfs"), SubResource("Resource_tog40"), SubResource("Resource_qaiew"), SubResource("Resource_xj2sr")])
+retreat_position = Vector2(3088, 432)

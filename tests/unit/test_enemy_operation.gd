@@ -8,6 +8,7 @@ func run() -> Array[String]:
 	_test_withdrawal(failures)
 	_test_threshold(failures)
 	_test_reserve(failures)
+	failures.append_array(TestEnemyOperationTemplates.new().run())
 	return failures
 
 func _test_content(failures: Array[String]) -> void:
