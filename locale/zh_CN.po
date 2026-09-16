@@ -2995,3 +2995,25 @@ msgstr "前置任务已恢复"
 
 msgid "STAFF_BUDGET_HELP"
 msgstr "包含初始部署；未用额度允许将领自动补员和投入预备队。"
+
+
+msgid "ENEMY_OBSERVED_TITLE"
+msgstr "已观察的敌军行动（最近记录）"
+
+msgid "ENEMY_OBSERVED_NONE"
+msgstr "没有观察记录，无法确认敌军行动。"
+
+msgid "ENEMY_OBSERVED_ROW"
+msgstr "%s–%s · 可见兵力 %d · %s。仅反映当时所见，后续结果未确认。"
+
+msgid "ENEMY_OBSERVED_MOVING"
+msgstr "移动"
+
+msgid "ENEMY_OBSERVED_ENGAGING"
+msgstr "开火"
+
+msgid "ENEMY_OBSERVED_HOLDING"
+msgstr "停留"
+
+msgid "ENEMY_OBSERVED_SIGHTED"
+msgstr "出现"

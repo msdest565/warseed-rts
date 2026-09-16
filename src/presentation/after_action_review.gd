@@ -4,6 +4,7 @@ extends RefCounted
 const FORMAT_VERSION := 1
 const SCHEMA_ID := "warseed.after_action_review.v1"
 
+var enemy_observed_actions: Array[EnemyObservedAction] = []
 var observer_faction_id: int
 var source_fingerprint: String
 var result: StringName
@@ -44,10 +45,12 @@ func duplicate_review() -> AfterActionReview:
 	var copied_causes: Array[AfterActionCause] = []
 	for entry in causes:
 		copied_causes.append(entry.duplicate_entry())
-	return AfterActionReview.new(
+	var copy := AfterActionReview.new(
 		observer_faction_id, source_fingerprint, result, grade, concluded_tick,
 		points, cards, copied_causes
 	)
+	for entry in enemy_observed_actions: copy.enemy_observed_actions.append(entry.duplicate_value())
+	return copy
 
 
 func to_dictionary() -> Dictionary:
@@ -60,7 +63,10 @@ func to_dictionary() -> Dictionary:
 	var cause_records: Array[Dictionary] = []
 	for entry in causes:
 		cause_records.append(entry.to_dictionary())
+	var observations: Array[Dictionary] = []
+	for entry in enemy_observed_actions: observations.append(entry.to_dictionary())
 	var result_dictionary := {
+		"enemy_observed_actions": observations,
 		"format_version": FORMAT_VERSION,
 		"schema_id": SCHEMA_ID,
 		"observer_faction_id": observer_faction_id,

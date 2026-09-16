@@ -1,6 +1,6 @@
 # WARSEED AI 开发状态与任务队列
 
-> 状态版本：80
+> 状态版本：81
 > 更新时间：2026-09-16
 > 更新规则：每个完成、阻塞或重新规划的工作项都必须更新本文件
 > 执行规则：[`AI_DEVELOPMENT_WORKFLOW.md`](AI_DEVELOPMENT_WORKFLOW.md)
@@ -10,7 +10,7 @@
 
 ```yaml
 workflow_version: 1.2
-state_version: 80
+state_version: 81
 updated_at: 2026-09-16
 project: WARSEED
 current_phase: R5
@@ -44,11 +44,11 @@ human_validation_debt: CLOSED_BY_D026
 human_validation_test_plan: docs/HUMAN_VALIDATION_TEST_PLAN.md
 simulated_gate_authorized_at: 2026-08-21
 simulated_gate_authority: product_owner_user_message
-next_work_item: WS-R5-004
+next_work_item: WS-R5-005
 next_work_item_status: READY
 next_work_item_blocker_kind: none
 next_work_item_blocker: none
-machine_ready_work_item: WS-R5-004
+machine_ready_work_item: WS-R5-005
 active_work_item: none
 queued_maintenance_work_item: none
 queued_maintenance_status: none
@@ -581,8 +581,8 @@ Git交接：此前 `.git/index.lock` 权限与审批服务503阻塞已于2026-09
 | WS-R5-001 | DONE | 敌方Doctrine与阶段计划 | 765.543秒完整门；719受验文件无漂移 |
 | WS-R5-002 | DONE | 兵力分配与预备策略 | 815.577秒完整门；724受验文件无漂移 |
 | WS-R5-003 | DONE | 多轴与补给切断模板 | 1046.924秒完整门；752文件无漂移 |
-| WS-R5-004 | READY | 反应审计与复盘 | 依赖R5-003 |
-| WS-R5-005 | BLOCKED | R5出口 | 依赖R5-004 |
+| WS-R5-004 | DONE | 反应审计与复盘 | 960.707秒完整门；最终真实五档UI/重导出PASS |
+| WS-R5-005 | READY | R5出口 | 依赖R5-004 |
 
 用户已授权按独立工作项完成R3/R4/R5，本次R3工程出口审查通过后仅解锁R4-001；R4和R5尚未完成。临时WS-MAINT-20260910-001文档保持删除，契约仍在第12节，不另建交接文档。
 
@@ -649,3 +649,7 @@ R5-002最终DONE：预备队实际执行与公平条件、完整发布门815.577
 2026-09-16 最新授权：用户将主模型累计预算扩充至1000美元，保留原输入/输出计费基线；970美元停止新增实现，预留30美元验收交接。旧400美元预算暂停解除，R5-003按BLOCKED → READY → DISCOVERY恢复。继续使用Luna辅助，性能D-028暂缓；R5-004/005仍按工程依赖执行。
 
 R5-003 DONE：三份正式typed模板、实际轨迹重复一致、普通矿区补给2→0→2通过；1046.924秒完整发布门、752文件无漂移，旧黄金未改。唯一下一项WS-R5-004 READY。费用上限1000美元且原基线不变；性能仍暂缓，HUMAN可选。
+
+R5-004阶段性验证：最终权威版本完整门960.707秒PASS，762文件初次冻结无漂移；真实UI的英文480宽暴露两处旧布局最小宽度，仅ArmyBoard/PrebattlePlanner后续调整，最终五档与重导出尚待。不能把此前ui4四档通过写成五档全过。
+
+R5-004 DONE：反应/护送目标切换延迟、typed执行审计和合法双语复盘完成；960.707秒完整门PASS，之后两处纯UI布局修复由最终ui5真实五档及重导出/包smoke验证，最终PCK DD5692F388A20D90557A8E27E1228D42E4A62E0AA950CB1DBDF2D50C4FD13578。下一项R5-005 READY，阶段尚待出口审查。

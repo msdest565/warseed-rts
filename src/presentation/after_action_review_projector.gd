@@ -12,7 +12,7 @@ func project(source_report: Dictionary, observer_faction_id: int) -> AfterAction
 	if not _validate_source(source_report, observer_faction_id):
 		return null
 	var outcome := source_report.get("outcome", {}) as Dictionary
-	return AfterActionReview.new(
+	var review := AfterActionReview.new(
 		observer_faction_id,
 		String(source_report["fingerprint"]),
 		StringName(outcome.get("result", "in_progress")),
@@ -22,6 +22,11 @@ func project(source_report: Dictionary, observer_faction_id: int) -> AfterAction
 		_build_card_contributions(source_report),
 		_build_causes(source_report, outcome)
 	)
+	for value in source_report.get("enemy_observed_actions",[]):
+		if not value is Dictionary: continue
+		var entry := EnemyObservedAction.from_dictionary(value)
+		if entry != null: review.enemy_observed_actions.append(entry)
+	return review
 
 
 func _validate_source(source_report: Dictionary, observer_faction_id: int) -> bool:

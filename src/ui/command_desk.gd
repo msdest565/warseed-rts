@@ -852,6 +852,7 @@ func _record_and_show_stale(exception_id: StringName) -> void:
 func _show_decision_failure(subject: String, action: String, reason: String) -> void:
 	if decision_failure_dialog == null:
 		return
+	decision_failure_dialog.dialog_autowrap = true
 	decision_failure_dialog.title = GameText.t(&"DECISION_FAILURE_TITLE")
 	decision_failure_dialog.dialog_text = GameText.t(&"DECISION_FAILURE_BODY") % [subject, action, reason]
 	if not decision_failure_dialog.is_inside_tree():

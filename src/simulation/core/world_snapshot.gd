@@ -1,6 +1,9 @@
 class_name WorldSnapshot
 extends RefCounted
 
+var enemy_action_audit: Array[EnemyActionAuditRecord] = []
+var enemy_observed_actions: Array[EnemyObservedAction] = []
+
 var tick: int
 var units: Array[UnitSnapshot]
 var formations: Array[FormationSnapshot]

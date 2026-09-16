@@ -128,6 +128,8 @@ var enemy_reaction_rules: Array[EnemyReactionRuleState] = []
 var opened_engineering_routes: Dictionary = {}
 var enemy_reaction_committed_until_tick: int = GREY_RIDGE_OPENING_COMMITMENT_TICKS
 var enemy_reaction_log: Array[String] = []
+var enemy_action_audit := EnemyActionAuditSystem.new()
+var enemy_escort_observed_target_id: int = 0
 var enemy_opening_plan_id: StringName = ENEMY_PLAN_CENTRAL_ASSAULT
 var enemy_opening_followup_executed: bool = false
 var enemy_offensive_followup_executed: bool = false
@@ -205,6 +207,7 @@ func _init(
 	_update_faction_knowledge()
 	if create_default_units and create_test_agent and scenario_kind == ScenarioKind.LEGACY_RTS:
 		_create_default_agent_task()
+	enemy_action_audit.advance(self)
 	_update_commander_behavior_feedback()
 
 
@@ -877,6 +880,7 @@ func submit_command(command: GameCommand) -> CommandValidationResult:
 			if commander_order.order_kind == CommanderOrderCommand.OrderKind.SET_POSTURE \
 					and commander_order.posture == CommanderState.Posture.DISENGAGE:
 				_cancel_pending_commander_automation(commander_order.commander_id)
+		enemy_action_audit.accepted(self,command)
 		command_queue.enqueue(command.duplicate_value() if command is StaffPlanApprovalCommand or command is CommanderCardTaskCommand else command)
 		event_kind = SimulationEvent.Kind.COMMAND_ACCEPTED
 	events.append(SimulationEvent.new(current_tick, event_kind, command.target_entity_id, result.describe()))
@@ -1528,6 +1532,7 @@ func advance_tick() -> WorldSnapshot:
 	if is_card_battle():
 		battle_outcome = objective_system.advance(self, events, current_tick)
 	_update_faction_knowledge()
+	enemy_action_audit.advance(self)
 	_update_commander_behavior_feedback()
 	metrics.record_events(events, event_start)
 	profile_started_usec = _record_tick_profile_section(&"post_tick_knowledge", profile_started_usec)
@@ -2123,7 +2128,8 @@ func _advance_escort_interception() -> void:
 	if target_contact == null:
 		enemy_escort_observed_tick = -1
 		return
-	if enemy_escort_observed_tick < 0:
+	if enemy_escort_observed_tick < 0 or enemy_escort_observed_target_id != target_contact.entity_id:
+		enemy_escort_observed_target_id = target_contact.entity_id
 		enemy_escort_observed_tick = current_tick
 		events.append(SimulationEvent.new(
 			current_tick, SimulationEvent.Kind.ENEMY_REACTION_ARMED, target_contact.entity_id,
@@ -2151,10 +2157,11 @@ func _advance_escort_interception() -> void:
 		enemy_reaction_log.append("tick=%d;rule=escort_intercept;source=LEGAL_FACTION_OBSERVATION;target=%d;command_rejected=%s" % [current_tick, target_contact.entity_id, result.describe()])
 		enemy_escort_observed_tick = -1
 		return
+	enemy_action_audit.annotate(self,command,&"escort_intercept",&"LEGAL_FACTION_OBSERVATION","visible_contact=%d" % target_contact.entity_id,enemy_escort_observed_tick,battle_definition.escort_intercept_delay_ticks,current_tick+120)
 	enemy_escort_intercept_target_id = target_contact.entity_id
 	enemy_reaction_committed_until_tick = current_tick + 120
 	var detail := "rule=escort_intercept;source=LEGAL_FACTION_OBSERVATION;observed_tick=%d;target=%d;commit_until=%d" % [
-		current_tick, target_contact.entity_id, enemy_reaction_committed_until_tick,
+		enemy_escort_observed_tick, target_contact.entity_id, enemy_reaction_committed_until_tick,
 	]
 	enemy_reaction_log.append("tick=%d;%s" % [current_tick, detail])
 	events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.ENEMY_REACTION_COMMITTED, interceptors.leader_entity_id, detail))
@@ -2367,7 +2374,7 @@ func _advance_grey_ridge_enemy_reactions() -> void:
 		if not bool(observation.get("active", false)):
 			rule.observed_tick = -1
 			continue
-		if rule.observed_tick < 0:
+		if rule.observed_tick < 0 or rule.last_target_entity_id != int(observation.get("target_entity_id", 0)):
 			rule.observed_tick = current_tick
 			rule.last_target_entity_id = int(observation.get("target_entity_id", 0))
 			rule.last_target_position = observation.get("target_position", Vector2.ZERO) as Vector2
@@ -2433,7 +2440,8 @@ func _submit_enemy_scout_order(formation: FormationState, enemy_agent_id: int) -
 	)
 	command.agent_id = enemy_agent_id
 	command.strategic_priority = ENEMY_STRATEGIC_PRIORITY_SCOUT
-	submit_command(command)
+	if submit_command(command).is_accepted():
+		enemy_action_audit.annotate(self,command,&"strategic_scout",&"LEGAL_FACTION_OBSERVATION","reachable unexplored map area",current_tick,0,enemy_reaction_committed_until_tick)
 
 
 func _submit_enemy_attack_order(formation: FormationState, target_id: int, target_position: Vector2, enemy_agent_id: int, replaced_task: TaskState) -> void:
@@ -2447,7 +2455,8 @@ func _submit_enemy_attack_order(formation: FormationState, target_id: int, targe
 	command.agent_id = enemy_agent_id
 	command.strategic_priority = ENEMY_STRATEGIC_PRIORITY_ATTACK
 	command.replaces_task_id = replaced_task.task_id if replaced_task != null else 0
-	submit_command(command)
+	if submit_command(command).is_accepted():
+		enemy_action_audit.annotate(self,command,&"strategic_attack",&"LEGAL_FACTION_OBSERVATION","visible_contact=%d" % target_id,current_tick,0,enemy_reaction_committed_until_tick)
 
 
 func _submit_enemy_capture_order(formation: FormationState, region: StrategicRegionState, enemy_agent_id: int, replaced_task: TaskState) -> void:
@@ -2464,7 +2473,8 @@ func _submit_enemy_capture_order(formation: FormationState, region: StrategicReg
 	command.agent_id = enemy_agent_id
 	command.strategic_priority = ENEMY_STRATEGIC_PRIORITY_CAPTURE
 	command.replaces_task_id = replaced_task.task_id if replaced_task != null else 0
-	submit_command(command)
+	if submit_command(command).is_accepted():
+		enemy_action_audit.annotate(self,command,&"strategic_capture",&"LEGAL_FACTION_OBSERVATION","public_region=%s;controller=%d;contested=%s" % [region.region_id,region.controller_faction_id,region.contested],current_tick,0,enemy_reaction_committed_until_tick)
 
 
 func _best_enemy_capture_region(origin: Vector2) -> StrategicRegionState:
@@ -2614,6 +2624,7 @@ func _commit_enemy_reaction(rule: EnemyReactionRuleState, observation: Dictionar
 	if not result.is_accepted():
 		rule.last_reason = "%s;command_rejected=%s" % [rule.last_reason, result.describe()]
 		return
+	enemy_action_audit.annotate(self,command,rule.rule_id,&"LEGAL_FACTION_OBSERVATION",String(observation.get("reason","")),rule.observed_tick,rule.delay_ticks,current_tick+rule.commitment_ticks)
 	rule.last_fired_tick = current_tick
 	rule.fired_count += 1
 	rule.last_target_entity_id = target_entity_id
@@ -2622,8 +2633,11 @@ func _commit_enemy_reaction(rule: EnemyReactionRuleState, observation: Dictionar
 	var detail := "rule=%s;source=LEGAL_FACTION_OBSERVATION;observed_tick=%d;delay=%d;action=%s;target=%d;commit_until=%d" % [rule.rule_id, rule.observed_tick, rule.delay_ticks, EnemyReactionRuleState.ActionKind.keys()[rule.action_kind], target_entity_id, enemy_reaction_committed_until_tick]
 	enemy_reaction_log.append("tick=%d;%s" % [current_tick, detail])
 	events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.ENEMY_REACTION_COMMITTED, formation.leader_entity_id, detail))
-	if is_entity_visible_to_faction(formation.leader_entity_id, LOCAL_PLAYER_ID):
-		_add_intel_report(LOCAL_PLAYER_ID, &"INTEL_SOURCE_CARDINAL", &"INTEL_ENEMY_MANEUVER", formation.member_entity_ids.size(), formation.member_entity_ids.size(), observation.get("region_id", &"") as StringName, &"INTEL_DIRECTION_CURRENT", &"INTEL_CONFIDENCE_HIGH", 0, 0, true)
+	var visible_strength := 0
+	for member_id in formation.member_entity_ids:
+		if is_entity_enabled(member_id) and is_entity_visible_to_faction(member_id, LOCAL_PLAYER_ID): visible_strength += 1
+	if visible_strength > 0:
+		_add_intel_report(LOCAL_PLAYER_ID, &"INTEL_SOURCE_CARDINAL", &"INTEL_ENEMY_MANEUVER", visible_strength, visible_strength, observation.get("region_id", &"") as StringName, &"INTEL_DIRECTION_CURRENT", &"INTEL_CONFIDENCE_HIGH", 0, 0, true)
 	rule.observed_tick = -1
 
 
@@ -2675,6 +2689,7 @@ func create_true_state_snapshot() -> WorldSnapshot:
 		faction_snapshots.append(FactionSnapshot.new(factions[faction_id] as FactionState))
 	var task_snapshots := _create_task_snapshots()
 	var snapshot := WorldSnapshot.new(current_tick, unit_snapshots, formation_snapshots, projectile_snapshots, metrics.create_snapshot(), faction_snapshots, building_snapshots, ore_snapshots, 0, null, true, task_snapshots, MissionSnapshot.new(mission_state), _create_commander_snapshots(), _create_unit_card_snapshots(), _create_strategic_region_snapshots(), _create_intel_report_snapshots(), _create_enemy_reaction_snapshots(), objective_system.create_snapshots(), battle_outcome, staff_plan_system.create_snapshots(0))
+	snapshot.enemy_action_audit = enemy_action_audit.records_for(0)
 	snapshot.enemy_operation = enemy_operation_system.snapshot_for(0)
 	snapshot.commander_task_graphs = commander_task_graph_system.create_snapshots(0)
 	return snapshot
@@ -2743,6 +2758,8 @@ func create_faction_snapshot(faction_id: int) -> WorldSnapshot:
 		if knowledge.get_cell_state(logic_grid.world_to_cell(ore_field.position)) != FactionKnowledge.CellState.UNEXPLORED:
 			ore_snapshots.append(OreFieldSnapshot.new(ore_field))
 	var snapshot := WorldSnapshot.new(current_tick, unit_snapshots, formation_snapshots, projectile_snapshots, metrics.create_snapshot(), faction_snapshots, building_snapshots, ore_snapshots, faction_id, FactionKnowledgeSnapshot.new(knowledge), false, _create_task_snapshots(), MissionSnapshot.new(mission_state), _create_commander_snapshots(faction_id), _create_unit_card_snapshots(faction_id), _create_strategic_region_snapshots(), _create_intel_report_snapshots(faction_id), [], objective_system.create_snapshots(), battle_outcome, staff_plan_system.create_snapshots(faction_id))
+	snapshot.enemy_action_audit = enemy_action_audit.records_for(faction_id)
+	snapshot.enemy_observed_actions = enemy_action_audit.observations_for(faction_id)
 	snapshot.enemy_operation = enemy_operation_system.snapshot_for(faction_id)
 	snapshot.commander_task_graphs = commander_task_graph_system.create_snapshots(faction_id)
 	return snapshot
@@ -4650,6 +4667,7 @@ func _refresh_unit_card_control_states() -> void:
 
 
 func _apply_command(command: GameCommand) -> void:
+	enemy_action_audit.accepted(self, command)
 	if command is CommanderCardTaskCommand:
 		commander_task_graph_system.apply(self, command as CommanderCardTaskCommand)
 		return
@@ -4783,6 +4801,7 @@ func _apply_command(command: GameCommand) -> void:
 			member.recovery_path_index = 0
 			member.recovery_attempts = 0
 			member.ticks_without_progress = 0
+		enemy_action_audit.applied(self,command)
 	elif command is MoveCommand:
 		var unit := units[command.target_entity_id] as UnitState
 		_cancel_unit_job(unit)
@@ -5000,6 +5019,8 @@ func _apply_strategic_order(command: StrategicOrderCommand) -> void:
 		unit.assigned_task_id = task.task_id
 		unit.original_formation_id = unit.formation_id
 	events.append(SimulationEvent.new(current_tick, SimulationEvent.Kind.TASK_STATE_CHANGED, task.task_id, "EXECUTING:%s" % TaskState.Kind.keys()[task.kind]))
+	enemy_action_audit.bind_task(command.command_id,task.task_id)
+	enemy_action_audit.applied(self,command)
 
 
 func _preempt_autonomous_tasks_for(command: StrategicOrderCommand) -> void:
@@ -5172,6 +5193,7 @@ func _apply_attack(command: AttackCommand) -> void:
 			unit.entity_id,
 			"target=%d" % command.attack_target_entity_id
 		))
+	enemy_action_audit.applied(self,command)
 
 
 func _combat_participants(formation_id: int) -> Array[int]:
@@ -5258,6 +5280,7 @@ func _apply_stop(command: StopCommand) -> void:
 		unit.is_attack_moving = false
 		unit.attack_move_destination = unit.position
 		unit.pursuit_target_cell = Vector2i(-1, -1)
+	enemy_action_audit.applied(self,command)
 
 
 func _remove_unit_from_formation(unit: UnitState) -> void:

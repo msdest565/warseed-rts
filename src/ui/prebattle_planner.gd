@@ -211,6 +211,7 @@ func _build_ui() -> void:
 
 	var commander_title := Label.new()
 	commander_title.name = "CommanderTitle"
+	commander_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	commander_title.add_theme_font_size_override("font_size", 14)
 	commander_title.add_theme_color_override("font_color", Color(0.84, 0.89, 0.86))
 	content.add_child(commander_title)
@@ -223,6 +224,7 @@ func _build_ui() -> void:
 
 	var card_title := Label.new()
 	card_title.name = "UnitCardTitle"
+	card_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	card_title.add_theme_font_size_override("font_size", 14)
 	card_title.add_theme_color_override("font_color", Color(0.84, 0.89, 0.86))
 	content.add_child(card_title)
@@ -349,6 +351,8 @@ func _create_commander_panel(definition: CommanderDefinition) -> PanelContainer:
 	doctrine_label.add_theme_color_override("font_color", Color(0.48, 0.82, 0.7))
 	controls.add_child(doctrine_label)
 	var doctrine_menu := OptionButton.new()
+	doctrine_menu.fit_to_longest_item = false
+	doctrine_menu.clip_text = true
 	doctrine_menu.name = "Doctrine"
 	doctrine_menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for doctrine_id in definition.available_doctrine_ids:
@@ -374,6 +378,8 @@ func _create_commander_panel(definition: CommanderDefinition) -> PanelContainer:
 	posture_label.add_theme_color_override("font_color", Color(0.48, 0.82, 0.7))
 	controls.add_child(posture_label)
 	var posture_menu := OptionButton.new()
+	posture_menu.fit_to_longest_item = false
+	posture_menu.clip_text = true
 	posture_menu.name = "Posture"
 	posture_menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for posture in range(CommanderState.Posture.size()):
@@ -512,6 +518,8 @@ func _create_unit_card_panel(definition: UnitCardDefinition) -> PanelContainer:
 	choices.add_theme_constant_override("separation", 5)
 	layout.add_child(choices)
 	var commander_menu := OptionButton.new()
+	commander_menu.fit_to_longest_item = false
+	commander_menu.clip_text = true
 	for commander in _commander_definitions:
 		commander_menu.add_item(GameText.t((commander as CommanderDefinition).display_name_key))
 		commander_menu.set_item_metadata(commander_menu.item_count - 1, (commander as CommanderDefinition).definition_id)
@@ -684,6 +692,8 @@ func _apply_layout_for_size(viewport_size: Vector2) -> void:
 	footer.custom_minimum_size.y = 96.0 if narrow else 42.0
 	var battle := simulation_host.world.battle_definition if simulation_host != null else null
 	var battle_name := GameText.t(battle.display_name_key) if battle != null else GameText.t(&"GREY_RIDGE_TITLE")
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.text = GameText.t(&"PREBATTLE_TITLE_GENERIC") % battle_name
 	operation.visible = not narrow
 	operation.custom_minimum_size.x = 0.0 if narrow else 240.0

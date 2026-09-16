@@ -192,11 +192,22 @@ func _refresh_turning_points() -> void:
 
 
 func _refresh_causes() -> void:
-	if _review == null or _review.causes.is_empty():
-		rows.add_child(_create_empty_review_label(&"AFTER_ACTION_NO_CAUSES"))
-		return
-	for entry in _review.causes:
-		rows.add_child(_create_cause_row(entry))
+	if _review == null: return
+	if _review.causes.is_empty(): rows.add_child(_create_empty_review_label(&"AFTER_ACTION_NO_CAUSES"))
+	for entry in _review.causes: rows.add_child(_create_cause_row(entry))
+	rows.add_child(_create_empty_review_label(&"ENEMY_OBSERVED_TITLE"))
+	if _review.enemy_observed_actions.is_empty():
+		rows.add_child(_create_empty_review_label(&"ENEMY_OBSERVED_NONE"))
+	for index in range(maxi(0,_review.enemy_observed_actions.size()-12),_review.enemy_observed_actions.size()):
+		var entry := _review.enemy_observed_actions[index]
+		var label := Label.new()
+		label.custom_minimum_size=Vector2(0,42)
+		label.vertical_alignment=VERTICAL_ALIGNMENT_CENTER
+		label.set_meta(&"enemy_observation_id",entry.observation_id)
+		label.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+		label.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+		label.text=GameText.t(&"ENEMY_OBSERVED_ROW") % [_format_tick(entry.first_tick),_format_tick(entry.last_tick),entry.visible_strength,GameText.t(StringName("ENEMY_OBSERVED_"+String(entry.action)))]
+		rows.add_child(label)
 
 
 func _create_empty_review_label(key: StringName) -> Label:

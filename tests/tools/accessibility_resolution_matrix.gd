@@ -176,6 +176,30 @@ func _run_resolution(resolution: Vector2i) -> void:
 	await _activate_debrief_button(game.battle_debrief.causes_button)
 	await _validate_debrief_rows(game.battle_debrief, viewport_rect, &"cause_id", -1, "causes")
 	await _save_screenshot(resolution, "debrief_causes")
+	# Typed view fixture; legal simulation-to-projector behavior is tested separately.
+	for locale in ["zh_CN","en"]:
+		TranslationServer.set_locale(locale)
+		game.battle_debrief.refresh_locale()
+		if game.battle_debrief._review == null:
+			_fail("enemy observation debrief requires projected review")
+			return
+		for action in [&"MOVING",&"ENGAGING",&"HOLDING"]:
+			var entry := EnemyObservedAction.new()
+			entry.observation_id=game.battle_debrief._review.enemy_observed_actions.size()+1
+			entry.first_tick=100
+			entry.last_tick=125
+			entry.visible_strength=4
+			entry.action=action
+			game.battle_debrief._review.enemy_observed_actions.append(entry)
+		game.battle_debrief._refresh_review_rows()
+		await _wait_frames(6)
+		await _validate_debrief_rows(game.battle_debrief,viewport_rect,&"enemy_observation_id",-1,"enemy observations "+locale)
+		await _focus_last_debrief_row(game.battle_debrief,viewport_rect)
+		for row in game.battle_debrief.rows.get_children():
+			if row is Label and row.has_meta(&"enemy_observation_id") and row.text.contains("ENEMY_OBSERVED_"):
+				_fail("enemy observation text missing translation")
+		await _save_screenshot(resolution,"debrief_enemy_"+locale)
+
 	resolution_report["screens"]["debrief"] = _screen_report([
 		game.battle_debrief.get_node("Backdrop/Panel"),
 		game.battle_debrief.timeline_button, game.battle_debrief.cards_button, game.battle_debrief.causes_button,

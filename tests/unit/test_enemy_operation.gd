@@ -3,6 +3,7 @@ extends RefCounted
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	failures.append_array(TestEnemyActionAudit.new().run())
 	_test_content(failures)
 	_test_lock_and_fairness(failures)
 	_test_withdrawal(failures)

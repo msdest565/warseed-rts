@@ -914,6 +914,7 @@ func _create_tactical_column(commander: CommanderSnapshot) -> BoxContainer:
 	_commander_status_labels[commander.definition_id] = status
 	var posture := OptionButton.new()
 	posture.fit_to_longest_item = false
+	posture.clip_text = true
 	posture.custom_minimum_size.y = 32.0
 	posture.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	posture.add_theme_font_size_override("font_size", 11)

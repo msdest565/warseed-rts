@@ -12,6 +12,7 @@ var observer_faction_id: int
 var max_ticks: int
 var illegal_input_reason := ""
 
+var _enemy_observed_actions: Array[Dictionary] = []
 var _started_tick := 0
 var _latest_tick := 0
 var _commands: Array[Dictionary] = []
@@ -102,6 +103,8 @@ func record_command(command: GameCommand, validation: CommandValidationResult, d
 func observe(snapshot: WorldSnapshot, new_events: Array[SimulationEvent] = []) -> bool:
 	if not _accepts_snapshot(snapshot):
 		return false
+	_enemy_observed_actions.clear()
+	for entry in snapshot.enemy_observed_actions: _enemy_observed_actions.append(entry.to_dictionary())
 	_latest_tick = maxi(_latest_tick, snapshot.tick)
 	_observe_cards(snapshot)
 	_observe_tasks(snapshot)
@@ -263,6 +266,7 @@ func _report_without_fingerprint() -> Dictionary:
 		opened_exceptions += int(exception_record["opened_count"])
 		resolved_exceptions += int(exception_record["resolved_count"])
 	return {
+		"enemy_observed_actions": _enemy_observed_actions.duplicate(true),
 		"format_version": FORMAT_VERSION,
 		"schema_id": "warseed.gameplay_baseline.case.v1",
 		"evidence_level": EVIDENCE_LEVEL,

@@ -3056,3 +3056,25 @@ msgstr "Prerequisite restored"
 
 msgid "STAFF_BUDGET_HELP"
 msgstr "Includes initial deployment. Unused allowance permits automatic reinforcement and reserve commitment."
+
+
+msgid "ENEMY_OBSERVED_TITLE"
+msgstr "Observed enemy activity (recent records)"
+
+msgid "ENEMY_OBSERVED_NONE"
+msgstr "No observations available; enemy activity is unconfirmed."
+
+msgid "ENEMY_OBSERVED_ROW"
+msgstr "%s–%s · %d units visible · %s. Observed activity only; later outcome unconfirmed."
+
+msgid "ENEMY_OBSERVED_MOVING"
+msgstr "Moving"
+
+msgid "ENEMY_OBSERVED_ENGAGING"
+msgstr "Firing"
+
+msgid "ENEMY_OBSERVED_HOLDING"
+msgstr "Holding"
+
+msgid "ENEMY_OBSERVED_SIGHTED"
+msgstr "Sighted"

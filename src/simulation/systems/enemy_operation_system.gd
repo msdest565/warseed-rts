@@ -124,6 +124,7 @@ func _issue(world: SimulationWorld, node: EnemyOperationPhaseSnapshot, immediate
 	if not receipt.is_accepted():
 		node.reason = &"COMMAND_REJECTED"
 		return
+	world.enemy_action_audit.annotate(world,command,node.definition.phase_id,&"LEGAL_FACTION_OBSERVATION" if node.definition.kind == Kind.RESERVE else &"LOCKED_PLAN_TIMELINE",String(node.reason) if node.definition.kind == Kind.RESERVE else "operation=%s;phase=%s" % [_state.operation_id,node.definition.phase_id],world.current_tick if node.definition.kind == Kind.RESERVE else 0,0,world.enemy_reaction_committed_until_tick)
 	if immediate: world._apply_command(command)
 	if not _state.committed_formation_ids.has(node.formation_id): _state.committed_formation_ids.append(node.formation_id)
 	node.command_id = command.command_id
@@ -156,5 +157,6 @@ func _withdraw(world: SimulationWorld, formation_ids: Array[int]) -> void:
 		command.agent_id = world.battle_definition.enemy_agent_id
 		command.task_id = world.battle_definition.enemy_task_id
 		if world.submit_command(command).is_accepted():
+			world.enemy_action_audit.annotate(world,command,&"doctrine_withdrawal",&"LEGAL_FACTION_OBSERVATION","own_strength_at_or_below_doctrine_threshold",world.current_tick,0,world.current_tick)
 			_state.withdrawn_formation_ids.append(id)
 			world.enemy_reaction_log.append("tick=%d;source=LEGAL_FACTION_OBSERVATION;rule=doctrine_withdrawal;formation=%d;command=%d;reason=OWN_STRENGTH_BELOW_LIMIT" % [world.current_tick, id, command.command_id])

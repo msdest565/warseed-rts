@@ -287,7 +287,7 @@ func _test_grey_ridge_hides_individual_selection(failures: Array[String]) -> voi
 	var host := fixture["host"] as SimulationHost
 	var member := host.current_snapshot.get_unit(9)
 	input.select_at(member.position)
-	_expect(input.selected_unit_card_id == &"ironwall_assault_group" and input.selected_entity_ids.size() == 12, "formal Grey Ridge selection should promote a clicked member to its whole unit card", failures)
+	_expect(input.selected_unit_card_id == &"ironwall_assault_group" and input.selected_entity_ids.size() == 12, "formal Grey Ridge selection should promote a clicked member to its whole unit card (selected=%s members=%s clicked=%s)" % [input.selected_unit_card_id,input.selected_entity_ids,member.unit_card_id], failures)
 	input.diagnostic_individual_selection_enabled = true
 	input.select_at(member.position)
 	_expect(input.selected_entity_ids == [member.entity_id], "F3 diagnostics should retain individual selection for development inspection only", failures)
