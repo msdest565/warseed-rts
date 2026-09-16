@@ -19,6 +19,8 @@ var main_axis_region_id: StringName
 var reserve_policy: CommanderState.ReservePolicy = CommanderState.ReservePolicy.HOLD
 # Explicit player execution orders may also hand manual cards back to this commander.
 var hand_back_control: bool = false
+# Explicit contextual execution can replace a hold/disengage posture atomically.
+var apply_requested_posture: bool = false
 
 
 func _init(

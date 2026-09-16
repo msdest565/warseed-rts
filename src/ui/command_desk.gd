@@ -379,13 +379,24 @@ func _cancel_intent() -> void:
 		_show_decision_failure(subject, GameText.t(&"COMMAND_DESK_CANCEL"), GameText.command_result(result))
 
 
+func _decision_matches_filter(decision: CardActionSnapshot) -> bool:
+	if _card_action_filter == SupportOrderCommand.SupportKind.ENGINEERING_ROUTE and decision.action_kind == CardActionSnapshot.TACTICAL + TacticalAbilityDefinition.Kind.OPEN_ROUTE:
+		return true
+	if decision.action_kind in [CardActionSnapshot.ATTACK_HEADQUARTERS, CardActionSnapshot.CONTINUE_RECON]:
+		return true
+	if _card_action_filter == SupportOrderCommand.SupportKind.ENGINEERING_ROUTE and decision.action_kind == CardActionSnapshot.DEPLOY:
+		var card := current_snapshot.get_unit_card(decision.unit_card_id)
+		return card != null and card.tactical_kind == TacticalAbilityDefinition.Kind.OPEN_ROUTE
+	return _card_action_filter == -2 or decision.action_kind == _card_action_filter
+
+
 func _rebuild_exception_rows() -> void:
 	if exception_rows == null:
 		return
 	_row_insert_index = 0
 	var visible_card_ids: Array[StringName] = []
 	for decision in card_actions:
-		if _card_action_filter == -2 or decision.action_kind == _card_action_filter:
+		if _decision_matches_filter(decision):
 			visible_card_ids.append(decision.decision_id)
 	for child in exception_rows.get_children():
 		if child.has_meta(&"card_decision_id") and visible_card_ids.has(child.get_meta(&"card_decision_id")):
@@ -408,14 +419,14 @@ func _rebuild_exception_rows() -> void:
 				_add_exception_row(exception)
 	var count := 0
 	for decision in card_actions:
-		if _card_action_filter != -2 and decision.action_kind != _card_action_filter:
+		if not _decision_matches_filter(decision):
 			continue
 		_add_card_action_row(decision)
 		count += 1
 	if count == 0 and (_card_action_filter != -2 or current_command_situation == null or current_command_situation.exceptions.is_empty()):
 		var clear_label := Label.new()
 		clear_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		clear_label.text = GameText.t(&"CARD_DECISION_NO_TARGETS" if _card_action_filter != -2 else &"COMMAND_DESK_NO_EXCEPTIONS")
+		clear_label.text = GameText.t(&"CARD_ENGINEERING_NO_TARGETS" if _card_action_filter == SupportOrderCommand.SupportKind.ENGINEERING_ROUTE else (&"CARD_DECISION_NO_TARGETS" if _card_action_filter != -2 else &"COMMAND_DESK_NO_EXCEPTIONS"))
 		_place_decision_row(clear_label)
 
 
@@ -560,7 +571,7 @@ func _acknowledge_exception(exception_id: StringName) -> void:
 func _update_status() -> void:
 	var decision_count := 0
 	for decision in card_actions:
-		if _card_action_filter == -2 or decision.action_kind == _card_action_filter:
+		if _decision_matches_filter(decision):
 			decision_count += 1
 	if _card_action_filter == -2 and current_command_situation != null:
 		for exception in current_command_situation.exceptions:
@@ -943,7 +954,7 @@ func show_card_actions(kind: int) -> void:
 
 
 func _card_subject(decision: CardActionSnapshot) -> String:
-	if decision.action_kind == CardActionSnapshot.ATTACK_HEADQUARTERS:
+	if decision.action_kind in [CardActionSnapshot.ATTACK_HEADQUARTERS, CardActionSnapshot.CONTINUE_RECON]:
 		return "%s / %s" % [GameText.t(decision.commander_name_key), GameText.t(decision.target_name_key)]
 	return "%s / %s" % [GameText.t(decision.card_name_key), GameText.t(decision.commander_name_key)]
 
@@ -1003,8 +1014,8 @@ func _add_card_action_row(decision: CardActionSnapshot) -> void:
 	title.tooltip_text = title.text
 	var detail_text := GameText.t(&"CARD_DECISION_CONTEXT") % [decision.current_strength, decision.authorized_strength, decision.supply_cost, decision.available_supply, decision.population, decision.population_capacity, decision.population_required, ceili(decision.cooldown_ticks * SimulationWorld.TICK_SECONDS), GameText.t(decision.target_name_key)]
 	detail_text += "\n" + _card_reason(decision.reason)
-	if decision.action_kind == CardActionSnapshot.ATTACK_HEADQUARTERS:
-		detail_text = GameText.t(&"CARD_ATTACK_HEADQUARTERS_CONTEXT") + "\n" + _card_reason(decision.reason)
+	if decision.action_kind in [CardActionSnapshot.ATTACK_HEADQUARTERS, CardActionSnapshot.CONTINUE_RECON]:
+		detail_text = GameText.t(&"CARD_CONTINUE_RECON_CONTEXT" if decision.action_kind == CardActionSnapshot.CONTINUE_RECON else &"CARD_ATTACK_HEADQUARTERS_CONTEXT") + "\n" + _card_reason(decision.reason)
 	if decision.action_kind >= CardActionSnapshot.TACTICAL:
 		var card := current_snapshot.get_unit_card(decision.unit_card_id)
 		if card != null and card.ammunition_capacity > 0:
@@ -1068,7 +1079,7 @@ func _perform_card_action(decision_id: StringName) -> void:
 		_rebuild_exception_rows()
 		return
 	var command: GameCommand
-	if decision.action_kind == CardActionSnapshot.ATTACK_HEADQUARTERS:
+	if decision.action_kind in [CardActionSnapshot.ATTACK_HEADQUARTERS, CardActionSnapshot.CONTINUE_RECON]:
 		command = CardActionProjector.headquarters_command(decision, simulation_host.world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, simulation_host.current_snapshot.tick)
 	elif decision.action_kind >= CardActionSnapshot.TACTICAL:
 		command = TacticalActionProjector.command_for(decision, simulation_host.world.allocate_command_id(), SimulationWorld.LOCAL_PLAYER_ID, simulation_host.current_snapshot.tick)
@@ -1144,7 +1155,7 @@ func _card_response_is_confirmed(response: Dictionary) -> bool:
 	if card == null or faction == null or current_snapshot.tick <= int(response["issued_tick"]):
 		return false
 	var kind := int(response["support_kind"])
-	if kind == CardActionSnapshot.ATTACK_HEADQUARTERS:
+	if kind in [CardActionSnapshot.ATTACK_HEADQUARTERS, CardActionSnapshot.CONTINUE_RECON]:
 		var commander := current_snapshot.get_commander(response["commander_id"] as StringName)
 		return commander != null and commander.target_position.is_equal_approx(response["target_position"] as Vector2) and not commander.current_task_ids.is_empty()
 	if kind >= CardActionSnapshot.TACTICAL:

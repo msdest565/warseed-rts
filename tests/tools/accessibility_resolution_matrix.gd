@@ -257,6 +257,7 @@ func _run_resolution(resolution: Vector2i) -> void:
 	resolution_report["screens"]["twelve_card_overview"] = await _verify_twelve_card_overview(resolution)
 	resolution_report["screens"]["composition_persistence"] = await _verify_composition_persistence(resolution)
 	resolution_report["screens"]["tactical_cards"] = await _verify_tactical_cards(resolution)
+	await _verify_engineering_and_recon(resolution)
 	_reports.append(resolution_report)
 
 
@@ -311,6 +312,11 @@ func _verify_staff_plans(game: GameRoot, resolution: Vector2i) -> void:
 		panel.scroll.scroll_vertical = 0
 		await _wait_frames(4)
 		await _save_screenshot(resolution, "staff_plans_" + locale)
+		var before_generation := panel.generation_count
+		var before_fingerprint := panel.current_plans.fingerprint()
+		await _click_popup_control(panel, panel.generate_button)
+		if panel.generation_count != before_generation + 1 or panel.current_plans.fingerprint() != before_fingerprint or panel.status_label.text != GameText.t(&"STAFF_REGENERATED_SAME") % [panel.generation_count, panel.current_plans.plans.size()]:
+			_fail("unchanged regeneration must execute and visibly explain identical deterministic plans")
 		var old_tick := host.current_snapshot.tick
 		panel.budget.value = 1
 		if panel.current_plans != null:
@@ -1477,3 +1483,68 @@ func _verify_tactical_planning(game: GameRoot, resolution: Vector2i) -> void:
 	await _wait_frames(15)
 	if host.is_tactical_paused() or host.current_snapshot.tick <= frozen_tick:
 		_fail("Space must resume queued orders and simulation")
+
+
+func _verify_engineering_and_recon(resolution: Vector2i) -> void:
+	var game := (load("res://scenes/game/grey_ridge.tscn") as PackedScene).instantiate() as GameRoot
+	root.add_child(game)
+	current_scene = game
+	await _wait_frames(10)
+	var host := game.simulation_host
+	host.set_process(false)
+	host.world = TestGreyRidgeTacticalContent.new()._formal_world([&"bridge_engineer_group", &"falcon_recon_group"])
+	(host.world.factions[1] as FactionState).supply = 10
+	var engineer := host.world.unit_cards[&"bridge_engineer_group"] as UnitCardState
+	var route := host.world.battle_definition.engineering_routes[0]
+	TestTacticalCards._place(host.world, engineer, host.world._engineering_route_center(route) + Vector2(0, 180))
+	host._grey_ridge_army_plan = host.world.grey_ridge_army_plan.duplicate_plan()
+	host._grey_ridge_battle_started = true
+	host.current_snapshot = host.world.create_snapshot()
+	host.previous_snapshot = host.current_snapshot
+	game.prebattle_planner.visible = false
+	game._on_scenario_restarted(host.current_snapshot)
+	await _wait_frames(10)
+	var desk := game.command_desk
+	var support_scroll := game.support_panel.get_node("Margin/Scroll") as ScrollContainer
+	support_scroll.ensure_control_visible(game.support_panel.engineering_button)
+	await _wait_frames(5)
+	await _click_control(game.support_panel.engineering_button)
+	await _wait_frames(5)
+	var action := _first_card_decision_button(desk, CardActionSnapshot.TACTICAL + TacticalAbilityDefinition.Kind.OPEN_ROUTE)
+	if action == null or action.disabled:
+		_fail("left engineering entry must expose the executable migrated tactical action")
+	else:
+		(desk.get_node("Exceptions/Scroll") as ScrollContainer).ensure_control_visible(action)
+		await _wait_frames(5)
+		await _click_control(action)
+		for tick in range(35):
+			host.current_snapshot = host.world.advance_tick()
+		await _wait_frames(5)
+		if not host.world.opened_engineering_routes.has(route.route_id) or not game.battlefield._engineering_route_is_open(route):
+			_fail("engineering click must clear authority and the map barrier")
+		await _save_screenshot(resolution, "engineering_open")
+	for region in host.world.strategic_regions.values():
+		if region.capturable:
+			region.controller_faction_id = 1
+	host.current_snapshot = host.world.create_snapshot()
+	desk.update_command_situation(host.current_snapshot, CommandSituationSnapshot.new(host.current_snapshot.tick, 1, [], []))
+	# A stale engineering filter must not hide the next strategic decision.
+	var recon_button: Button
+	for row in desk.exception_rows.get_children():
+		if row.has_node("Action") and (row.get_node("Action") as Button).text == GameText.t(&"CARD_CONTINUE_RECON"):
+			recon_button = row.get_node("Action") as Button
+	if recon_button == null:
+		_fail("all held must show continued reconnaissance even under the engineering filter")
+	else:
+		(desk.get_node("Exceptions/Scroll") as ScrollContainer).ensure_control_visible(recon_button)
+		await _wait_frames(5)
+		await _save_screenshot(resolution, "continue_recon")
+		await _click_control(recon_button)
+		host.current_snapshot = host.world.advance_tick()
+		var card := host.world.unit_cards[&"falcon_recon_group"] as UnitCardState
+		var task := host.world.tasks.get(card.assigned_task_id) as TaskState
+		if task == null or task.kind != TaskState.Kind.SCOUT_AREA or not task.persistent_order:
+			_fail("continued reconnaissance click must create a real persistent scout task")
+	game.queue_free()
+	await _wait_frames(4)
+	current_scene = null

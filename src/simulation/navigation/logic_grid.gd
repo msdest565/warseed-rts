@@ -58,6 +58,10 @@ static func create_for_battle(definition: BattleDefinition) -> LogicGrid:
 	)
 	for rect in definition.navigation_blocked_rects:
 		grid._block_rect(rect)
+	# The marked engineering obstacle and authoritative navigation cover the same cells.
+	for route in definition.engineering_routes:
+		for rect in route.cleared_rects:
+			grid._block_rect(rect)
 	return grid
 
 

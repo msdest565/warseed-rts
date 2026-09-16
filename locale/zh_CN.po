@@ -3017,3 +3017,36 @@ msgstr "停留"
 
 msgid "ENEMY_OBSERVED_SIGHTED"
 msgstr "出现"
+
+msgid "STAFF_ALL_HELD"
+msgstr "所有据点已占领。请关闭此窗，在决策区选择继续侦察；发现敌方指挥部后可下达进攻。"
+
+msgid "STAFF_REGENERATED"
+msgstr "第 %d 次计算完成：%d 个方案。请选择并批准。"
+
+msgid "STAFF_REGENERATED_SAME"
+msgstr "第 %d 次计算完成：%d 个方案。战场已暂停且条件未变，结果相同；可修改目标、预算或可用部队。"
+
+msgid "STAFF_NO_CARDS"
+msgstr "未选择部队。请勾选至少一张可用部队卡后重新生成。"
+
+msgid "STAFF_FAILURE_INSUFFICIENT_ALTERNATIVES"
+msgstr "当前可用兵力不足以形成两种不同方案。请先归还手控部队、部署或补充兵力，或放宽可用卡与补给预算。"
+
+msgid "STAFF_FAILURE_BATTLE_ENDED"
+msgstr "会战已结束，不能生成新方案。"
+
+msgid "STAFF_FAILURE_OBJECTIVE_ALREADY_HELD"
+msgstr "目标已占领，请选择其他目标；全部占领后请在决策区继续侦察。"
+
+msgid "CARD_CONTINUE_RECON"
+msgstr "继续侦察敌方指挥部"
+
+msgid "CARD_UNEXPLORED_FRONTIER"
+msgstr "未探索区域"
+
+msgid "CARD_CONTINUE_RECON_CONTEXT"
+msgstr "据点已全部占领。将侦察部队交回AI，持续搜索未知区域并回报敌情；发现敌方指挥部后将出现进攻决策。"
+
+msgid "CARD_ENGINEERING_NO_TARGETS"
+msgstr "暂无可开通路线：需要尚未开通的渡口及存活的工程部队。先在军团中部署工程卡。"

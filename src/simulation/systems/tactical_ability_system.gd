@@ -167,7 +167,8 @@ func _execute(world: SimulationWorld, card: UnitCardState) -> bool:
 						world.logic_grid.set_blocked(Vector2i(x, y), false)
 			world.opened_engineering_routes[route.route_id] = world.current_tick
 			(world.factions[card.faction_id] as FactionState).opened_engineering_route_ids.append(route.route_id)
-			world.events.append(SimulationEvent.new(world.current_tick, SimulationEvent.Kind.ENGINEERING_ROUTE_OPENED, card.faction_id, "route=%s;engineer_card=%s;source=tactical" % [route.route_id, card.definition.definition_id]))
+			var position := world._engineering_route_center(route)
+			world.events.append(SimulationEvent.new(world.current_tick, SimulationEvent.Kind.ENGINEERING_ROUTE_OPENED, card.faction_id, "route=%s;region=%s;engineer_card=%s;source=tactical;position=%.1f,%.1f" % [route.route_id, route.linked_region_id, card.definition.definition_id, position.x, position.y]))
 		TacticalAbilityDefinition.Kind.SUPPRESS:
 			for id in card.member_entity_ids:
 				var unit := world.units.get(id) as UnitState

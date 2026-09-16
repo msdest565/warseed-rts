@@ -3616,6 +3616,8 @@ func _apply_commander_order(command: CommanderOrderCommand) -> void:
 			var card := unit_cards.get(card_id) as UnitCardState
 			if card != null and card.faction_id == commander.faction_id and card.deployment_state == UnitCardState.DeploymentState.DEPLOYED:
 				_release_card_for_commander(card, "PLAYER_EXECUTION_ORDER")
+	if command.apply_requested_posture:
+		commander.posture = command.posture
 	if command.order_kind == CommanderOrderCommand.OrderKind.SET_POSTURE:
 		commander.posture = command.posture
 		if commander.posture == CommanderState.Posture.DISENGAGE:

@@ -4,6 +4,7 @@ extends RefCounted
 # A value-only, local-faction UI decision. Never an authoritative command.
 const DEPLOY := -1
 const ATTACK_HEADQUARTERS := -3
+const CONTINUE_RECON := -4
 const TACTICAL := 100
 
 var decision_id: StringName
@@ -36,6 +37,7 @@ func action_key() -> StringName:
 	if action_kind >= TACTICAL:
 		return tactical_name_key
 	match action_kind:
+		CONTINUE_RECON: return &"CARD_CONTINUE_RECON"
 		ATTACK_HEADQUARTERS: return &"CARD_ATTACK_HEADQUARTERS"
 		DEPLOY: return &"CARD_DECISION_DEPLOY"
 		SupportOrderCommand.SupportKind.FIELD_REINFORCEMENT: return &"CARD_ACTION_REINFORCE"

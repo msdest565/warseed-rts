@@ -26,6 +26,8 @@ func find_path(from_position: Vector2, to_position: Vector2) -> PackedVector2Arr
 		_cache.clear()
 		_cache_revision = logic_grid.revision
 		_astar.update()
+		# update() is a no-op unless grid geometry is dirty; clear removed obstacles too.
+		_astar.fill_solid_region(_astar.region, false)
 		for cell in logic_grid.get_blocked_cells():
 			_astar.set_point_solid(cell, true)
 	var key := "%s:%s:%d" % [logic_grid.world_to_cell(from_position), logic_grid.world_to_cell(to_position), logic_grid.revision]

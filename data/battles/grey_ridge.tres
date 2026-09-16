@@ -286,7 +286,7 @@ script = ExtResource("25_route")
 route_id = &"grey_ridge_side_route"
 display_name_key = &"GREY_RIDGE_SIDE_ROUTE"
 linked_region_id = &"east_supply"
-cleared_rects = Array[Rect2i]([Rect2i(140, 60, 16, 8)])
+cleared_rects = Array[Rect2i]([Rect2i(140, 60, 8, 4)])
 
 [resource]
 script = ExtResource("1_battle")

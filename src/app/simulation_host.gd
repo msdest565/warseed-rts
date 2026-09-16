@@ -77,8 +77,14 @@ func get_staff_assessment() -> StaffSituationSnapshot:
 	return StaffSituationAssessor.new().assess(current_snapshot, SimulationWorld.LOCAL_PLAYER_ID)
 
 
+var staff_plan_rejection_reason: StringName
+
+
 func get_staff_plans(request: StaffPlanRequest) -> StaffPlanSet:
-	return StaffPlanGenerator.new().generate(current_snapshot, SimulationWorld.LOCAL_PLAYER_ID, request)
+	var generator := StaffPlanGenerator.new()
+	var result := generator.generate(current_snapshot, SimulationWorld.LOCAL_PLAYER_ID, request)
+	staff_plan_rejection_reason = generator.last_rejection_reason
+	return result
 
 
 func approve_staff_plan(request: StaffPlanRequest, plan: StaffCourseOfAction) -> CommandValidationResult:

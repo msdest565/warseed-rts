@@ -4,6 +4,7 @@ extends RefCounted
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	failures.append_array(TestPostCaptureDecisions.new().run())
 	_test_card_action_projection(failures)
 	_test_high_level_intent_command_pipeline(failures)
 	_test_intent_validation_and_cancel(failures)

@@ -115,8 +115,8 @@ func _test_formal_engineering_and_breakthrough(failures: Array[String]) -> void:
 	var assault := world.unit_cards[&"armored_spearhead"] as UnitCardState
 	var route := world.battle_definition.engineering_routes[0]
 	TestTacticalCards._place(world, engineer, world._engineering_route_center(route) + Vector2(0, 180))
-	var start := world.logic_grid.cell_to_world(Vector2i(143, 62))
-	var finish := world.logic_grid.cell_to_world(Vector2i(149, 62))
+	var start := world.logic_grid.cell_to_world(Vector2i(146, 58))
+	var finish := world.logic_grid.cell_to_world(Vector2i(146, 66))
 	var before := world.pathfinder.find_path(start, finish)
 	var revision := world.logic_grid.revision
 	_expect(world.logic_grid.is_blocked(Vector2i(145, 62)), "formal route crosses an existing blocked obstacle", failures)

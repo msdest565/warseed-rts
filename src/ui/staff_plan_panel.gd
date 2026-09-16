@@ -22,6 +22,7 @@ var scroll: ScrollContainer
 var execution_label: Label
 var current_plans: StaffPlanSet
 var pending_command_id: int = 0
+var generation_count := 0
 var _was_paused := false
 var _restoring_pause := false
 var _request := StaffPlanRequest.new()
@@ -42,6 +43,7 @@ func open_plans(new_host: SimulationHost, objective_id: StringName) -> void:
 	host = new_host
 	_was_paused = host.is_tactical_paused()
 	host.set_tactical_paused(true)
+	generation_count = 0
 	_request = StaffPlanRequest.new()
 	_request.objective_region_id = objective_id
 	current_plans = null
@@ -197,8 +199,12 @@ func refresh_locale() -> void:
 
 
 func generate() -> void:
+	generation_count += 1
+	var previous := current_plans.fingerprint() if current_plans != null else ""
 	if host == null or objective_selector.selected < 0:
-		_set_status(GameText.t(&"STAFF_NO_ALTERNATIVES"))
+		current_plans = null
+		_rebuild_plans()
+		_set_status(GameText.t(&"STAFF_ALL_HELD"))
 		return
 	_request.objective_region_id = objective_selector.get_item_metadata(objective_selector.selected)
 	_request.max_supply_cost = int(budget.value)
@@ -209,7 +215,13 @@ func generate() -> void:
 			_request.allowed_card_ids.append(id)
 	current_plans = host.get_staff_plans(_request) if not _request.allowed_card_ids.is_empty() else null
 	_rebuild_plans()
-	_set_status(GameText.t(&"STAFF_CHOOSE") if current_plans != null else GameText.t(&"STAFF_NO_ALTERNATIVES"))
+	if current_plans != null:
+		var key := &"STAFF_REGENERATED_SAME" if current_plans.fingerprint() == previous else &"STAFF_REGENERATED"
+		_set_status(GameText.t(key) % [generation_count, current_plans.plans.size()])
+	else:
+		var reason: StringName = &"STAFF_NO_CARDS" if _request.allowed_card_ids.is_empty() else &"STAFF_FAILURE_%s" % host.staff_plan_rejection_reason
+		var message := GameText.t(reason)
+		_set_status(message if message != String(reason) else GameText.t(&"STAFF_NO_ALTERNATIVES"))
 
 
 func _edited() -> void:

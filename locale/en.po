@@ -3078,3 +3078,36 @@ msgstr "Holding"
 
 msgid "ENEMY_OBSERVED_SIGHTED"
 msgstr "Sighted"
+
+msgid "STAFF_ALL_HELD"
+msgstr "All regions are secured. Close this window and choose Continue reconnaissance in Decisions; attack HQ after discovering it."
+
+msgid "STAFF_REGENERATED"
+msgstr "Calculation %d complete: %d plans. Choose one to approve."
+
+msgid "STAFF_REGENERATED_SAME"
+msgstr "Calculation %d complete: %d plans. Battle is paused and conditions are unchanged. Edit the objective, budget or allowed cards for different options."
+
+msgid "STAFF_NO_CARDS"
+msgstr "No cards selected. Select an available card and generate again."
+
+msgid "STAFF_FAILURE_INSUFFICIENT_ALTERNATIVES"
+msgstr "Available forces cannot form two distinct plans. Return manual cards to AI, deploy or reinforce troops, or allow more cards and supply."
+
+msgid "STAFF_FAILURE_BATTLE_ENDED"
+msgstr "The battle has ended; new plans are unavailable."
+
+msgid "STAFF_FAILURE_OBJECTIVE_ALREADY_HELD"
+msgstr "Objective already secured. Select another target, or continue reconnaissance from Decisions after securing all regions."
+
+msgid "CARD_CONTINUE_RECON"
+msgstr "Continue reconnaissance for enemy HQ"
+
+msgid "CARD_UNEXPLORED_FRONTIER"
+msgstr "Unexplored frontier"
+
+msgid "CARD_CONTINUE_RECON_CONTEXT"
+msgstr "All regions secured. Return scouts to AI to explore unknown areas and report contacts. Discovering enemy HQ unlocks an attack decision."
+
+msgid "CARD_ENGINEERING_NO_TARGETS"
+msgstr "No route available: an unopened crossing and surviving engineers are required. Deploy an engineer card from the army first."

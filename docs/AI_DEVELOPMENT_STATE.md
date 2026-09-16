@@ -1,6 +1,6 @@
 # WARSEED AI 开发状态与任务队列
 
-> 状态版本：82
+> 状态版本：84
 > 更新时间：2026-09-16
 > 更新规则：每个完成、阻塞或重新规划的工作项都必须更新本文件
 > 执行规则：[`AI_DEVELOPMENT_WORKFLOW.md`](AI_DEVELOPMENT_WORKFLOW.md)
@@ -10,7 +10,7 @@
 
 ```yaml
 workflow_version: 1.2
-state_version: 82
+state_version: 84
 updated_at: 2026-09-16
 project: WARSEED
 current_phase: R5
@@ -21,8 +21,8 @@ release_candidate_status: ENGINEERING_BASELINE_ARCHIVED
 release_candidate_package: build/playtest-kits/WARSEED-R1-Feedback-RC2-20260901.zip
 release_candidate_sha256: 730B7F496F8871D62CA887F5B955974CF540014F3B5EA9307E6F5D4070C10A08
 active_maintenance_work_item: none
-working_build_id: 0.1.0-playable.20260914
-latest_maintenance_work_item: WS-MAINT-20260916-001
+working_build_id: 0.1.0-r5-fix.20260916
+latest_maintenance_work_item: WS-MAINT-20260916-002
 latest_maintenance_status: DONE
 feedback_build_id: 0.1.0-r1-feedback.2
 feedback_schema_version: 1
@@ -96,8 +96,8 @@ r5_exit_status: ACCEPTED
 r5_exit_authority: USER_CONTINUATION_R4_R5
 r5_simulated_full_gate_duration_seconds: 960.707
 r5_simulated_verified_at: 2026-09-16
-r5_playable_package: build/playtest-kits/WARSEED-R5-Playable-20260916.zip
-r5_playable_package_sha256: F0A407F36E08CF3A275EA55E7A72111011C64EA34942C8964891852286A4CE9A
+r5_playable_package: build/playtest-kits/WARSEED-R5-Fix-20260916.zip
+r5_playable_package_sha256: 157E561CFD980793F052F730766F2C978EA764A1C6D622EDA103B08ED36D798F
 
 goal_protocol_version: 1.1
 gameplay_rework_roadmap: docs/GAMEPLAY_REWORK_ROADMAP.md
@@ -108,7 +108,7 @@ full_gate_command: >-
   -GodotConsolePath <godot-console>
 ```
 
-解释：产品负责人于 2026-09-07 接受 R1 工程出口并通过 D-026 取消真人证据硬门，同时通过 D-027 将 R2-R7 重排为玩法优先路线。2026-09-10 用户明确要求战术规划维护自检后完成 R3、R4、R5；维护现已通过完整发布门，以该授权接受已审查的 R2 工程出口并进入 R3。R3-001/002 已逐项完成，D-021 已按用户明确授权接受；控制交接与军团总览维护 `WS-MAINT-20260910-003` 已通过 1487.349 秒完整门并 DONE；R3-003 已按 D-021 实施并通过1745.289秒完整门；D-022 已于2026-09-11由用户明确接受；左侧冷却显示维护已完成，R3-004 已通过 1575.107 秒完整门并 DONE，R3-005已通过最终686.300秒完整门；R3-006出口审查完成，R4-001/002/003已完成，唯一下一项R4-004。001 临时文档已按用户要求删除，契约和验收归档在第 12 节；002 完成记录见第 13 节。自动化仍只能标记为 `SIMULATED`，不得宣称已经证明真人理解或主观乐趣。D-021/D-022 均已接受；完整 R3/R4/R5 goal 尚未完成。
+解释：产品负责人于 2026-09-07 接受 R1 工程出口并通过 D-026 取消真人证据硬门，同时通过 D-027 将 R2-R7 重排为玩法优先路线。2026-09-10 用户明确要求战术规划维护自检后完成 R3、R4、R5；维护现已通过完整发布门，以该授权接受已审查的 R2 工程出口并进入 R3。R3-001/002 已逐项完成，D-021 已按用户明确授权接受；控制交接与军团总览维护 `WS-MAINT-20260910-003` 已通过 1487.349 秒完整门并 DONE；R3-003 已按 D-021 实施并通过1745.289秒完整门；D-022 已于2026-09-11由用户明确接受；左侧冷却显示维护已完成，R3-004 已通过 1575.107 秒完整门并 DONE，R3-005已通过最终686.300秒完整门；R3-006出口审查完成，R4-001/002/003已完成，唯一下一项R4-004。001 临时文档已按用户要求删除，契约和验收归档在第 12 节；002 完成记录见第 13 节。自动化仍只能标记为 `SIMULATED`，不得宣称已经证明真人理解或主观乐趣。D-021/D-022 均已接受；完整 R3/R4/R5 goal 已完成（见当前控制块及出口证据）；当前维护不重开 R6/R7。
 
 2026-09-07 已完成开发标准与路线重排：新建 `GAMEPLAY_REWORK_ROADMAP.md`，R2 从正式地图管线改为灰脊乐趣基准，后续依次处理卡牌战术语法、我方分层 AI、敌方行动 AI、第一章行动层与内容生产。旧扩充路线保留为架构和迁移参考，不再决定任务领取。
 
@@ -664,3 +664,10 @@ R5-004阶段性验证：最终权威版本完整门960.707秒PASS，762文件初
 R5-004 DONE：反应/护送目标切换延迟、typed执行审计和合法双语复盘完成；960.707秒完整门PASS，之后两处纯UI布局修复由最终ui5真实五档及重导出/包smoke验证，最终PCK DD5692F388A20D90557A8E27E1228D42E4A62E0AA950CB1DBDF2D50C4FD13578。下一项R5-005 READY，阶段尚待出口审查。
 
 R5-005 REVIEWING → DONE：001～004全部DONE，30场完整对局重复一致、质量PASS，合法知识/审计/存档/UI/导出通过。完整门960.707秒后仅两个UI布局文件变化，经ui5真实五档及重新导出/包验证闭环。R5阶段出口按用户持续完成R4/R5授权接受；本次维护及R3/R4/R5完整目标完成，不进入R6/R7。已交付WARSEED-R5-Playable-20260916.zip，17文件和ZIP逐个校验。性能DEFERRED，HUMAN可选NOT_RUN。预算上限1000，原基线不变，收尾前保守估算约725.52美元；不是账单。
+
+
+## 2026-09-16 R5可玩版反馈维护（WS-MAINT-20260916-002）
+
+契约：[WS-MAINT-20260916-002](work_items/WS-MAINT-20260916-002.md)。当前DONE；修复方案重新生成缺少具体反馈、左侧工程入口未接入迁移后的技能、渡口可视范围/导航障碍不一致、开通后AStar残留solid，以及全部据点占领后的持续侦察入口。合法发现总部后保留进攻决策，重要后续决策不再被支援筛选隐藏。无存档迁移、核心无网络依赖；HUMAN仍为可选NOT_RUN，性能按D-028暂缓。
+
+维护最终完整门973.265秒PASS（artifacts/maint-002-release2.log），五档中英真实窗口PASS（maint-002-ui3.log），专项与自然连续侦察通过；ZIP及17文件manifest已校验。包与SHA见控制块，工作版本0.1.0-r5-fix.20260916。下一任务none；R5出口保持，未开启R6/R7。

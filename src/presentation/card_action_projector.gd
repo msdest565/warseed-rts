@@ -12,7 +12,10 @@ func project(snapshot: WorldSnapshot, battle: BattleDefinition) -> Array[CardAct
 	if faction == null:
 		return result
 	result.append_array(TacticalActionProjector.new().project(snapshot, battle))
-	result.append_array(_headquarters_actions(snapshot))
+	var headquarters := _headquarters_actions(snapshot)
+	result.append_array(headquarters)
+	if headquarters.is_empty():
+		result.append_array(_recon_actions(snapshot, battle))
 	for card in snapshot.unit_cards:
 		if card.faction_id != snapshot.observer_faction_id:
 			continue
@@ -43,6 +46,81 @@ func project(snapshot: WorldSnapshot, battle: BattleDefinition) -> Array[CardAct
 		return a_priority < b_priority if a_priority != b_priority else String(a.decision_id) < String(b.decision_id)
 	)
 	return result
+
+
+func _recon_actions(snapshot: WorldSnapshot, battle: BattleDefinition) -> Array[CardActionSnapshot]:
+	var result: Array[CardActionSnapshot] = []
+	var held := 0
+	for region in snapshot.strategic_regions:
+		if not region.capturable:
+			continue
+		if region.controller_faction_id != snapshot.observer_faction_id:
+			return result
+		held += 1
+	if held == 0 or snapshot.outcome != null and snapshot.outcome.is_terminal():
+		return result
+	# Building snapshots contain only legally known buildings. Never consult battle HQ coordinates.
+	for building in snapshot.buildings:
+		if building.enabled and building.faction_id != snapshot.observer_faction_id and building.definition_id == &"command_center":
+			return result
+	# Terrain is public authored data; apply only our published route openings.
+	var grid := LogicGrid.create_for_battle(battle)
+	var faction := snapshot.get_faction(snapshot.observer_faction_id)
+	for route in battle.engineering_routes:
+		if faction.opened_engineering_route_ids.has(route.route_id):
+			for rect in route.cleared_rects:
+				for x in range(rect.position.x, rect.end.x):
+					for y in range(rect.position.y, rect.end.y):
+						grid.set_blocked(Vector2i(x, y), false)
+	var pathfinder := GridPathfinder.new(grid)
+	for card in snapshot.unit_cards:
+		if card.faction_id != snapshot.observer_faction_id or card.deployment_state != UnitCardState.DeploymentState.DEPLOYED or not card.has_active_unit_type(&"scout_vehicle"):
+			continue
+		var commander := snapshot.get_commander(card.commander_definition_id)
+		if commander == null:
+			continue
+		var formation := snapshot.get_formation(card.formation_id)
+		var origin := formation.anchor_position if formation != null else card.center_position
+		var point := _frontier(snapshot.knowledge, origin, grid, pathfinder)
+		if not point.is_finite():
+			continue
+		var decision := CardActionSnapshot.new()
+		decision.action_kind = CardActionSnapshot.CONTINUE_RECON
+		decision.decision_id = StringName("continue_recon:%s" % card.definition_id)
+		decision.unit_card_id = card.definition_id
+		decision.card_name_key = card.display_name_key
+		decision.commander_id = commander.definition_id
+		decision.commander_name_key = commander.display_name_key
+		decision.target_name_key = &"CARD_UNEXPLORED_FRONTIER"
+		decision.position = point
+		decision.route = PackedVector2Array([card.center_position, point])
+		result.append(decision)
+	return result
+
+
+func _frontier(knowledge: FactionKnowledgeSnapshot, origin: Vector2, grid: LogicGrid, pathfinder: GridPathfinder) -> Vector2:
+	var candidates: Array[Vector2] = []
+	# Stable row-major scan of legal fog boundaries and public terrain.
+	for y in range(1, knowledge.grid_size.y - 1):
+		for x in range(1, knowledge.grid_size.x - 1):
+			var cell := Vector2i(x, y)
+			if grid.is_blocked(cell) or knowledge.get_cell_state(cell) != FactionKnowledge.CellState.UNEXPLORED:
+				continue
+			var frontier := false
+			for offset in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+				if knowledge.get_cell_state(cell + offset) != FactionKnowledge.CellState.UNEXPLORED:
+					frontier = true
+			if not frontier:
+				continue
+			candidates.append(grid.cell_to_world(cell))
+	candidates.sort_custom(func(a: Vector2, b: Vector2) -> bool:
+		var ad := origin.distance_squared_to(a)
+		var bd := origin.distance_squared_to(b)
+		return ad < bd if ad != bd else (a.y < b.y if a.y != b.y else a.x < b.x))
+	for point in candidates:
+		if not pathfinder.find_path(origin, point).is_empty():
+			return point
+	return Vector2.INF
 
 
 func _headquarters_actions(snapshot: WorldSnapshot) -> Array[CardActionSnapshot]:
@@ -85,6 +163,8 @@ static func headquarters_command(decision: CardActionSnapshot, command_id: int, 
 	var command := CommanderOrderCommand.new(command_id, faction_id, tick, decision.commander_id,
 		CommanderOrderCommand.OrderKind.ASSIGN_OBJECTIVE, decision.position)
 	command.hand_back_control = true
+	command.apply_requested_posture = true
+	command.posture = CommanderState.Posture.CAUTIOUS if decision.action_kind == CardActionSnapshot.CONTINUE_RECON else CommanderState.Posture.AGGRESSIVE
 	return command
 
 
