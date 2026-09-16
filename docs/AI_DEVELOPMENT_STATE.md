@@ -1,6 +1,6 @@
 # WARSEED AI 开发状态与任务队列
 
-> 状态版本：81
+> 状态版本：82
 > 更新时间：2026-09-16
 > 更新规则：每个完成、阻塞或重新规划的工作项都必须更新本文件
 > 执行规则：[`AI_DEVELOPMENT_WORKFLOW.md`](AI_DEVELOPMENT_WORKFLOW.md)
@@ -10,12 +10,12 @@
 
 ```yaml
 workflow_version: 1.2
-state_version: 81
+state_version: 82
 updated_at: 2026-09-16
 project: WARSEED
 current_phase: R5
-current_gate: R5_IMPLEMENTATION
-phase_status: IN_PROGRESS
+current_gate: R5_EXIT_ACCEPTED
+phase_status: COMPLETE_SIMULATED
 release_candidate: R1-FEEDBACK-RC2
 release_candidate_status: ENGINEERING_BASELINE_ARCHIVED
 release_candidate_package: build/playtest-kits/WARSEED-R1-Feedback-RC2-20260901.zip
@@ -44,15 +44,15 @@ human_validation_debt: CLOSED_BY_D026
 human_validation_test_plan: docs/HUMAN_VALIDATION_TEST_PLAN.md
 simulated_gate_authorized_at: 2026-08-21
 simulated_gate_authority: product_owner_user_message
-next_work_item: WS-R5-005
-next_work_item_status: READY
+next_work_item: none
+next_work_item_status: none
 next_work_item_blocker_kind: none
 next_work_item_blocker: none
-machine_ready_work_item: WS-R5-005
+machine_ready_work_item: none
 active_work_item: none
 queued_maintenance_work_item: none
 queued_maintenance_status: none
-expansion_implementation_allowed: true
+expansion_implementation_allowed: false
 agent_playbook: docs/AI_AGENT_PLAYBOOK.md
 delegation_template: docs/AI_DELEGATION_TEMPLATE.md
 low_cost_provider_guide: docs/AI_LOW_COST_PROVIDER.md
@@ -91,6 +91,13 @@ r4_exit_status: ACCEPTED
 r4_exit_authority: USER_CONTINUATION_AND_D029
 r4_simulated_full_gate_duration_seconds: 819.106
 r4_simulated_verified_at: 2026-09-16
+r5_engineering_status: COMPLETE_SIMULATED
+r5_exit_status: ACCEPTED
+r5_exit_authority: USER_CONTINUATION_R4_R5
+r5_simulated_full_gate_duration_seconds: 960.707
+r5_simulated_verified_at: 2026-09-16
+r5_playable_package: build/playtest-kits/WARSEED-R5-Playable-20260916.zip
+r5_playable_package_sha256: F0A407F36E08CF3A275EA55E7A72111011C64EA34942C8964891852286A4CE9A
 
 goal_protocol_version: 1.1
 gameplay_rework_roadmap: docs/GAMEPLAY_REWORK_ROADMAP.md
@@ -135,6 +142,8 @@ full_gate_command: >-
 | 可选产品研究 | P6.7 与集中真人用例尚未执行；D-026 后不参与工程、阶段或发布门 |
 
 ## 3. 当前阶段目标
+
+2026-09-16当前结论：R3/R4/R5授权目标已完成，R5工程出口接受，最终证据见R5_EXIT_EVIDENCE.md。以下带较早日期的暂停与下一项描述均为历史，不覆盖控制块；R6/R7未开始。
 
 2026-09-14最新用户指示覆盖下述继续授权：`WS-MAINT-20260914-001` 的手控战斗可靠性、单位批量可见性、已知总部进攻和补给数值显示已完成，可直接运行的Windows最终包已交付，开发现已暂停。R4-004现有实现保留并随包回归，但工作项保持用户暂停的BLOCKED；不领取R4-005或R5，不宣称R4/R5完整目标完成。当前维护DONE，最终证据见第20节。
 
@@ -582,7 +591,7 @@ Git交接：此前 `.git/index.lock` 权限与审批服务503阻塞已于2026-09
 | WS-R5-002 | DONE | 兵力分配与预备策略 | 815.577秒完整门；724受验文件无漂移 |
 | WS-R5-003 | DONE | 多轴与补给切断模板 | 1046.924秒完整门；752文件无漂移 |
 | WS-R5-004 | DONE | 反应审计与复盘 | 960.707秒完整门；最终真实五档UI/重导出PASS |
-| WS-R5-005 | READY | R5出口 | 依赖R5-004 |
+| WS-R5-005 | DONE | R5出口 | 最终完整门/真实UI/包/知识/确定性审查通过 |
 
 用户已授权按独立工作项完成R3/R4/R5，本次R3工程出口审查通过后仅解锁R4-001；R4和R5尚未完成。临时WS-MAINT-20260910-001文档保持删除，契约仍在第12节，不另建交接文档。
 
@@ -653,3 +662,5 @@ R5-003 DONE：三份正式typed模板、实际轨迹重复一致、普通矿区�
 R5-004阶段性验证：最终权威版本完整门960.707秒PASS，762文件初次冻结无漂移；真实UI的英文480宽暴露两处旧布局最小宽度，仅ArmyBoard/PrebattlePlanner后续调整，最终五档与重导出尚待。不能把此前ui4四档通过写成五档全过。
 
 R5-004 DONE：反应/护送目标切换延迟、typed执行审计和合法双语复盘完成；960.707秒完整门PASS，之后两处纯UI布局修复由最终ui5真实五档及重导出/包smoke验证，最终PCK DD5692F388A20D90557A8E27E1228D42E4A62E0AA950CB1DBDF2D50C4FD13578。下一项R5-005 READY，阶段尚待出口审查。
+
+R5-005 REVIEWING → DONE：001～004全部DONE，30场完整对局重复一致、质量PASS，合法知识/审计/存档/UI/导出通过。完整门960.707秒后仅两个UI布局文件变化，经ui5真实五档及重新导出/包验证闭环。R5阶段出口按用户持续完成R4/R5授权接受；本次维护及R3/R4/R5完整目标完成，不进入R6/R7。已交付WARSEED-R5-Playable-20260916.zip，17文件和ZIP逐个校验。性能DEFERRED，HUMAN可选NOT_RUN。预算上限1000，原基线不变，收尾前保守估算约725.52美元；不是账单。
